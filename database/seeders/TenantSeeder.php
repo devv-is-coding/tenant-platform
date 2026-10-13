@@ -25,6 +25,9 @@ class TenantSeeder extends Seeder
                 'province' => 'Negros Oriental',
                 'region' => 'Negros Island Region',
                 'country' => 'Philippines',
+                // The central marketplace renders prices on the central domain,
+                // where tenancy is never initialised, so currency lives only here.
+                'currency' => 'PHP',
             ]);
 
             $tenant->domains()->create(['domain' => $attributes['domain']]);

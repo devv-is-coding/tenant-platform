@@ -22,6 +22,12 @@ class UserSeeder extends Seeder
         $this->seedUser('superadmin', Role::SuperAdmin);
         $this->seedUser('customer', Role::Customer);
 
+        // A handful of extra named customers, so marketplace mock data (wishlists,
+        // bookings, reviews) has more than one customer to spread across.
+        foreach (['beatriz', 'tomas', 'carmela', 'julio', 'nadia'] as $username) {
+            $this->seedCustomer($username);
+        }
+
         // Iterated on the builder: the stancl base model's TenantCollection is not
         // generic, so a fetched collection would lose the Tenant type.
         Tenant::query()->each(function (Tenant $tenant): void {
@@ -51,6 +57,23 @@ class UserSeeder extends Seeder
             'email' => str_replace('_', '.', $username).'@example.com',
             'tenant_id' => $tenant?->id,
             ...$platformName,
+        ]);
+    }
+
+    /**
+     * Create a customer unless one with the username already exists, keeping
+     * the factory's realistic random name rather than the role-labelled name
+     * used for the fixed demo accounts.
+     */
+    private function seedCustomer(string $username): void
+    {
+        if (User::withTrashed()->where('username', $username)->exists()) {
+            return;
+        }
+
+        User::factory()->role(Role::Customer)->create([
+            'username' => $username,
+            'email' => $username.'@example.com',
         ]);
     }
 }
