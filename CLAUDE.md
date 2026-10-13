@@ -210,6 +210,12 @@ Use Conventional Commits:
 9. Do not create commits unless the user explicitly asks you to commit or the current task explicitly requires a commit.
 10. Follow the project's existing Git workflow and branching rules.
 
+## Before Pushing
+
+- Before any `git push`, run `composer ci:check` — the same command CI runs (Pint style check, PHPStan, and the full Pest suite).
+- Push only if it passes. If it fails, fix the cause and re-run; do not push a failing branch.
+- Never bypass hooks or checks (`--no-verify`, skipping tests) to get a push through.
+
 ## Migrations
 
 - Do not create a new migration to add or change columns on an existing table. Edit the project's existing migration for that table instead (e.g. `users` columns go in `2026_08_07_101622_user_added_attributes.php`).
