@@ -210,6 +210,10 @@ Use Conventional Commits:
 9. Do not create commits unless the user explicitly asks you to commit or the current task explicitly requires a commit.
 10. Follow the project's existing Git workflow and branching rules.
 
+## Before Starting Work
+
+- Before writing code, confirm the setup is actually working: the Docker stack is up and healthy (`docker compose ps`), migrations are current (`php artisan migrate:status`), and there's no unexplained failure already present (e.g. a broken container, a stale schema, a red test). Fix or flag that first rather than building on top of it.
+
 ## Before Pushing
 
 - Before any `git push`, run `composer ci:check` — the same command CI runs (Pint style check, PHPStan, and the full Pest suite).
