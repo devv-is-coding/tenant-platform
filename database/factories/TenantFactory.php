@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\TenantStatus;
 use App\Models\Tenant;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -19,6 +20,7 @@ class TenantFactory extends Factory
     {
         return [
             'id' => fake()->unique()->slug(2),
+            'status' => TenantStatus::Active,
         ];
     }
 }

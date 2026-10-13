@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\TenantStatus;
 use App\Models\Tenant;
 use Illuminate\Database\Seeder;
 
@@ -20,6 +21,8 @@ class TenantSeeder extends Seeder
 
             $tenant = Tenant::create([
                 'id' => $id,
+                // Fixture agencies are already past onboarding; a real one starts Pending.
+                'status' => TenantStatus::Active,
                 'name' => $attributes['name'],
                 'locality_type' => $attributes['locality_type'],
                 'province' => 'Negros Oriental',
