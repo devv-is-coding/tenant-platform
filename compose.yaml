@@ -7,7 +7,7 @@ services:
     build:
       context: .
       target: app
-    image: 360-app
+    image: tenant-platform
     restart: unless-stopped
     depends_on:
       mariadb:

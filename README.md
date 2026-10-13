@@ -1,16 +1,16 @@
-# 360-APP
+# Tenant Platform
 
 **A multi-tenant travel & tour agency SaaS marketplace**, built with Laravel 13 and Livewire 4.
 
-360-APP takes **360 Degrees** — a single-company capstone project selling tours, visas and hotel
-rooms — and reworks it into a platform where independent travel agencies each run their own
+Tenant Platform takes **360 Degrees** — a single-company capstone project selling tours, visas and
+hotel rooms — and reworks it into a platform where independent travel agencies each run their own
 isolated database, while customers browse and book across all of them from one central
 storefront.
 
 The original system's business logic is ported deliberately. Its structural defects are fixed
 deliberately, each with a named regression test. Both halves are the point of this project.
 
-[![Tests](https://github.com/devv-is-coding/360-app/actions/workflows/tests.yml/badge.svg)](https://github.com/devv-is-coding/360-app/actions/workflows/tests.yml)
+[![Tests](https://github.com/devv-is-coding/tenant-platform/actions/workflows/tests.yml/badge.svg)](https://github.com/devv-is-coding/tenant-platform/actions/workflows/tests.yml)
 ![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?logo=php&logoColor=white)
 ![Laravel](https://img.shields.io/badge/Laravel-13-FF2D20?logo=laravel&logoColor=white)
 ![Livewire](https://img.shields.io/badge/Livewire-4-4E56A6?logo=livewire&logoColor=white)
@@ -136,8 +136,8 @@ column exists anywhere, or if a column matching `/amount|price|total|fee|discoun
 ### With Docker (recommended)
 
 ```bash
-git clone https://github.com/devv-is-coding/360-app.git
-cd 360-app
+git clone https://github.com/devv-is-coding/tenant-platform.git
+cd tenant-platform
 cp .env.example .env
 
 docker compose up -d
