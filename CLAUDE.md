@@ -218,9 +218,18 @@ Use Conventional Commits:
 
 ## Migrations
 
-- Do not create a new migration to add or change columns on an existing table. Edit the project's existing migration for that table instead (e.g. `users` columns go in `2026_08_07_101622_user_added_attributes.php`).
+- Do not create a new migration to add or change columns on an existing table. Edit the project's existing migration for that table instead (e.g. `users` columns go in `2026_08_07_101622_user_added_attributes.php`, `tenants` columns go in `2019_09_15_000010_create_tenants_table.php`).
 - Never edit Laravel's default migrations (`0001_01_01_*`). Change their tables through the project's own migration instead.
 - Editing an existing migration requires a fresh migration (`migrate:fresh --seed`) to apply; tell the user.
+- `migrate:fresh` drops only the central database, not the `tenant*` databases. Drop those first, or reseeding fails with `TenantDatabaseAlreadyExistsException`.
+- A new real column on `tenants` must also be added to `Tenant::getCustomColumns()`. Otherwise stancl silently stores it in the `data` JSON column.
+
+## Docker (Local Development)
+
+- The source is not bind-mounted: a bind mount from the Windows drive made every request take ~3s. Start the stack with `docker compose up --watch`, which syncs host edits into the container.
+- Sync is one-way, host to container. Run `php artisan make:*` and other file generators on the host, never through `docker compose exec`.
+- `.env` is read only when the container is created. After changing it, run `docker compose up -d --force-recreate app`.
+- Changes to `composer.json` or `composer.lock` rebuild the image automatically while watch is running.
 
 ## Timestamp Columns
 
