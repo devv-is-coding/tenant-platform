@@ -6,7 +6,7 @@ services:
   app:
     build:
       context: .
-      target: app
+      target: dev
     image: tenant-platform
     restart: unless-stopped
     depends_on:
@@ -19,21 +19,41 @@ services:
       SERVER_NAME: ":80"
     ports:
       - "${APP_PORT:-8000}:80"
-    # The bind mount shadows the source baked into the image at build time, so host
-    # edits are live in the container with no rebuild. opcache.validate_timestamps=1
-    # in docker/php.ini picks up changed PHP within revalidate_freq (2s), and the
-    # entrypoint runs `optimize:clear` whenever APP_ENV is not production.
+    # The source is NOT bind-mounted. On Windows a bind mount of the repo is a 9p
+    # share of the C: drive, roughly 15x slower per file than the container's own
+    # disk, and Laravel touches ~1,100 files per request - that alone made every
+    # page take ~3s. Instead the image carries the source and vendor/, and
+    # `docker compose up --watch` syncs host edits into /app (see develop.watch).
+    # opcache.validate_timestamps=1 picks up synced PHP within revalidate_freq (2s).
     #
-    # Because /app comes from the host, these must exist on the host:
-    #   composer install         -> vendor/
-    #   npm ci && npm run build  -> public/build/   (or `npm run dev` for HMR)
+    # Sync is one-way, host -> container: run `php artisan make:*` on the host.
     #
-    # Rebuild only when the image itself changes: Dockerfile, docker/php.ini,
-    # docker/entrypoint.sh, or PHP extensions.
+    # Only rarely-touched paths stay bind-mounted, where the 9p cost is harmless:
     volumes:
-      - .:/app
-      # Explicit so storage/logs/laravel.log is readable from the host.
-      - ./storage:/app/storage
+      # Host-built assets (`npm run build`), the Vite HMR `hot` file
+      # (`npm run dev`), and the public/storage symlink.
+      - ./public:/app/public
+      # So storage/logs/laravel.log is readable from the host.
+      - ./storage/logs:/app/storage/logs
+      # So uploaded files survive the container being recreated.
+      - ./storage/app:/app/storage/app
+    develop:
+      watch:
+        - path: .
+          target: /app
+          action: sync
+          initial_sync: true
+          ignore:
+            - vendor/
+            - node_modules/
+            - public/
+            - storage/
+            - bootstrap/cache/
+            - .git/
+        - path: composer.json
+          action: rebuild
+        - path: composer.lock
+          action: rebuild
 
   mariadb:
     image: mariadb:11.4

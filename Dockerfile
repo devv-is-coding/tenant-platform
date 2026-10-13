@@ -88,3 +88,14 @@ EXPOSE 80
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
+
+# ---------------------------------------------------------------------------
+# Stage 5 — Local development image (compose.yaml builds this target).
+#
+# Adds dev dependencies: the seeders need Faker, which is require-dev. The
+# autoloader is left unoptimised so newly synced classes resolve via PSR-4
+# without a dump. post-autoload-dump re-runs package:discover.
+# ---------------------------------------------------------------------------
+FROM app AS dev
+
+RUN composer install --prefer-dist --no-progress

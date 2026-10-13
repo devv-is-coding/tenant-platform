@@ -140,15 +140,24 @@ git clone https://github.com/devv-is-coding/tenant-platform.git
 cd tenant-platform
 cp .env.example .env
 
-docker compose up -d
-docker compose exec app composer install
-docker compose exec app php artisan key:generate
+# Prints an app key: paste it into APP_KEY in .env. The container reads .env at startup.
+docker compose run --rm --no-deps --entrypoint php app artisan key:generate --show
+
+npm install && npm run build      # assets are built on the host (or `npm run dev` for HMR)
+docker compose up --build --watch
+```
+
+In a second terminal:
+
+```bash
 docker compose exec app php artisan migrate --seed
-docker compose exec app npm install
-docker compose exec app npm run build
 ```
 
 The app is served at `http://localhost:8000`.
+
+The source is not bind-mounted. On Windows a bind mount of the repo runs about 15× slower per
+file, which made every page take around 3 seconds. Instead, `--watch` syncs your edits into the
+container within a second or two. Sync is one-way, so run `php artisan make:*` on the host.
 
 ### Without Docker
 
