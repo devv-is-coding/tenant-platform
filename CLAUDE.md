@@ -242,6 +242,13 @@ Use Conventional Commits:
 - Models declare `CREATED_AT`, `UPDATED_AT` and `DELETED_AT` accordingly — see `app/Models/User.php` for the pattern.
 - Declare soft deletes as `$table->softDeletes('deleted_on')`.
 
+## Onboarding Forms
+
+- Build onboarding flows as a step-by-step wizard modeled on `resources/views/pages/admin/tenants/⚡create.blade.php`; copy its structure rather than starting from a plain form.
+- One card, one question per step: an icon, the question as the heading, a one-line subheading, then only that step's fields. A footer bar holds `Go back` (hidden on step 1) and `Continue`, which reads as the final action on the last step.
+- Responsive shape: a portrait single-column card on mobile; from `lg` a landscape card centred in the viewport, with the icon, question and a numbered step list in a tinted left panel and the fields on the right.
+- `Continue` validates only the current step's fields, from the same rules the final action uses (expose them as a public `rules()` on the action). The final submit revalidates everything and, on failure, jumps back to the step holding the first error.
+
 ## Intelephense Diagnostics
 
 - Before ending a task, always check the Intelephense diagnostics (IDE `getDiagnostics`) for every file you created or modified, and resolve any errors or warnings you introduced.
