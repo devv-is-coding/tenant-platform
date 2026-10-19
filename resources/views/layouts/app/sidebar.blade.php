@@ -18,6 +18,10 @@
                         <flux:sidebar.item icon="shield-check" :href="route('admin.dashboard')" :current="request()->routeIs('admin.dashboard')" wire:navigate>
                             {{ __('Console') }}
                         </flux:sidebar.item>
+
+                        <flux:sidebar.item icon="building-office" :href="route('admin.tenants.create')" :current="request()->routeIs('admin.tenants.create')" wire:navigate>
+                            {{ __('Onboard agency') }}
+                        </flux:sidebar.item>
                     @else
                         <flux:sidebar.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
                             {{ __('Dashboard') }}

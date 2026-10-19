@@ -57,3 +57,13 @@ test('tenants can be filtered by status in a query', function () {
     expect($activeIds->all())->toBe([$active->id]);
     expect($activeIdsBySql->all())->toBe([$active->id]);
 });
+
+test('a new tenant database is provisioned with one default settings row', function () {
+    $tenant = Tenant::factory()->create();
+
+    $settings = $tenant->run(fn () => DB::table('settings')->get());
+
+    expect($settings)->toHaveCount(1)
+        ->and($settings->first()->booking_hold_minutes)->toEqual(1440)
+        ->and($settings->first()->requires_listing_approval)->toEqual(1);
+});

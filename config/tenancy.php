@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\Domain;
 use App\Models\Tenant;
+use Database\Seeders\Tenant\TenantDatabaseSeeder;
 use Stancl\Tenancy\Bootstrappers\CacheTenancyBootstrapper;
 use Stancl\Tenancy\Bootstrappers\DatabaseTenancyBootstrapper;
 use Stancl\Tenancy\Bootstrappers\FilesystemTenancyBootstrapper;
@@ -205,7 +206,14 @@ return [
      * Parameters used by the tenants:seed command.
      */
     'seeder_parameters' => [
-        '--class' => 'DatabaseSeeder', // root seeder class
-        // '--force' => true, // This needs to be true to seed tenant databases in production
+        // The tenant root seeder. The bare 'DatabaseSeeder' default resolves to
+        // the central seeder, which would seed central fixtures into a tenant.
+        '--class' => TenantDatabaseSeeder::class,
+        '--force' => true, // This needs to be true to seed tenant databases in production
     ],
+
+    /**
+     * ISO 4217 codes an agency may trade in, offered when onboarding one.
+     */
+    'currencies' => ['PHP'],
 ];

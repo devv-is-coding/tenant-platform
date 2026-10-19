@@ -41,6 +41,8 @@ Route::domain((string) parse_url((string) config('app.url'), PHP_URL_HOST))->gro
         ->name('admin.')
         ->group(function () {
             Route::view('/', 'admin.dashboard')->name('dashboard');
+
+            Route::livewire('tenants/create', 'pages::admin.tenants.create')->name('tenants.create');
         });
 
     Route::middleware(['auth', 'verified'])->group(function () {
