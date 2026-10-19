@@ -24,7 +24,7 @@ enum LoginPortal
             return self::Tenant;
         }
 
-        if ($request->routeIs('admin.login.store')) {
+        if ($request->routeIs('admin.login.store', 'admin.passkey.login')) {
             return self::SuperAdmin;
         }
 

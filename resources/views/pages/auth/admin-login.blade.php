@@ -19,7 +19,7 @@
         <!-- Session Status -->
         <x-auth-session-status class="text-center" :status="session('status')" />
 
-        <x-passkey-verify />
+        <x-passkey-verify submit-route="admin.passkey.login" />
 
         <form method="POST" action="{{ route('admin.login.store') }}" class="flex flex-col gap-6">
             @csrf

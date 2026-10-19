@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Laravel\Fortify\Fortify;
+use Laravel\Passkeys\Contracts\PasskeyUser;
+use Laravel\Passkeys\Passkeys;
 
 class FortifyServiceProvider extends ServiceProvider
 {
@@ -57,6 +59,12 @@ class FortifyServiceProvider extends ServiceProvider
 
             return $user;
         });
+
+        // Passkey sign-in skips authenticateUsing, so it needs the same active
+        // and portal checks or it becomes a way around them.
+        Passkeys::authorizeLoginUsing(fn (Request $request, PasskeyUser $user): bool => $user instanceof User
+            && $user->is_active
+            && LoginPortal::fromRequest($request)->allows($user));
     }
 
     /**

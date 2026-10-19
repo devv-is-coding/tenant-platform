@@ -1,8 +1,12 @@
 <?php
 
 use App\Enums\Role;
+use App\Models\Passkey;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use Laravel\Passkeys\Passkeys;
 
 use function Pest\Laravel\actingAs;
 use function Pest\Laravel\assertAuthenticatedAs;
@@ -70,6 +74,29 @@ test('the customer login refuses other roles', function (Role $role) {
     'manager' => Role::Manager,
     'staff' => Role::Staff,
 ]);
+
+test('passkey sign-in follows the same portal and active rules as a password', function (string $route, Closure $makeUser, bool $allowed) {
+    $request = Request::create(route($route), 'POST');
+    $request->setRouteResolver(fn () => Route::getRoutes()->match($request));
+    $passkey = (new Passkey)->setRelation('user', $makeUser());
+
+    $allowsLogin = Passkeys::allowsLogin($request, $passkey);
+
+    expect($allowsLogin)->toBe($allowed);
+})->with([
+    'customer on the customer route' => ['passkey.login', fn () => User::factory()->create(), true],
+    'inactive customer on the customer route' => ['passkey.login', fn () => User::factory()->inactive()->create(), false],
+    'staff on the customer route' => ['passkey.login', fn () => User::factory()->role(Role::Staff)->create(), false],
+    'super admin on the customer route' => ['passkey.login', fn () => User::factory()->superAdmin()->create(), false],
+    'super admin on the admin route' => ['admin.passkey.login', fn () => User::factory()->superAdmin()->create(), true],
+    'inactive super admin on the admin route' => ['admin.passkey.login', fn () => User::factory()->superAdmin()->inactive()->create(), false],
+    'customer on the admin route' => ['admin.passkey.login', fn () => User::factory()->create(), false],
+]);
+
+test('the super admin login sends passkeys to the super admin endpoint', function () {
+    get(route('admin.login'))
+        ->assertSee("submit: '".route('admin.passkey.login')."'", false);
+});
 
 test('inactive users cannot log in', function () {
     $user = User::factory()->inactive()->create();

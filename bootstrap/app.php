@@ -36,6 +36,12 @@ return Application::configure(basePath: dirname(__DIR__))
             before: StartSession::class,
             prepend: InitializeTenancyUnlessCentral::class,
         );
+
+        // Guests opening the platform console belong at the super admin login,
+        // not the customer one.
+        $middleware->redirectGuestsTo(fn (Request $request): string => $request->routeIs('admin.*')
+            ? route('admin.login')
+            : route('login'));
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

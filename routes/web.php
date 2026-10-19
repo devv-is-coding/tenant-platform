@@ -1,7 +1,10 @@
 <?php
 
+use App\Http\Middleware\EnsureUserIsSuperAdmin;
+use App\Http\Middleware\RedirectSuperAdminsToConsole;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
+use Laravel\Passkeys\Http\Controllers\PasskeyLoginController;
 
 /*
 | Central routes are constrained to the central host so they do not collide with
@@ -25,10 +28,25 @@ Route::domain((string) parse_url((string) config('app.url'), PHP_URL_HOST))->gro
         Route::post('admin/login', [AuthenticatedSessionController::class, 'store'])
             ->middleware('throttle:'.config('fortify.limiters.login'))
             ->name('admin.login.store');
+
+        // A separate passkey endpoint so LoginPortal can tell an admin passkey
+        // sign-in from a customer one; Fortify's passkey.login serves customers.
+        Route::post('admin/passkeys/login', [PasskeyLoginController::class, 'store'])
+            ->middleware('throttle:'.config('fortify.limiters.passkeys'))
+            ->name('admin.passkey.login');
     });
 
+    Route::middleware(['auth', 'verified', EnsureUserIsSuperAdmin::class])
+        ->prefix('admin')
+        ->name('admin.')
+        ->group(function () {
+            Route::view('/', 'admin.dashboard')->name('dashboard');
+        });
+
     Route::middleware(['auth', 'verified'])->group(function () {
-        Route::view('dashboard', 'dashboard')->name('dashboard');
+        Route::view('dashboard', 'dashboard')
+            ->middleware(RedirectSuperAdminsToConsole::class)
+            ->name('dashboard');
     });
 
     require __DIR__.'/settings.php';
