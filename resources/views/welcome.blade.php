@@ -31,7 +31,7 @@
                 </div>
 
                 <div class="flex flex-col gap-4">
-                    <flux:heading size="xl" class="max-w-2xl text-4xl! leading-tight! lg:text-5xl!">
+                    <flux:heading size="xl" level="1" class="max-w-2xl">
                         {{ __('One platform, every agency its own.') }}
                     </flux:heading>
 

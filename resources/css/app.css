@@ -45,6 +45,25 @@
     all sit on the same left edge.
     */
     --container-layout: 115rem;
+
+    /*
+    The typography scale. Heading line heights tighten as the size grows, which
+    the scale does not specify but large type needs to stay readable.
+    */
+    --text-body: 1.0625rem; /* 17px */
+    --text-body--line-height: 2; /* loose */
+
+    --text-h1: 3.5rem; /* 56px */
+    --text-h1--line-height: 1.1;
+
+    --text-h2: 3rem; /* 48px */
+    --text-h2--line-height: 1.15;
+
+    --text-h3: 2rem; /* 32px */
+    --text-h3--line-height: 1.25;
+
+    --text-h4: 1.25rem; /* 20px */
+    --text-h4--line-height: 1.4;
 }
 
 @layer theme {
@@ -64,6 +83,48 @@
     ::file-selector-button {
         border-color: var(--color-gray-200, currentColor);
     }
+}
+
+/*
+The global typography scale.
+
+These rules are deliberately unlayered: Tailwind's utilities sit in the
+utilities layer, and an unlayered rule outranks every layer, so this governs
+flux:heading's own text-2xl and friends on a heading that declares a level.
+
+Only a flux:heading with a level renders a real h1-h4; without one it renders
+a div and keeps Flux's own size.
+*/
+h1 {
+    font-size: var(--text-h1);
+    line-height: var(--text-h1--line-height);
+}
+
+h2 {
+    font-size: var(--text-h2);
+    line-height: var(--text-h2--line-height);
+}
+
+h3 {
+    font-size: var(--text-h3);
+    line-height: var(--text-h3--line-height);
+}
+
+h4 {
+    font-size: var(--text-h4);
+    line-height: var(--text-h4--line-height);
+}
+
+/*
+Body copy. The exclusions matter: flux:text's default size is written as
+[:where(&)]:text-sm - zero specificity, so it is meant to be overridden - while
+an explicit size="sm" or a hand-written text-xs is a real choice that must
+survive. A class selector matches whole tokens, so .text-sm here does not match
+Flux's bracketed default.
+*/
+p:not(.text-xs):not(.text-sm):not(.text-base):not(.text-lg):not(.text-xl) {
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
 }
 
 [data-flux-field]:not(ui-radio, ui-checkbox) {

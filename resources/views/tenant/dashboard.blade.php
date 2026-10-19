@@ -7,7 +7,7 @@
 --}}
 <x-layouts::app :title="$title">
     <div class="flex flex-col gap-2">
-        <flux:heading size="xl">{{ __('Welcome, :name', ['name' => auth()->user()->first_name]) }}</flux:heading>
+        <flux:heading size="xl" level="1">{{ __('Welcome, :name', ['name' => auth()->user()->first_name]) }}</flux:heading>
 
         <flux:text>
             {{ __('You are signed in as :role of :tenant.', [
