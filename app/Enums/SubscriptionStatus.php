@@ -35,6 +35,19 @@ enum SubscriptionStatus: int
     }
 
     /**
+     * Get the Flux badge color the console shows the status in.
+     */
+    public function color(): string
+    {
+        return match ($this) {
+            self::Trialing => 'sky',
+            self::Active => 'green',
+            self::PastDue => 'red',
+            self::Cancelled, self::Expired => 'zinc',
+        };
+    }
+
+    /**
      * Determine if the platform should keep issuing invoices for this period.
      */
     public function isBillable(): bool

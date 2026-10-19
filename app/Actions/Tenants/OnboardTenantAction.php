@@ -87,6 +87,9 @@ class OnboardTenantAction
                 'string',
                 'max:40',
                 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
+                // admin/tenants/create is a route, so a tenant with that id
+                // could never reach its admin/tenants/{tenant} page.
+                Rule::notIn(['create']),
                 Rule::unique(Tenant::class, 'id'),
                 $this->domainIsAvailable(...),
             ],
@@ -109,6 +112,7 @@ class OnboardTenantAction
     {
         return [
             'subdomain.regex' => __('The subdomain may only contain lowercase letters, numbers and single dashes.'),
+            'subdomain.not_in' => __('That subdomain is reserved.'),
         ];
     }
 

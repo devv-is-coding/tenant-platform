@@ -86,6 +86,13 @@ class NavigationMenu
                 ]),
                 $this->group(__('Agencies'), [
                     $this->link(
+                        __('All agencies'),
+                        __('Search agencies and open their records.'),
+                        route('admin.tenants.index'),
+                        'building-office-2',
+                        'admin.tenants.index',
+                    ),
+                    $this->link(
                         __('Onboard an agency'),
                         __('Create a tenant and its first admin.'),
                         route('admin.tenants.create'),

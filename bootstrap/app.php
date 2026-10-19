@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\InitializeTenancyUnlessCentral;
+use App\Http\Middleware\PreventWritesWhileTenantIsRestricted;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -36,6 +37,15 @@ return Application::configure(basePath: dirname(__DIR__))
             before: StartSession::class,
             prepend: InitializeTenancyUnlessCentral::class,
         );
+
+        // Every tenant route's stack. A suspended or paused agency is read-only,
+        // so the write guard sits here rather than on individual routes.
+        $middleware->group('tenant', [
+            'web',
+            InitializeTenancyByDomain::class,
+            PreventAccessFromCentralDomains::class,
+            PreventWritesWhileTenantIsRestricted::class,
+        ]);
 
         // Guests opening the platform console belong at the super admin login,
         // not the customer one.

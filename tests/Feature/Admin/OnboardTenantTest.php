@@ -123,6 +123,14 @@ test('a subdomain that cannot name a tenant database is rejected', function (str
     'double dash' => 'dumaguete--city',
 ]);
 
+test('a subdomain that would collide with a console route is rejected', function () {
+    onboardingForm(User::factory()->superAdmin()->create(), ['subdomain' => 'create'])
+        ->call('onboard')
+        ->assertHasErrors(['subdomain' => 'That subdomain is reserved.']);
+
+    expect(Tenant::count())->toBe(0);
+});
+
 test('an unsupported currency is rejected', function () {
     onboardingForm(User::factory()->superAdmin()->create(), ['currency' => 'USD'])
         ->call('onboard')

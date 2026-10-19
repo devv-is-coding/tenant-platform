@@ -15,5 +15,13 @@
                 'tenant' => tenant('name') ?? tenant('id'),
             ]) }}
         </flux:text>
+
+        @if (tenant('status')->isReadOnly())
+            <flux:callout variant="warning" icon="lock-closed" class="mt-4" :heading="__('This agency is :status. You can view its records but not change them.', ['status' => mb_strtolower(tenant('status')->label())])">
+                @if (tenant('status_reason'))
+                    <flux:callout.text>{{ __('Reason: :reason', ['reason' => tenant('status_reason')]) }}</flux:callout.text>
+                @endif
+            </flux:callout>
+        @endif
     </div>
 </x-layouts::app>
