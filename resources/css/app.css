@@ -61,6 +61,73 @@ select:focus[data-flux-control] {
     @apply outline-hidden ring-2 ring-accent ring-offset-2 ring-offset-accent-foreground;
 }
 
+/*
+Flux ships no transition for dropdown panels, so the navigation panels animate
+here. A [popover] is display:none while closed, which is why the entry needs
+@starting-style and the exit needs allow-discrete - the same technique flux.css
+already uses for dialogs. Floating UI positions these with left/top and never
+writes transform, so transform is free to animate.
+
+The second selector is for Flux's popover polyfill, which sets a literal
+:popover-open class rather than the real state. Scoped to the nav panels so
+other dropdowns keep their current behaviour.
+*/
+@media (prefers-reduced-motion: no-preference) {
+    [data-app-nav-panel] {
+        opacity: 0;
+        transform: translateY(-0.375rem) scale(0.98);
+        transition:
+            opacity 0.12s ease-in,
+            transform 0.12s ease-in,
+            overlay 0.12s allow-discrete,
+            display 0.12s allow-discrete;
+    }
+
+    [data-app-nav-panel]:popover-open,
+    [data-app-nav-panel].\:popover-open {
+        opacity: 1;
+        transform: none;
+        transition:
+            opacity 0.18s ease-out,
+            transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+            overlay 0.18s allow-discrete,
+            display 0.18s allow-discrete;
+    }
+
+    @starting-style {
+        [data-app-nav-panel]:popover-open,
+        [data-app-nav-panel].\:popover-open {
+            opacity: 0;
+            transform: translateY(-0.375rem) scale(0.98);
+        }
+    }
+
+    [data-app-nav-panel]:popover-open [data-flux-menu-item] {
+        animation: app-nav-item-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    [data-app-nav-panel]:popover-open [data-flux-menu-item]:nth-child(2) { animation-delay: 0.03s; }
+    [data-app-nav-panel]:popover-open [data-flux-menu-item]:nth-child(3) { animation-delay: 0.06s; }
+    [data-app-nav-panel]:popover-open [data-flux-menu-item]:nth-child(4) { animation-delay: 0.09s; }
+}
+
+@keyframes app-nav-item-in {
+    from {
+        opacity: 0;
+        transform: translateY(0.25rem);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* flux:navbar.item ships no focus style, leaving keyboard users without one. */
+[data-flux-navbar-items]:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent-content;
+}
+
 /* \[:where(&)\]:size-4 {
     @apply size-4;
 } */

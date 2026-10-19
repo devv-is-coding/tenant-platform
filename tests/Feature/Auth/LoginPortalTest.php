@@ -161,6 +161,23 @@ test('tenant users can open their tenant dashboard', function () {
         ->assertSee('Acme Branch');
 });
 
+/*
+ * The settings routes carry the central domain, so route() returns a central
+ * URL on a tenant domain rather than failing. Nothing but an assertion catches
+ * a link leaking across the boundary.
+ */
+test('the tenant dashboard navigation links nowhere central', function () {
+    $staff = User::factory()->role(Role::Staff)->for(tenantOnDomain('acme'))->create();
+
+    actingAs($staff)
+        ->get('http://acme.localhost/dashboard')
+        ->assertOk()
+        ->assertDontSee(route('profile.edit'))
+        ->assertDontSee(route('security.edit'))
+        ->assertDontSee(route('appearance.edit'))
+        ->assertDontSee(route('admin.dashboard'));
+});
+
 test('the tenant dashboard is forbidden to users of another tenant', function () {
     tenantOnDomain('acme');
     $otherTenantAdmin = User::factory()->role(Role::Admin)->for(tenantOnDomain('globex'))->create();

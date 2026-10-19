@@ -1,5 +1,5 @@
-<x-layouts::app.sidebar :title="$title ?? null">
-    <flux:main>
+<x-layouts::app.navbar :title="$title ?? null">
+    <flux:main id="main-content">
         {{ $slot }}
     </flux:main>
-</x-layouts::app.sidebar>
+</x-layouts::app.navbar>
