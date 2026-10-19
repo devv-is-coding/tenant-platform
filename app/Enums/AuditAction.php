@@ -32,8 +32,9 @@ enum AuditAction: string
     case UserProfileUpdated = 'user.profile_updated';
 
     case TenantCreated = 'tenant.created';
+    case TenantActivated = 'tenant.activated';
     case TenantSuspended = 'tenant.suspended';
-    case TenantResumed = 'tenant.resumed';
+    case TenantReactivated = 'tenant.reactivated';
     case TenantDeleted = 'tenant.deleted';
 
     case SubscriptionCreated = 'subscription.created';

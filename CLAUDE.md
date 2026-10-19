@@ -210,6 +210,58 @@ Use Conventional Commits:
 9. Do not create commits unless the user explicitly asks you to commit or the current task explicitly requires a commit.
 10. Follow the project's existing Git workflow and branching rules.
 
+## Git Branch Naming Conventions
+
+Use this format:
+
+`<type>/<short-description>`
+
+When the work tracks a GitHub Issue, include its number:
+
+`<type>/<issue-number>-<short-description>`
+
+### Branch Types
+
+| Prefix | Purpose | Example |
+|---|---|---|
+| `main` | Stable, production-ready code | `main` |
+| `develop` | Integration branch, only when the project uses this workflow | `develop` |
+| `feature/` | New functionality | `feature/tenant-management` |
+| `fix/` | Regular bug fixes | `fix/login-validation` |
+| `hotfix/` | Urgent production fixes | `hotfix/payment-failure` |
+| `refactor/` | Code restructuring without intended behavior changes | `refactor/auth-service` |
+| `docs/` | Documentation changes | `docs/api-setup-guide` |
+| `test/` | Test-related changes | `test/booking-service` |
+| `chore/` | Maintenance, dependencies, and tooling | `chore/update-dependencies` |
+| `style/` | Formatting or non-functional code style changes | `style/format-python-code` |
+| `perf/` | Performance improvements | `perf/optimize-booking-query` |
+
+### Naming Rules
+
+1. Use lowercase letters only.
+2. Separate words with hyphens (`-`), and put a forward slash (`/`) between the type and the description.
+3. Keep names concise, descriptive, and specific to the task, for example `feature/42-tenant-directory`.
+4. Avoid spaces, vague names, unnecessary dates, and inconsistent naming patterns.
+
+### Branch Workflow
+
+1. Do not create a branch for every small action. Create one when the task, its risk, or the existing project workflow warrants it.
+2. Before creating a branch, inspect the current branch, the working tree, and the repository's instructions.
+3. Never switch branches if doing so could overwrite, discard, or interfere with uncommitted user changes.
+4. Do not create, rename, delete, or switch branches without considering the user's current workflow and the repository's existing conventions.
+5. Follow the project's branching strategy when one is documented. Do not introduce `develop` or another permanent branch unnecessarily.
+6. Prefer feature branches and pull requests for changes that need isolation or review.
+7. Do not commit directly to `main` unless the user or the established project workflow explicitly permits it.
+8. Do not rename or delete existing branches just to enforce this convention.
+9. Never discard user changes or run destructive Git operations without explicit authorization.
+
+### Branch Names vs. Commit Messages
+
+Branch naming and commit messages are separate conventions; commits still follow the Git Commit Message Convention above. The prefixes differ, for example:
+
+- Branch `feature/tenant-management`, commit `feat: implement tenant management`
+- Branch `fix/booking-validation`, commit `fix: validate booking dates`
+
 ## Before Starting Work
 
 - Before writing code, confirm the setup is actually working: the Docker stack is up and healthy (`docker compose ps`), migrations are current (`php artisan migrate:status`), and there's no unexplained failure already present (e.g. a broken container, a stale schema, a red test). Fix or flag that first rather than building on top of it.

@@ -35,11 +35,12 @@ function navigationFor(?User $user, bool $tenantContext = false): array
     return app(NavigationMenu::class)->for($user, $tenantContext);
 }
 
-test('super admins get the console and agency onboarding, not the customer dashboard', function () {
+test('super admins get the console, agency directory and onboarding, not the customer dashboard', function () {
     $sections = navigationFor(User::factory()->superAdmin()->create());
 
     expect(navigationHrefs($sections))
         ->toContain(route('admin.dashboard'))
+        ->toContain(route('admin.tenants.index'))
         ->toContain(route('admin.tenants.create'))
         ->not->toContain(route('dashboard'));
 });
@@ -50,6 +51,7 @@ test('every other central role gets the dashboard and never the console', functi
     expect(navigationHrefs($sections))
         ->toContain(route('dashboard'))
         ->not->toContain(route('admin.dashboard'))
+        ->not->toContain(route('admin.tenants.index'))
         ->not->toContain(route('admin.tenants.create'));
 })->with([
     'customer' => Role::Customer,

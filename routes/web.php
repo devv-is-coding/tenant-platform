@@ -42,7 +42,12 @@ Route::domain((string) parse_url((string) config('app.url'), PHP_URL_HOST))->gro
         ->group(function () {
             Route::view('/', 'admin.dashboard')->name('dashboard');
 
+            Route::livewire('tenants', 'pages::admin.tenants.index')->name('tenants.index');
+
+            // Registered before tenants/{tenant} so "create" is not read as a tenant id.
             Route::livewire('tenants/create', 'pages::admin.tenants.create')->name('tenants.create');
+
+            Route::livewire('tenants/{tenant}', 'pages::admin.tenants.show')->name('tenants.show');
         });
 
     Route::middleware(['auth', 'verified'])->group(function () {
