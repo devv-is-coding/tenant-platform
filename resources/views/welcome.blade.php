@@ -24,7 +24,7 @@
             </x-slot:trailing>
         </x-app-chrome>
 
-        <main id="main-content" class="mx-auto w-full max-w-5xl px-6 py-16 lg:px-8 lg:py-24">
+        <main id="main-content" class="mx-auto w-full max-w-5xl p-gutter lg:p-gutter-lg">
             <section class="flex flex-col items-start gap-6">
                 <div class="flex size-16 items-center justify-center rounded-2xl bg-accent-content text-accent-foreground">
                     <x-app-logo-icon class="size-9 fill-current" />
@@ -86,15 +86,9 @@
                     </flux:card>
                 @endforeach
             </section>
-
-            <flux:separator class="mt-20" />
-
-            <footer class="mt-6">
-                <flux:text size="sm">
-                    &copy; {{ now()->year }} {{ config('app.name') }}
-                </flux:text>
-            </footer>
         </main>
+
+        <x-app-footer class="mt-20" />
 
         @fluxScripts
     </body>

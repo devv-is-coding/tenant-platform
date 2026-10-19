@@ -26,6 +26,25 @@
     --color-accent: var(--color-neutral-800);
     --color-accent-content: var(--color-neutral-800);
     --color-accent-foreground: var(--color-white);
+
+    /*
+    The global layout gutter - the padding between a page's content and the
+    edge of the viewport - set to Medium on a Compact 16/24, Medium 24/32,
+    Spacious 32/48 scale. Use p-gutter / lg:p-gutter-lg rather than a literal
+    p-6, so the gutter can be changed in one place.
+
+    This is the page gutter only. Spacing between sections within a page is
+    content rhythm and stays with the content.
+    */
+    --spacing-gutter: 1.5rem;
+    --spacing-gutter-lg: 2rem;
+
+    /*
+    How wide page content may grow before it stops and centres. Shared by the
+    header and the page body so the brand, the navigation and the page heading
+    all sit on the same left edge.
+    */
+    --container-layout: 115rem;
 }
 
 @layer theme {
@@ -121,6 +140,17 @@ other dropdowns keep their current behaviour.
         opacity: 1;
         transform: none;
     }
+}
+
+/*
+flux:header's container caps its inner row at max-w-7xl. Flux writes that as
+[:where(&)]:max-w-7xl - zero specificity, so it is meant to be overridden - but
+the element is inside the component, out of reach of a class. This points the
+header row at the shared layout width so the navigation lines up with the page
+content beneath it.
+*/
+[data-flux-header] > div {
+    max-width: var(--container-layout);
 }
 
 /* flux:navbar.item ships no focus style, leaving keyboard users without one. */
