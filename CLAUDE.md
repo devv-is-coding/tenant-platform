@@ -250,9 +250,12 @@ Use Conventional Commits:
 - Responsive shape: a portrait single-column card on mobile; from `lg` a landscape card centred in the viewport, with the icon, question and a numbered step list in a tinted left panel and the fields on the right.
 - `Continue` validates only the current step's fields, from the same rules the final action uses (expose them as a public `rules()` on the action). The final submit revalidates everything and, on failure, jumps back to the step holding the first error.
 
-## Intelephense Diagnostics
+## IDE Diagnostics
 
-- Before ending a task, always check the Intelephense diagnostics (IDE `getDiagnostics`) for every file you created or modified, and resolve any errors or warnings you introduced.
+- Before ending a task, always check the IDE diagnostics (`getDiagnostics`) for every file you created or modified, and resolve every error and warning you introduced.
+- Check every language the change touched, not only PHP/Intelephense: Blade, CSS, JS, JSON and config files all report separately.
+- Also re-check files you did not edit whose diagnostics the change could affect.
+- When a warning is a false positive from tooling that does not understand valid syntax (for example VS Code's CSS service not knowing Tailwind v4's `@theme`, `@source` or `@apply`), silence it at its source — e.g. `.vscode/css-custom-data.json` — rather than leaving it or rewriting correct code to satisfy it.
 
 ## CLAUDE.md Modification Policy
 
