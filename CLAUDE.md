@@ -233,6 +233,7 @@ Use Conventional Commits:
 - The source is not bind-mounted: a bind mount from the Windows drive made every request take ~3s. Start the stack with `docker compose up --watch`, which syncs host edits into the container.
 - Sync is one-way, host to container. Run `php artisan make:*` and other file generators on the host, never through `docker compose exec`.
 - `.env` is read only when the container is created. After changing it, run `docker compose up -d --force-recreate app`.
+- Recreating or restarting the `app` container resets its source to the image's copy and detaches the running watch, so every uncommitted edit since the last image build disappears *inside the container* — routes 404, new pages vanish. Nothing is lost on the host. Always follow a recreate with `docker compose up --watch` (its `initial_sync` re-copies the host source), then confirm the work is back before reporting anything as broken.
 - Changes to `composer.json` or `composer.lock` rebuild the image automatically while watch is running.
 
 ## Timestamp Columns
