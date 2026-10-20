@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\Passkey;
 use App\Models\PersonalAccessToken;
 use App\Models\Subscription;
+use App\Models\SubscriptionInvoice;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Date;
@@ -45,6 +46,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Relation::morphMap([
             'subscription' => Subscription::class,
+            'subscription_invoice' => SubscriptionInvoice::class,
         ]);
     }
 

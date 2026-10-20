@@ -223,4 +223,10 @@ return [
      * snapshotted onto each subscription so past records survive a change.
      */
     'billing_currency' => 'PHP',
+
+    /**
+     * Days an agency has to pay a subscription invoice, counted from the day it
+     * is issued. Past that, the invoice is overdue.
+     */
+    'billing_due_days' => 10,
 ];

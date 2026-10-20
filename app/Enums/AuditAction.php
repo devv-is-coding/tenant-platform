@@ -40,6 +40,7 @@ enum AuditAction: string
     case SubscriptionCreated = 'subscription.created';
     case SubscriptionPlanChanged = 'subscription.plan_changed';
     case SubscriptionCancelled = 'subscription.cancelled';
+    case SubscriptionMarkedPastDue = 'subscription.past_due';
     case SubscriptionInvoiceIssued = 'subscription.invoice_issued';
     case SubscriptionInvoiceVoided = 'subscription.invoice_voided';
     case SubscriptionPaymentRecorded = 'subscription.payment_recorded';
