@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\BillingInterval;
 use App\Enums\SubscriptionStatus;
 use Database\Factories\SubscriptionFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -35,6 +36,24 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property Carbon|null $created_on
  * @property Carbon|null $updated_on
  */
+#[Fillable([
+    'tenant_id',
+    'active_for_tenant_id',
+    'plan_name',
+    'amount_minor',
+    'currency',
+    'interval',
+    'status',
+    'starts_on',
+    'current_period_start_on',
+    'current_period_end_on',
+    'next_billing_on',
+    'trial_ends_on',
+    'cancelled_on',
+    'cancel_reason',
+    'ends_on',
+    'created_by',
+])]
 class Subscription extends Model
 {
     /**

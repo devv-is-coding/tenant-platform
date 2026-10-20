@@ -37,3 +37,10 @@ test('only super admins may activate, suspend or reactivate an agency, even its 
 
     expect($user->can('changeStatus', $tenant))->toBe($allowed);
 })->with($superAdminsOnly);
+
+test('only super admins may put an agency on a plan, even its own admin may not', function (Role $role, bool $allowed) {
+    $tenant = Tenant::factory()->make(['id' => 'dumaguete']);
+    $user = User::factory()->role($role)->make(['tenant_id' => $role->isTenantRole() ? 'dumaguete' : null]);
+
+    expect($user->can('manageSubscription', $tenant))->toBe($allowed);
+})->with($superAdminsOnly);

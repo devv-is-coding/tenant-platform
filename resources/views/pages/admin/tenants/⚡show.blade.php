@@ -1,11 +1,14 @@
 <?php
 
+use App\Actions\Subscriptions\StartSubscriptionAction;
 use App\Actions\Tenants\ChangeTenantStatusAction;
+use App\Enums\BillingInterval;
 use App\Enums\TenantStatus;
 use App\Models\PlatformAuditEvent;
 use App\Models\Subscription;
 use App\Models\Tenant;
 use App\Models\User;
+use App\ValueObjects\Money;
 use Flux\Flux;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -28,6 +31,12 @@ new class extends Component {
     public Tenant $tenant;
 
     public string $status_reason = '';
+
+    public string $plan_name = '';
+
+    public string $amount = '';
+
+    public int $interval = BillingInterval::Monthly->value;
 
     /**
      * Mount the component.
@@ -57,6 +66,27 @@ new class extends Component {
         Flux::toast(variant: 'success', text: __(':name is now :status.', [
             'name' => $this->tenant->name ?? $this->tenant->id,
             'status' => mb_strtolower($this->tenant->status->label()),
+        ]));
+    }
+
+    /**
+     * Put the agency on a plan, replacing the one it is on.
+     *
+     * Authorized here because Livewire's update requests do not re-run the
+     * console's route middleware.
+     */
+    public function startSubscription(StartSubscriptionAction $startSubscription): void
+    {
+        $this->authorize('manageSubscription', $this->tenant);
+
+        $subscription = $startSubscription->handle(Auth::user(), $this->tenant, $this->only(['plan_name', 'amount', 'interval']));
+
+        $this->reset('plan_name', 'amount', 'interval');
+        unset($this->subscription, $this->subscriptions, $this->recentActivity);
+        Flux::modals()->close();
+        Flux::toast(variant: 'success', text: __(':name is now on :plan.', [
+            'name' => $this->tenant->name ?? $this->tenant->id,
+            'plan' => $subscription->plan_name,
         ]));
     }
 
@@ -117,7 +147,18 @@ new class extends Component {
     #[Computed]
     public function subscription(): ?Subscription
     {
-        return $this->tenant->latestSubscription;
+        return $this->tenant->latestSubscription()->first();
+    }
+
+    /**
+     * Get every subscription the agency has held, newest first.
+     *
+     * @return Collection<int, Subscription>
+     */
+    #[Computed]
+    public function subscriptions(): Collection
+    {
+        return $this->tenant->subscriptions()->latest('id')->get();
     }
 
     /**
@@ -242,7 +283,17 @@ new class extends Component {
         </section>
 
         <aside class="flex flex-col gap-4">
-            <flux:heading size="lg" level="2">{{ __('Subscription') }}</flux:heading>
+            <div class="flex items-center justify-between gap-3">
+                <flux:heading size="lg" level="2">{{ __('Subscription') }}</flux:heading>
+
+                @can('manageSubscription', $tenant)
+                    <flux:modal.trigger name="start-subscription">
+                        <flux:button size="sm">
+                            {{ $this->subscription?->status->isLive() ? __('Change plan') : __('Start subscription') }}
+                        </flux:button>
+                    </flux:modal.trigger>
+                @endcan
+            </div>
 
             <flux:card class="flex flex-col gap-4">
                 @if ($this->subscription)
@@ -252,6 +303,9 @@ new class extends Component {
                     </div>
 
                     <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                        <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Amount') }}</dt>
+                        <dd>{{ Money::ofMinor($this->subscription->amount_minor, $this->subscription->currency)->format() }}</dd>
+
                         <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Billed') }}</dt>
                         <dd>{{ $this->subscription->interval->label() }}</dd>
 
@@ -272,7 +326,89 @@ new class extends Component {
                     <flux:text>{{ __('This agency has never had a subscription.') }}</flux:text>
                 @endif
             </flux:card>
+
+            <flux:modal name="start-subscription" class="md:w-[28rem]">
+                <form wire:submit="startSubscription" class="space-y-6">
+                    <div>
+                        <flux:heading size="lg">
+                            {{ $this->subscription?->status->isLive() ? __('Change :name\'s plan', ['name' => $tenant->name ?? $tenant->id]) : __('Start a subscription for :name', ['name' => $tenant->name ?? $tenant->id]) }}
+                        </flux:heading>
+                        <flux:text class="mt-2">
+                            @if ($this->subscription?->status->isLive())
+                                {{ __('The new plan starts today. :plan ends today and stays in the history.', ['plan' => $this->subscription->plan_name]) }}
+                            @else
+                                {{ __('The plan starts today. The name, price and billing interval are recorded as agreed.') }}
+                            @endif
+                        </flux:text>
+                    </div>
+
+                    <flux:input wire:model="plan_name" :label="__('Plan name')" :placeholder="__('Agency Standard')" required />
+
+                    <flux:field>
+                        <flux:label>{{ __('Amount per billing period') }}</flux:label>
+
+                        <flux:input.group>
+                            <flux:input.group.prefix>{{ config('tenancy.billing_currency') }}</flux:input.group.prefix>
+
+                            <flux:input wire:model="amount" inputmode="decimal" placeholder="2500.00" required />
+                        </flux:input.group>
+
+                        <flux:error name="amount" />
+                    </flux:field>
+
+                    <flux:select wire:model="interval" :label="__('Billed')">
+                        @foreach (BillingInterval::cases() as $billingInterval)
+                            <flux:select.option :value="$billingInterval->value">{{ $billingInterval->label() }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
+
+                    <div class="flex justify-end gap-2">
+                        <flux:modal.close>
+                            <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                        </flux:modal.close>
+
+                        <flux:button type="submit" variant="primary">
+                            {{ $this->subscription?->status->isLive() ? __('Change plan') : __('Start subscription') }}
+                        </flux:button>
+                    </div>
+                </form>
+            </flux:modal>
         </aside>
+
+        <section class="flex flex-col gap-4 lg:col-span-3">
+            <flux:heading size="lg" level="2">{{ __('Subscription history') }}</flux:heading>
+
+            <flux:table>
+                <flux:table.columns>
+                    <flux:table.column>{{ __('Plan') }}</flux:table.column>
+                    <flux:table.column>{{ __('Amount') }}</flux:table.column>
+                    <flux:table.column class="max-sm:hidden">{{ __('Status') }}</flux:table.column>
+                    <flux:table.column class="max-sm:hidden">{{ __('Started') }}</flux:table.column>
+                    <flux:table.column class="max-sm:hidden">{{ __('Ended') }}</flux:table.column>
+                </flux:table.columns>
+
+                <flux:table.rows>
+                    @forelse ($this->subscriptions as $pastSubscription)
+                        <flux:table.row :key="$pastSubscription->id">
+                            <flux:table.cell variant="strong">{{ $pastSubscription->plan_name }}</flux:table.cell>
+                            <flux:table.cell>
+                                {{ Money::ofMinor($pastSubscription->amount_minor, $pastSubscription->currency)->format() }}
+                                <flux:text size="sm">{{ $pastSubscription->interval->label() }}</flux:text>
+                            </flux:table.cell>
+                            <flux:table.cell class="max-sm:hidden">
+                                <flux:badge :color="$pastSubscription->status->color()" size="sm" inset="top bottom">{{ $pastSubscription->status->label() }}</flux:badge>
+                            </flux:table.cell>
+                            <flux:table.cell class="max-sm:hidden">{{ $pastSubscription->starts_on->toFormattedDateString() }}</flux:table.cell>
+                            <flux:table.cell class="max-sm:hidden">{{ $pastSubscription->ends_on?->toFormattedDateString() ?? '—' }}</flux:table.cell>
+                        </flux:table.row>
+                    @empty
+                        <flux:table.row>
+                            <flux:table.cell colspan="5" class="py-8 text-center">{{ __('No subscriptions yet.') }}</flux:table.cell>
+                        </flux:table.row>
+                    @endforelse
+                </flux:table.rows>
+            </flux:table>
+        </section>
 
         <section class="flex flex-col gap-4 lg:col-span-3">
             <flux:heading size="lg" level="2">{{ __('Recent activity') }}</flux:heading>

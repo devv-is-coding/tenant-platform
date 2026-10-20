@@ -7,6 +7,7 @@ use App\Models\AuditEvent;
 use App\Models\PlatformAuditEvent;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 use LogicException;
 
 class AuditRecorder
@@ -19,6 +20,9 @@ class AuditRecorder
      * still reads correctly after either is deleted. A NULL actor means the
      * action was unauthenticated - never 0, which is a valid role value.
      *
+     * The subject is the record the action was about, such as a subscription,
+     * stored under its morph alias.
+     *
      * @param  array<string, mixed>|null  $changes
      */
     public function recordPlatformEvent(
@@ -27,6 +31,7 @@ class AuditRecorder
         ?Tenant $tenant = null,
         ?string $description = null,
         ?array $changes = null,
+        ?Model $subject = null,
     ): PlatformAuditEvent {
         return PlatformAuditEvent::create([
             'tenant_id' => $tenant?->id,
@@ -35,6 +40,8 @@ class AuditRecorder
             'actor_role' => $actor?->role,
             'actor_label' => $this->actorLabel($actor),
             'action' => $action,
+            'subject_type' => $subject?->getMorphClass(),
+            'subject_id' => $subject?->getKey(),
             'description' => $description,
             'changes' => $changes,
             'ip_address' => request()->ip(),

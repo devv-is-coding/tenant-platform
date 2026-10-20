@@ -39,4 +39,13 @@ class TenantPolicy
     {
         return $user->isSuperAdmin();
     }
+
+    /**
+     * Determine whether the user can put an agency on a subscription plan or
+     * move it to a different one.
+     */
+    public function manageSubscription(User $user, Tenant $tenant): bool
+    {
+        return $user->isSuperAdmin();
+    }
 }
