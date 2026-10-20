@@ -216,4 +216,11 @@ return [
      * ISO 4217 codes an agency may trade in, offered when onboarding one.
      */
     'currencies' => ['PHP'],
+
+    /**
+     * ISO 4217 code the platform bills every agency in. This is the platform's
+     * own currency, unrelated to the currency an agency trades in, and it is
+     * snapshotted onto each subscription so past records survive a change.
+     */
+    'billing_currency' => 'PHP',
 ];
