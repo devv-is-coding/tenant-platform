@@ -112,6 +112,16 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     }
 
     /**
+     * Get every invoice the platform has issued the agency.
+     *
+     * @return HasMany<SubscriptionInvoice, $this>
+     */
+    public function subscriptionInvoices(): HasMany
+    {
+        return $this->hasMany(SubscriptionInvoice::class);
+    }
+
+    /**
      * Get the platform audit events recorded against the agency.
      *
      * @return HasMany<PlatformAuditEvent, $this>

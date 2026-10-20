@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Stancl\Tenancy\Database\Concerns\CentralConnection;
 
@@ -97,5 +98,15 @@ class Subscription extends Model
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    /**
+     * Get the invoices issued for this subscription's billing periods.
+     *
+     * @return HasMany<SubscriptionInvoice, $this>
+     */
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(SubscriptionInvoice::class);
     }
 }

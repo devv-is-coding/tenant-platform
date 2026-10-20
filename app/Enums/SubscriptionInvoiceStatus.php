@@ -35,6 +35,19 @@ enum SubscriptionInvoiceStatus: int
     }
 
     /**
+     * Get the Flux badge color the console shows the status in.
+     */
+    public function color(): string
+    {
+        return match ($this) {
+            self::Open => 'sky',
+            self::PartiallyPaid => 'amber',
+            self::Paid => 'green',
+            self::Void => 'zinc',
+        };
+    }
+
+    /**
      * Determine if the invoice still expects money.
      *
      * A void invoice does not, regardless of its balance - the platform has

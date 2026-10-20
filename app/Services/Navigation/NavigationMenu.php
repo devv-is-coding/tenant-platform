@@ -100,6 +100,15 @@ class NavigationMenu
                         'admin.tenants.create',
                     ),
                 ]),
+                $this->group(__('Billing'), [
+                    $this->link(
+                        __('Overdue invoices'),
+                        __('Agencies still owing after the due date.'),
+                        route('admin.invoices.overdue'),
+                        'exclamation-triangle',
+                        'admin.invoices.overdue',
+                    ),
+                ]),
             ]),
         ];
     }

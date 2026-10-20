@@ -6,6 +6,7 @@ use App\Enums\BillingInterval;
 use App\Enums\TenantStatus;
 use App\Models\PlatformAuditEvent;
 use App\Models\Subscription;
+use App\Models\SubscriptionInvoice;
 use App\Models\Tenant;
 use App\Models\User;
 use App\ValueObjects\Money;
@@ -27,6 +28,11 @@ new class extends Component {
      * The number of audit events listed, newest first.
      */
     private const RECENT_ACTIVITY_LIMIT = 10;
+
+    /**
+     * The number of invoices listed, newest period first.
+     */
+    private const RECENT_INVOICES_LIMIT = 10;
 
     public Tenant $tenant;
 
@@ -159,6 +165,21 @@ new class extends Component {
     public function subscriptions(): Collection
     {
         return $this->tenant->subscriptions()->latest('id')->get();
+    }
+
+    /**
+     * Get the agency's newest invoices.
+     *
+     * @return Collection<int, SubscriptionInvoice>
+     */
+    #[Computed]
+    public function invoices(): Collection
+    {
+        return $this->tenant->subscriptionInvoices()
+            ->latest('period_start_on')
+            ->latest('id')
+            ->limit(self::RECENT_INVOICES_LIMIT)
+            ->get();
     }
 
     /**
@@ -404,6 +425,48 @@ new class extends Component {
                     @empty
                         <flux:table.row>
                             <flux:table.cell colspan="5" class="py-8 text-center">{{ __('No subscriptions yet.') }}</flux:table.cell>
+                        </flux:table.row>
+                    @endforelse
+                </flux:table.rows>
+            </flux:table>
+        </section>
+
+        <section class="flex flex-col gap-4 lg:col-span-3">
+            <flux:heading size="lg" level="2">{{ __('Invoices') }}</flux:heading>
+
+            <flux:table>
+                <flux:table.columns>
+                    <flux:table.column>{{ __('Reference') }}</flux:table.column>
+                    <flux:table.column class="max-lg:hidden">{{ __('Period') }}</flux:table.column>
+                    <flux:table.column align="end">{{ __('Amount') }}</flux:table.column>
+                    <flux:table.column align="end" class="max-md:hidden">{{ __('Paid') }}</flux:table.column>
+                    <flux:table.column class="max-sm:hidden">{{ __('Due') }}</flux:table.column>
+                    <flux:table.column>{{ __('Status') }}</flux:table.column>
+                </flux:table.columns>
+
+                <flux:table.rows>
+                    @forelse ($this->invoices as $invoice)
+                        <flux:table.row :key="$invoice->id">
+                            <flux:table.cell variant="strong">{{ $invoice->reference }}</flux:table.cell>
+                            <flux:table.cell class="max-lg:hidden">
+                                {{ $invoice->period_start_on->toFormattedDateString() }} – {{ $invoice->period_end_on->toFormattedDateString() }}
+                            </flux:table.cell>
+                            <flux:table.cell align="end">{{ Money::ofMinor($invoice->amount_minor, $invoice->currency)->format() }}</flux:table.cell>
+                            <flux:table.cell align="end" class="max-md:hidden">{{ Money::ofMinor($invoice->amount_paid_minor, $invoice->currency)->format() }}</flux:table.cell>
+                            <flux:table.cell class="max-sm:hidden">{{ $invoice->due_on->toFormattedDateString() }}</flux:table.cell>
+                            <flux:table.cell>
+                                <div class="flex flex-wrap gap-1">
+                                    <flux:badge :color="$invoice->status->color()" size="sm" inset="top bottom">{{ $invoice->status->label() }}</flux:badge>
+
+                                    @if ($invoice->isOverdue(today()))
+                                        <flux:badge color="red" size="sm" inset="top bottom">{{ __('Overdue') }}</flux:badge>
+                                    @endif
+                                </div>
+                            </flux:table.cell>
+                        </flux:table.row>
+                    @empty
+                        <flux:table.row>
+                            <flux:table.cell colspan="6" class="py-8 text-center">{{ __('No invoices have been issued to this agency.') }}</flux:table.cell>
                         </flux:table.row>
                     @endforelse
                 </flux:table.rows>

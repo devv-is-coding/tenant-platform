@@ -48,6 +48,8 @@ Route::domain((string) parse_url((string) config('app.url'), PHP_URL_HOST))->gro
             Route::livewire('tenants/create', 'pages::admin.tenants.create')->name('tenants.create');
 
             Route::livewire('tenants/{tenant}', 'pages::admin.tenants.show')->name('tenants.show');
+
+            Route::livewire('invoices/overdue', 'pages::admin.invoices.overdue')->name('invoices.overdue');
         });
 
     Route::middleware(['auth', 'verified'])->group(function () {

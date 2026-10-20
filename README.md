@@ -1,11 +1,16 @@
 # Tenant Platform
 
-**A multi-tenant travel & tour agency SaaS marketplace**, built with Laravel 13 and Livewire 4.
+**A multi-tenant travel & tour agency SaaS**, built with Laravel 13 and Livewire 4.
 
 Tenant Platform takes **360 Degrees** — a single-company capstone project selling tours, visas and
 hotel rooms — and reworks it into a platform where independent travel agencies each run their own
-isolated database, while customers browse and book across all of them from one central
-storefront.
+isolated database, and each agency's customers book through **that agency's own branded Flutter
+app**, backed by a REST API served from the agency's domain.
+
+- **Laravel web (Livewire):** the platform console for the super admin, and each agency's console
+  for its admins, managers and staff.
+- **Flutter app per agency:** customers only, over `/api/v1`. *(The customer API is designed and
+  on the roadmap; the Flutter apps live in a separate repository.)*
 
 The original system's business logic is ported deliberately. Its structural defects are fixed
 deliberately, each with a named regression test. Both halves are the point of this project.
@@ -62,25 +67,37 @@ means:
 - Deleting a tenant's database doesn't touch anyone else's.
 
 **Central database** — platform-wide concerns: user accounts, tenant registry, domains,
-subscriptions/billing, the cross-tenant discovery projection, wishlist, in-app notifications,
-and platform-level audit log.
+subscriptions/billing, customer transfers between agencies, API tokens, and the platform-level
+audit log.
 
 **Tenant databases** — everything one agency owns: catalog, inventory, bookings, payments,
-refunds, reviews, check-ins, and that agency's own audit trail.
+refunds, reviews, wishlists, in-app notifications, check-ins, app branding, and that agency's own
+audit trail.
 
-### The hard part: cross-tenant discovery without cross-tenant queries
+### One agency, one app, one API
 
-Customers need to search and browse listings from *every* agency at once, but each agency's
-catalog lives in its own database. Querying all tenant databases on every search request doesn't
-scale. The solution is a **central read projection** (`listings`): a denormalized, searchable
-copy of each published item, kept in sync by queued domain events and reconciled nightly.
+Each agency ships its own Flutter app, configured with nothing but its agency's URL. Everything
+else — name, logo, colours, contact details, currency — comes from a public
+`GET /api/v1/app-config`, so a single Flutter codebase reskins itself per agency.
 
-The invariant this design depends on, and the one thing that must never be violated:
+The API is served from **the agency's own domain**, where tenancy is resolved exactly as it is for
+the agency's staff. An app is therefore physically unable to address another agency's data, and
+every catalog, price and availability read comes straight from the agency's own database — there
+is no cross-agency copy to go stale.
 
-> The projection is for **discovery only**. It is never the source of truth for price or
-> availability. The booking flow always re-reads both, authoritatively, from the tenant database.
-> Staleness can only ever produce "search said ₱499, the detail page says ₱549" — never a
-> financial error.
+Customers authenticate with **Sanctum bearer tokens**, each bound to the agency that issued it.
+
+### Customers belong to one agency at a time
+
+A customer has one platform-wide account (one email, one password) but belongs to **one agency
+at a time** — the one whose app they signed up in. To use another agency's app they request a
+**transfer**, and the *old* agency must release them, which is refused while any trip, balance or
+refund is still open there. Their profile moves; their history stays in the old agency's database,
+untouched, and reappears if they ever move back.
+
+A cross-agency marketplace was designed (a central read projection kept in sync by domain events)
+and deliberately dropped: each agency owns its customers and its app, so there was nothing to
+aggregate.
 
 ### Two orthogonal booking axes
 
@@ -97,7 +114,7 @@ a no-op on SQLite, which means **a test asserting a row lock works would pass ag
 code**. So the actual concurrency guarantee is a database-level `UNIQUE` constraint on inventory
 allocations (`option_id`, `occupied_on`, `unit_index`) — a guarantee that holds identically on
 both drivers, with the row lock kept only as a UX optimization that turns a losing race into a
-clean "just sold out" instead of a 500 error.
+clean "just sold out" (`409`) instead of a 500 error.
 
 ### Money as integers, always
 
@@ -114,9 +131,10 @@ column exists anywhere, or if a column matching `/amount|price|total|fee|discoun
 | Layer | Choice |
 |---|---|
 | Language / Framework | PHP 8.4, Laravel 13 |
-| Frontend | Livewire 4 (single-file components), Flux UI 2, Tailwind CSS 4 |
+| Operator web | Livewire 4 (single-file components), Flux UI 2, Tailwind CSS 4 |
+| Customer API | Versioned REST (`/api/v1`) on each agency's domain, Eloquent API Resources, for per-agency Flutter apps |
 | Multi-tenancy | [stancl/tenancy](https://tenancyforlaravel.com/) 3.10, database-per-tenant |
-| Auth | Laravel Fortify (2FA, passkeys), Laravel Sanctum |
+| Auth | Laravel Fortify (web: 2FA, passkeys), Laravel Sanctum (API bearer tokens) |
 | Database | MariaDB 11.4 (all environments), SQLite in-memory (test suite only) |
 | Testing | Pest 5, PHPUnit, a dedicated architecture-test suite |
 | Static analysis | Larastan / PHPStan — **level 7** |
@@ -187,9 +205,11 @@ connections, 19 domain enums, full multi-tenant provisioning verified end-to-end
 permanently.
 
 Application logic (models, services, policies, UI) is being layered on top of this schema
-phase by phase — catalog management, inventory and date-ranged availability, the booking and
-payment lifecycle, refunds, reviews, QR check-in, Stripe integration, and platform-level tenant
-and subscription governance.
+phase by phase — platform-level tenant and subscription governance, the per-agency customer API
+and customer transfers, catalog management, inventory and date-ranged availability, the booking
+and payment lifecycle, refunds, reviews, QR check-in, and Stripe integration. The move to
+per-agency customer apps reshapes part of the schema (the central `listings` projection goes;
+wishlists and notifications move into tenant databases) in an upcoming rebuild.
 
 **Design priority, in order:** correctness, security, maintainability, architecture, automated
 testing, UX, performance, documentation, deployment readiness. Speed of delivery is explicitly

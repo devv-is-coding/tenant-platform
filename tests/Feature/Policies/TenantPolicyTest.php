@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Role;
+use App\Models\SubscriptionInvoice;
 use App\Models\Tenant;
 use App\Models\User;
 
@@ -43,4 +44,10 @@ test('only super admins may put an agency on a plan, even its own admin may not'
     $user = User::factory()->role($role)->make(['tenant_id' => $role->isTenantRole() ? 'dumaguete' : null]);
 
     expect($user->can('manageSubscription', $tenant))->toBe($allowed);
+})->with($superAdminsOnly);
+
+test('only super admins may browse the platform\'s invoices', function (Role $role, bool $allowed) {
+    $user = User::factory()->role($role)->make();
+
+    expect($user->can('viewAny', SubscriptionInvoice::class))->toBe($allowed);
 })->with($superAdminsOnly);
