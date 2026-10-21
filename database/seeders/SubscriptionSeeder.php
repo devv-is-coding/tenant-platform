@@ -148,7 +148,7 @@ class SubscriptionSeeder extends Seeder
         foreach ($payments as $index => $payment) {
             $amountPaid += $payment['amount_minor'];
 
-            DB::table('subscription_payments')->insert([
+            $paymentId = DB::table('subscription_payments')->insertGetId([
                 'subscription_invoice_id' => $invoiceId,
                 'tenant_id' => $tenant->id,
                 'reference' => sprintf('PLATPAY-%s-%04d-%d', $this->tenantCode($tenant->id), $sequence, $index + 1),
@@ -163,15 +163,11 @@ class SubscriptionSeeder extends Seeder
                 'updated_on' => $payment['paid_on'],
             ]);
 
-            $this->platformAudit($tenant, $superAdminId, 'subscription.payment_recorded', $invoiceId, $payment['paid_on']);
-
-            $status = $amountPaid >= $amountMinor
-                ? SubscriptionInvoiceStatus::Paid
-                : SubscriptionInvoiceStatus::PartiallyPaid;
+            $this->platformAudit($tenant, $superAdminId, 'subscription.payment_recorded', $paymentId, $payment['paid_on']);
 
             DB::table('subscription_invoices')->where('id', $invoiceId)->update([
                 'amount_paid_minor' => $amountPaid,
-                'status' => $status->value,
+                'status' => SubscriptionInvoiceStatus::fromAmounts($amountMinor, $amountPaid)->value,
             ]);
         }
     }
@@ -184,9 +180,11 @@ class SubscriptionSeeder extends Seeder
             'actor_id' => $actorId,
             'actor_role' => Role::SuperAdmin->value,
             'action' => $action,
-            'subject_type' => in_array($action, ['subscription.invoice_issued', 'subscription.payment_recorded'], true)
-                ? 'subscription_invoice'
-                : 'subscription',
+            'subject_type' => match ($action) {
+                'subscription.invoice_issued' => 'subscription_invoice',
+                'subscription.payment_recorded' => 'subscription_payment',
+                default => 'subscription',
+            },
             'subject_id' => $subjectId,
             'created_on' => $createdOn,
         ]);

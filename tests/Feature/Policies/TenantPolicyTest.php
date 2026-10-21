@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Role;
+use App\Models\PlatformAuditEvent;
 use App\Models\SubscriptionInvoice;
 use App\Models\Tenant;
 use App\Models\User;
@@ -50,4 +51,17 @@ test('only super admins may browse the platform\'s invoices', function (Role $ro
     $user = User::factory()->role($role)->make();
 
     expect($user->can('viewAny', SubscriptionInvoice::class))->toBe($allowed);
+})->with($superAdminsOnly);
+
+test('only super admins may read the platform audit log', function (Role $role, bool $allowed) {
+    $user = User::factory()->role($role)->make();
+
+    expect($user->can('viewAny', PlatformAuditEvent::class))->toBe($allowed);
+})->with($superAdminsOnly);
+
+test('only super admins may record a payment against an invoice, even the billed agency\'s own admin may not', function (Role $role, bool $allowed) {
+    $invoice = SubscriptionInvoice::factory()->make(['subscription_id' => 1, 'tenant_id' => 'dumaguete']);
+    $user = User::factory()->role($role)->make(['tenant_id' => $role->isTenantRole() ? 'dumaguete' : null]);
+
+    expect($user->can('recordPayment', $invoice))->toBe($allowed);
 })->with($superAdminsOnly);
