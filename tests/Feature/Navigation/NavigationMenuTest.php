@@ -4,6 +4,8 @@ use App\Enums\Role;
 use App\Models\User;
 use App\Services\Navigation\NavigationMenu;
 
+use function Pest\Laravel\get;
+
 /**
  * Flatten every link href in a menu, so a test can assert on what is reachable
  * without walking the section/group/link nesting itself.
@@ -124,7 +126,7 @@ test('guests get no authenticated links', function () {
 });
 
 test('a section is marked current when its own route is active', function () {
-    $this->get(route('dashboard'));
+    get(route('dashboard'));
 
     $sections = navigationFor(User::factory()->role(Role::Customer)->create());
 
@@ -132,7 +134,7 @@ test('a section is marked current when its own route is active', function () {
 });
 
 test('a dropdown is marked current when one of its links is active', function () {
-    $this->get(route('profile.edit'));
+    get(route('profile.edit'));
 
     $sections = navigationFor(User::factory()->role(Role::Customer)->create());
     $settings = collect($sections)->firstWhere('label', __('Settings'));

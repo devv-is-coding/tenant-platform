@@ -15,6 +15,7 @@ use Livewire\Livewire;
 use Stancl\Tenancy\Exceptions\TenantCouldNotBeIdentifiedOnDomainException;
 
 use function Pest\Laravel\get;
+use function Pest\Laravel\withoutExceptionHandling;
 
 /*
  * Deleting an agency must keep its own database, so these tests provision real
@@ -93,7 +94,7 @@ test('a deleted agency\'s address no longer identifies it', function () {
         ->set('delete_reason', 'Agency closed its business.')
         ->call('deleteAgency');
 
-    $this->withoutExceptionHandling();
+    withoutExceptionHandling();
     expect(fn () => get('http://dumaguete.localhost/login'))->toThrow(TenantCouldNotBeIdentifiedOnDomainException::class);
 });
 

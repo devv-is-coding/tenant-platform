@@ -101,7 +101,7 @@ test('every console page is forbidden to every role but super admin', function (
     actingAs($user);
 
     foreach (consolePages($tenant->id) as $name => $url) {
-        $this->assertSame(403, get($url)->status(), "[{$name}] was not forbidden to a {$role->name}");
+        expect(get($url)->status())->toBe(403, "[{$name}] was not forbidden to a {$role->name}");
     }
 })->with([
     'admin' => Role::Admin,
@@ -118,7 +118,7 @@ test('no console page exists on an agency\'s own domain, even for its admin', fu
     foreach (consolePages($tenant->id) as $name => $url) {
         $onAgencyDomain = 'http://dumaguete.localhost'.parse_url($url, PHP_URL_PATH);
 
-        $this->assertSame(404, get($onAgencyDomain)->status(), "[{$name}] was reachable on the agency's domain");
+        expect(get($onAgencyDomain)->status())->toBe(404, "[{$name}] was reachable on the agency's domain");
     }
 });
 

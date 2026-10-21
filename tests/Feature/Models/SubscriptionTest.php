@@ -7,6 +7,8 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Event;
 use Stancl\Tenancy\Events\TenantCreated;
 
+use function Pest\Laravel\assertModelExists;
+
 beforeEach(function () {
     // Only the central tables are exercised, so no tenant database is provisioned.
     Event::fake([TenantCreated::class]);
@@ -51,6 +53,6 @@ test('an agency with billing history cannot be hard-deleted', function () {
     // key; RESTRICT is what still guards a force delete.
     expect(fn () => $tenant->forceDelete())->toThrow(QueryException::class);
 
-    $this->assertModelExists($tenant);
-    $this->assertModelExists($subscription);
+    assertModelExists($tenant);
+    assertModelExists($subscription);
 });
