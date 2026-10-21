@@ -24,4 +24,12 @@ class SubscriptionInvoicePolicy
     {
         return $user->isSuperAdmin();
     }
+
+    /**
+     * Determine whether the user can delete the invoice, with its payments.
+     */
+    public function delete(User $user, SubscriptionInvoice $subscriptionInvoice): bool
+    {
+        return $user->isSuperAdmin();
+    }
 }

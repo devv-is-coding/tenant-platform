@@ -74,15 +74,9 @@ class NavigationMenu
         }
 
         return [
+            $this->section(__('Dashboard'), 'squares-2x2', route('admin.dashboard'), 'admin.dashboard'),
             $this->dropdown(__('Platform'), 'shield-check', [
                 $this->group(__('Oversight'), [
-                    $this->link(
-                        __('Console'),
-                        __('Platform-wide status and activity.'),
-                        route('admin.dashboard'),
-                        'shield-check',
-                        'admin.dashboard',
-                    ),
                     $this->link(
                         __('Audit log'),
                         __('Everything the platform did, and who did it.'),

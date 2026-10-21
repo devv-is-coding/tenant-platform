@@ -62,7 +62,9 @@ class OnboardTenantAction
 
             $this->auditRecorder->recordPlatformEvent(AuditAction::TenantCreated, $actor, $tenant);
         } catch (Throwable $exception) {
-            $tenant->delete();
+            // Undoing a half-created agency that never went live: a force
+            // delete, so its database is dropped rather than left behind.
+            $tenant->forceDelete();
 
             throw $exception;
         }

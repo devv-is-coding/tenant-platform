@@ -31,6 +31,7 @@ class CreateTenantsTable extends Migration
 
             $table->timestamp('created_on')->nullable();
             $table->timestamp('updated_on')->nullable();
+            $table->softDeletes('deleted_on');
             $table->json('data')->nullable();
         });
     }

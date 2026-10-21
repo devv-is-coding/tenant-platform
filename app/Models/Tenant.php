@@ -9,11 +9,13 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Stancl\Tenancy\Contracts\TenantWithDatabase;
 use Stancl\Tenancy\Database\Concerns\HasDatabase;
 use Stancl\Tenancy\Database\Concerns\HasDomains;
 use Stancl\Tenancy\Database\Models\Tenant as BaseTenant;
+use Stancl\Tenancy\Events;
 
 /**
  * Multi-database tenancy requires a tenant model implementing TenantWithDatabase;
@@ -28,16 +30,42 @@ use Stancl\Tenancy\Database\Models\Tenant as BaseTenant;
  * @property string|null $status_reason
  * @property Carbon|null $status_changed_on
  * @property int|null $status_changed_by
+ * @property Carbon|null $deleted_on
  * @property-read Subscription|null $latestSubscription
  */
 class Tenant extends BaseTenant implements TenantWithDatabase
 {
     /** @use HasFactory<TenantFactory> */
-    use HasDatabase, HasDomains, HasFactory;
+    use HasDatabase, HasDomains, HasFactory, SoftDeletes;
 
     const CREATED_AT = 'created_on';
 
     const UPDATED_AT = 'updated_on';
+
+    const DELETED_AT = 'deleted_on';
+
+    /**
+     * stancl's model events, except that deleting is mapped to a *force*
+     * delete only.
+     *
+     * TenantDeleted runs the DeleteDatabase job, and Eloquent fires `deleted`
+     * for a soft delete too, so the stock mapping would drop an agency's whole
+     * database when it is only soft-deleted. A soft delete must hide the agency
+     * and keep its data; only forceDelete() (tests, data repair, a failed
+     * onboarding) may destroy it.
+     *
+     * @var array<string, class-string>
+     */
+    protected $dispatchesEvents = [
+        'saving' => Events\SavingTenant::class,
+        'saved' => Events\TenantSaved::class,
+        'creating' => Events\CreatingTenant::class,
+        'created' => Events\TenantCreated::class,
+        'updating' => Events\UpdatingTenant::class,
+        'updated' => Events\TenantUpdated::class,
+        'forceDeleting' => Events\DeletingTenant::class,
+        'forceDeleted' => Events\TenantDeleted::class,
+    ];
 
     /**
      * Mirrors the column default, so a freshly created tenant reports Pending
@@ -64,6 +92,7 @@ class Tenant extends BaseTenant implements TenantWithDatabase
             'status_changed_by',
             'created_on',
             'updated_on',
+            'deleted_on',
         ];
     }
 

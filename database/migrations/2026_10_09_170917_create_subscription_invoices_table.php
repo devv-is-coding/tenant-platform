@@ -64,6 +64,7 @@ return new class extends Migration
 
             $table->timestamp('created_on')->nullable();
             $table->timestamp('updated_on')->nullable();
+            $table->softDeletes('deleted_on');
 
             // Issuing a period twice must produce one invoice, so the monthly
             // billing job is idempotent by construction rather than by

@@ -6,6 +6,7 @@ use App\Enums\AuditAction;
 use App\Enums\Role;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use LogicException;
 
@@ -45,9 +46,13 @@ use LogicException;
 ])]
 class AuditEvent extends Model
 {
+    use SoftDeletes;
+
     const CREATED_AT = 'created_on';
 
     const UPDATED_AT = null;
+
+    const DELETED_AT = 'deleted_on';
 
     /**
      * Get the attributes that should be cast.

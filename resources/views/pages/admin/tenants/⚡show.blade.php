@@ -1,8 +1,13 @@
 <?php
 
+use App\Actions\Subscriptions\DeleteSubscriptionAction;
+use App\Actions\Subscriptions\DeleteSubscriptionInvoiceAction;
+use App\Actions\Subscriptions\DeleteSubscriptionPaymentAction;
 use App\Actions\Subscriptions\RecordSubscriptionPaymentAction;
 use App\Actions\Subscriptions\StartSubscriptionAction;
 use App\Actions\Tenants\ChangeTenantStatusAction;
+use App\Actions\Tenants\DeleteAgencyUserAction;
+use App\Actions\Tenants\DeleteTenantAction;
 use App\Enums\BillingInterval;
 use App\Enums\PaymentMethod;
 use App\Enums\SubscriptionInvoiceStatus;
@@ -66,6 +71,19 @@ new class extends Component {
     public int $payment_method = PaymentMethod::BankTransfer->value;
 
     public string $payment_paid_on = '';
+
+    /**
+     * What the delete confirmation is open for: a user, subscription, invoice
+     * or payment of this agency. Set only by confirmDelete(), never by the
+     * browser.
+     */
+    #[Locked]
+    public ?string $deleting_type = null;
+
+    #[Locked]
+    public ?int $deleting_id = null;
+
+    public string $delete_reason = '';
 
     /**
      * Mount the component.
@@ -171,6 +189,107 @@ new class extends Component {
             'amount' => Money::ofMinor($payment->amount_minor, $payment->currency)->format(),
             'reference' => $invoice->reference,
         ]));
+    }
+
+    /**
+     * Open the delete confirmation for one of this agency's records.
+     */
+    public function confirmDelete(string $type, int $id): void
+    {
+        $record = $this->recordToDelete($type, $id);
+        $this->authorize('delete', $record);
+
+        $this->resetErrorBag();
+        $this->reset('delete_reason');
+        $this->deleting_type = $type;
+        $this->deleting_id = $id;
+        unset($this->deletion);
+
+        Flux::modal('delete-record')->show();
+    }
+
+    /**
+     * Soft-delete the record the confirmation is open for, cascading to what
+     * belongs to it.
+     *
+     * The record is looked up through this agency, so a tampered request
+     * cannot reach another agency's rows. Authorized here because Livewire's
+     * update requests do not re-run the admin route middleware.
+     */
+    public function deleteRecord(
+        DeleteAgencyUserAction $deleteUser,
+        DeleteSubscriptionAction $deleteSubscription,
+        DeleteSubscriptionInvoiceAction $deleteInvoice,
+        DeleteSubscriptionPaymentAction $deletePayment,
+    ): void {
+        $record = $this->recordToDelete((string) $this->deleting_type, (int) $this->deleting_id);
+        $this->authorize('delete', $record);
+        $input = $this->only('delete_reason');
+        // Read before deleting: once trashed the record is no longer found.
+        $label = $this->deletion['name'] ?? '';
+
+        match (true) {
+            $record instanceof User => $deleteUser->handle(Auth::user(), $this->tenant, $record, $input),
+            $record instanceof Subscription => $deleteSubscription->handle(Auth::user(), $record, $input),
+            $record instanceof SubscriptionInvoice => $deleteInvoice->handle(Auth::user(), $record, $input),
+            $record instanceof SubscriptionPayment => $deletePayment->handle(Auth::user(), $record, $input),
+        };
+
+        $this->reset('deleting_type', 'deleting_id', 'delete_reason');
+        unset($this->users, $this->subscription, $this->subscriptions, $this->invoices, $this->payments, $this->balanceOwed, $this->recentActivity, $this->deletion);
+        Flux::modals()->close();
+        Flux::toast(variant: 'success', text: __(':name was deleted.', ['name' => $label]));
+    }
+
+    /**
+     * Soft-delete the agency with its users, domains and billing records, and
+     * return to the directory.
+     */
+    public function deleteAgency(DeleteTenantAction $deleteTenant): void
+    {
+        $this->authorize('delete', $this->tenant);
+
+        $deleteTenant->handle(Auth::user(), $this->tenant, $this->only('delete_reason'));
+
+        Flux::toast(variant: 'success', text: __(':name was deleted.', ['name' => $this->tenant->name ?? $this->tenant->id]));
+        $this->redirectRoute('admin.tenants.index', navigate: true);
+    }
+
+    /**
+     * Describe what the open delete confirmation will remove, including what
+     * cascades with it.
+     *
+     * @return array{name: string, cascade: string|null}|null
+     */
+    #[Computed]
+    public function deletion(): ?array
+    {
+        if ($this->deleting_type === null || $this->deleting_id === null) {
+            return null;
+        }
+
+        $record = $this->recordToDelete($this->deleting_type, $this->deleting_id);
+
+        return match (true) {
+            $record instanceof User => ['name' => $record->full_name, 'cascade' => null],
+            $record instanceof Subscription => ['name' => $record->plan_name, 'cascade' => __('Its invoices and their payments are deleted with it.')],
+            $record instanceof SubscriptionInvoice => ['name' => $record->reference, 'cascade' => __('Its payments are deleted with it.')],
+            $record instanceof SubscriptionPayment => ['name' => $record->reference, 'cascade' => __('The invoice\'s paid amount is recalculated without it.')],
+        };
+    }
+
+    /**
+     * Find one of this agency's records by type, or fail with a 404.
+     */
+    private function recordToDelete(string $type, int $id): User|Subscription|SubscriptionInvoice|SubscriptionPayment
+    {
+        return match ($type) {
+            'user' => $this->tenant->users()->findOrFail($id),
+            'subscription' => $this->tenant->subscriptions()->findOrFail($id),
+            'invoice' => $this->tenant->subscriptionInvoices()->findOrFail($id),
+            'payment' => $this->tenant->subscriptionPayments()->findOrFail($id),
+            default => abort(404),
+        };
     }
 
     /**
@@ -335,16 +454,65 @@ new class extends Component {
                 <flux:badge :color="$tenant->status->color()">{{ $tenant->status->label() }}</flux:badge>
             </div>
 
-            @if ($this->statusActions)
-                <div class="flex gap-2">
-                    @foreach ($this->statusActions as $action)
-                        <flux:modal.trigger :name="'change-status-'.$action['status']->value">
-                            <flux:button :variant="$action['variant']">{{ $action['label'] }}</flux:button>
-                        </flux:modal.trigger>
-                    @endforeach
-                </div>
-            @endif
+            <div class="flex flex-wrap gap-2">
+                @foreach ($this->statusActions as $action)
+                    <flux:modal.trigger :name="'change-status-'.$action['status']->value">
+                        <flux:button :variant="$action['variant']">{{ $action['label'] }}</flux:button>
+                    </flux:modal.trigger>
+                @endforeach
+
+                @can('delete', $tenant)
+                    <flux:modal.trigger name="delete-agency">
+                        <flux:button variant="ghost" icon="trash" class="text-red-600! dark:text-red-400!">{{ __('Delete agency') }}</flux:button>
+                    </flux:modal.trigger>
+                @endcan
+            </div>
         </div>
+
+        <flux:modal name="delete-agency" class="md:w-[28rem]">
+            <form wire:submit="deleteAgency" class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Delete :name?', ['name' => $tenant->name ?? $tenant->id]) }}</flux:heading>
+                    <flux:text class="mt-2">
+                        {{ __('Its users, domains, subscriptions, invoices and payments are deleted with it, and its address stops working. Nothing is destroyed: every row is kept with a deletion date, and so is the agency\'s own database and audit trail.') }}
+                    </flux:text>
+                </div>
+
+                <flux:textarea wire:model="delete_reason" :label="__('Reason')" rows="3" required />
+
+                <div class="flex justify-end gap-2">
+                    <flux:modal.close>
+                        <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+
+                    <flux:button type="submit" variant="danger">{{ __('Delete agency') }}</flux:button>
+                </div>
+            </form>
+        </flux:modal>
+
+        <flux:modal name="delete-record" class="md:w-[28rem]">
+            @if ($this->deletion)
+                <form wire:submit="deleteRecord" class="space-y-6">
+                    <div>
+                        <flux:heading size="lg">{{ __('Delete :name?', ['name' => $this->deletion['name']]) }}</flux:heading>
+                        <flux:text class="mt-2">
+                            {{ $this->deletion['cascade'] }}
+                            {{ __('Nothing is destroyed: the row is kept with a deletion date.') }}
+                        </flux:text>
+                    </div>
+
+                    <flux:textarea wire:model="delete_reason" :label="__('Reason')" rows="3" required />
+
+                    <div class="flex justify-end gap-2">
+                        <flux:modal.close>
+                            <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                        </flux:modal.close>
+
+                        <flux:button type="submit" variant="danger">{{ __('Delete') }}</flux:button>
+                    </div>
+                </form>
+            @endif
+        </flux:modal>
 
         <flux:text class="mt-2">
             {{ $tenant->domains->pluck('domain')->join(', ') ?: $tenant->id }}
@@ -395,6 +563,7 @@ new class extends Component {
                     <flux:table.column>{{ __('Name') }}</flux:table.column>
                     <flux:table.column>{{ __('Role') }}</flux:table.column>
                     <flux:table.column class="max-sm:hidden">{{ __('Account') }}</flux:table.column>
+                    <flux:table.column align="end"><span class="sr-only">{{ __('Actions') }}</span></flux:table.column>
                 </flux:table.columns>
 
                 <flux:table.rows>
@@ -414,10 +583,16 @@ new class extends Component {
                                     <flux:badge color="zinc" size="sm" inset="top bottom">{{ __('Deactivated') }}</flux:badge>
                                 @endif
                             </flux:table.cell>
+
+                            <flux:table.cell align="end">
+                                @can('delete', $user)
+                                    <flux:button size="xs" variant="ghost" icon="trash" inset="top bottom" wire:click="confirmDelete('user', {{ $user->id }})" :aria-label="__('Delete :name', ['name' => $user->full_name])" />
+                                @endcan
+                            </flux:table.cell>
                         </flux:table.row>
                     @empty
                         <flux:table.row>
-                            <flux:table.cell colspan="3" class="py-8 text-center">{{ __('This agency has no users.') }}</flux:table.cell>
+                            <flux:table.cell colspan="4" class="py-8 text-center">{{ __('This agency has no users.') }}</flux:table.cell>
                         </flux:table.row>
                     @endforelse
                 </flux:table.rows>
@@ -527,6 +702,7 @@ new class extends Component {
                     <flux:table.column class="max-sm:hidden">{{ __('Status') }}</flux:table.column>
                     <flux:table.column class="max-sm:hidden">{{ __('Started') }}</flux:table.column>
                     <flux:table.column class="max-sm:hidden">{{ __('Ended') }}</flux:table.column>
+                    <flux:table.column align="end"><span class="sr-only">{{ __('Actions') }}</span></flux:table.column>
                 </flux:table.columns>
 
                 <flux:table.rows>
@@ -542,10 +718,15 @@ new class extends Component {
                             </flux:table.cell>
                             <flux:table.cell class="max-sm:hidden">{{ $pastSubscription->starts_on->toFormattedDateString() }}</flux:table.cell>
                             <flux:table.cell class="max-sm:hidden">{{ $pastSubscription->ends_on?->toFormattedDateString() ?? '—' }}</flux:table.cell>
+                            <flux:table.cell align="end">
+                                @can('delete', $pastSubscription)
+                                    <flux:button size="xs" variant="ghost" icon="trash" inset="top bottom" wire:click="confirmDelete('subscription', {{ $pastSubscription->id }})" :aria-label="__('Delete :name', ['name' => $pastSubscription->plan_name])" />
+                                @endcan
+                            </flux:table.cell>
                         </flux:table.row>
                     @empty
                         <flux:table.row>
-                            <flux:table.cell colspan="5" class="py-8 text-center">{{ __('No subscriptions yet.') }}</flux:table.cell>
+                            <flux:table.cell colspan="6" class="py-8 text-center">{{ __('No subscriptions yet.') }}</flux:table.cell>
                         </flux:table.row>
                     @endforelse
                 </flux:table.rows>
@@ -593,13 +774,19 @@ new class extends Component {
                                 </div>
                             </flux:table.cell>
                             <flux:table.cell align="end">
-                                @if ($invoice->status->acceptsPayment())
-                                    @can('recordPayment', $invoice)
-                                        <flux:button size="xs" wire:click="openPaymentForm({{ $invoice->id }})" inset="top bottom">
-                                            {{ __('Record payment') }}
-                                        </flux:button>
+                                <div class="flex justify-end gap-1">
+                                    @if ($invoice->status->acceptsPayment())
+                                        @can('recordPayment', $invoice)
+                                            <flux:button size="xs" wire:click="openPaymentForm({{ $invoice->id }})" inset="top bottom">
+                                                {{ __('Record payment') }}
+                                            </flux:button>
+                                        @endcan
+                                    @endif
+
+                                    @can('delete', $invoice)
+                                        <flux:button size="xs" variant="ghost" icon="trash" inset="top bottom" wire:click="confirmDelete('invoice', {{ $invoice->id }})" :aria-label="__('Delete :name', ['name' => $invoice->reference])" />
                                     @endcan
-                                @endif
+                                </div>
                             </flux:table.cell>
                         </flux:table.row>
                     @empty
@@ -673,6 +860,7 @@ new class extends Component {
                     <flux:table.column align="end">{{ __('Amount') }}</flux:table.column>
                     <flux:table.column class="max-sm:hidden">{{ __('Paid on') }}</flux:table.column>
                     <flux:table.column class="max-lg:hidden">{{ __('Recorded by') }}</flux:table.column>
+                    <flux:table.column align="end"><span class="sr-only">{{ __('Actions') }}</span></flux:table.column>
                 </flux:table.columns>
 
                 <flux:table.rows>
@@ -690,10 +878,15 @@ new class extends Component {
                             <flux:table.cell align="end">{{ Money::ofMinor($payment->amount_minor, $payment->currency)->format() }}</flux:table.cell>
                             <flux:table.cell class="max-sm:hidden">{{ $payment->paid_on?->toFormattedDateString() ?? '—' }}</flux:table.cell>
                             <flux:table.cell class="max-lg:hidden">{{ $payment->method->isGatewaySettled() ? __('Gateway') : ($payment->recorder?->full_name ?? '—') }}</flux:table.cell>
+                            <flux:table.cell align="end">
+                                @can('delete', $payment)
+                                    <flux:button size="xs" variant="ghost" icon="trash" inset="top bottom" wire:click="confirmDelete('payment', {{ $payment->id }})" :aria-label="__('Delete :name', ['name' => $payment->reference])" />
+                                @endcan
+                            </flux:table.cell>
                         </flux:table.row>
                     @empty
                         <flux:table.row>
-                            <flux:table.cell colspan="6" class="py-8 text-center">{{ __('This agency has not paid the platform anything yet.') }}</flux:table.cell>
+                            <flux:table.cell colspan="7" class="py-8 text-center">{{ __('This agency has not paid the platform anything yet.') }}</flux:table.cell>
                         </flux:table.row>
                     @endforelse
                 </flux:table.rows>

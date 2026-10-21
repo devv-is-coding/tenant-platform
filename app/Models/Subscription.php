@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Stancl\Tenancy\Database\Concerns\CentralConnection;
 
@@ -36,6 +37,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property int|null $created_by
  * @property Carbon|null $created_on
  * @property Carbon|null $updated_on
+ * @property Carbon|null $deleted_on
  */
 #[Fillable([
     'tenant_id',
@@ -63,11 +65,13 @@ class Subscription extends Model
      *
      * @use HasFactory<SubscriptionFactory>
      */
-    use CentralConnection, HasFactory;
+    use CentralConnection, HasFactory, SoftDeletes;
 
     const CREATED_AT = 'created_on';
 
     const UPDATED_AT = 'updated_on';
+
+    const DELETED_AT = 'deleted_on';
 
     /**
      * Get the attributes that should be cast.

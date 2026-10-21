@@ -1,7 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureUserIsSuperAdmin;
-use App\Http\Middleware\RedirectSuperAdminsToConsole;
+use App\Http\Middleware\RedirectSuperAdminsToAdminDashboard;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
 use Laravel\Passkeys\Http\Controllers\PasskeyLoginController;
@@ -36,11 +36,20 @@ Route::domain((string) parse_url((string) config('app.url'), PHP_URL_HOST))->gro
             ->name('admin.passkey.login');
     });
 
+    /*
+    | The super admin's first page: public, and where a guest opening any admin
+    | page is sent, one step before the login. A super admin already signed in
+    | goes on to the dashboard.
+    */
+    Route::view('admin/homepage', 'pages::admin.homepage')
+        ->middleware(RedirectSuperAdminsToAdminDashboard::class)
+        ->name('admin.homepage');
+
     Route::middleware(['auth', 'verified', EnsureUserIsSuperAdmin::class])
         ->prefix('admin')
         ->name('admin.')
         ->group(function () {
-            Route::view('/', 'admin.dashboard')->name('dashboard');
+            Route::livewire('/', 'pages::admin.dashboard')->name('dashboard');
 
             Route::livewire('tenants', 'pages::admin.tenants.index')->name('tenants.index');
 
@@ -56,7 +65,7 @@ Route::domain((string) parse_url((string) config('app.url'), PHP_URL_HOST))->gro
 
     Route::middleware(['auth', 'verified'])->group(function () {
         Route::view('dashboard', 'dashboard')
-            ->middleware(RedirectSuperAdminsToConsole::class)
+            ->middleware(RedirectSuperAdminsToAdminDashboard::class)
             ->name('dashboard');
     });
 

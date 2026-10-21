@@ -20,6 +20,7 @@ class CreateDomainsTable extends Migration
 
             $table->timestamp('created_on')->nullable();
             $table->timestamp('updated_on')->nullable();
+            $table->softDeletes('deleted_on');
             $table->foreign('tenant_id')->references('id')->on('tenants')->onUpdate('cascade')->onDelete('cascade');
         });
     }

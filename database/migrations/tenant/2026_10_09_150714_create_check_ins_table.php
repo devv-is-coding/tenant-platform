@@ -56,6 +56,7 @@ return new class extends Migration
 
             $table->timestamp('created_on')->nullable();
             $table->timestamp('updated_on')->nullable();
+            $table->softDeletes('deleted_on');
 
             $table->unique(['customer_id', 'itinerary_stop_id']);
             $table->index(['booking_id', 'checked_in_on']);

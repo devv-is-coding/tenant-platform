@@ -63,6 +63,7 @@ return new class extends Migration
             $table->text('user_agent')->nullable();
 
             $table->timestamp('created_on')->nullable()->index();
+            $table->softDeletes('deleted_on');
 
             $table->index(['subject_type', 'subject_id']);
         });
