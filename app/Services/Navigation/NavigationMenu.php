@@ -83,6 +83,13 @@ class NavigationMenu
                         'shield-check',
                         'admin.dashboard',
                     ),
+                    $this->link(
+                        __('Audit log'),
+                        __('Everything the platform did, and who did it.'),
+                        route('admin.audit.index'),
+                        'clipboard-document-list',
+                        'admin.audit.index',
+                    ),
                 ]),
                 $this->group(__('Agencies'), [
                     $this->link(

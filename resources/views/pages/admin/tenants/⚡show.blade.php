@@ -701,7 +701,15 @@ new class extends Component {
         </section>
 
         <section class="flex flex-col gap-4 lg:col-span-3">
-            <flux:heading size="lg" level="2">{{ __('Recent activity') }}</flux:heading>
+            <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <flux:heading size="lg" level="2">{{ __('Recent activity') }}</flux:heading>
+
+                @can('viewAny', PlatformAuditEvent::class)
+                    <flux:link :href="route('admin.audit.index', ['tenant' => $tenant->id])" variant="subtle" class="text-sm" wire:navigate>
+                        {{ __('View the full audit log') }}
+                    </flux:link>
+                @endcan
+            </div>
 
             <flux:table>
                 <flux:table.columns>

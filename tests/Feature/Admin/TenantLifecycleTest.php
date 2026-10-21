@@ -74,6 +74,27 @@ test('suspending an agency stores the reason and writes the change to both audit
         ->and($notice->changes)->toBe(['status' => ['old' => 2, 'new' => 4]]);
 });
 
+/*
+ * The platform decides whether an agency operates, never how: only lifecycle
+ * actions cross into an agency's log, which AuditRecorderTest pins down for
+ * item.approved and the other operational actions.
+ */
+test('a suspension is visible in the platform audit log and in the agency\'s own log', function () {
+    $superAdmin = User::factory()->superAdmin()->create();
+    $tenant = Tenant::factory()->create(['name' => 'Dumaguete City Travel & Tours']);
+
+    app(ChangeTenantStatusAction::class)->handle($superAdmin, $tenant, TenantStatus::Suspended, ['status_reason' => 'Subscription unpaid 14 days past due.']);
+
+    $central = Livewire::actingAs($superAdmin)
+        ->test('pages::admin.audit.index')
+        ->set('tenant', $tenant->id)
+        ->assertSee('Subscription unpaid 14 days past due.')
+        ->instance()->events;
+    expect($central->pluck('action')->all())->toBe([AuditAction::TenantSuspended]);
+
+    expect(tenantAuditLog($tenant)->pluck('action')->all())->toBe([AuditAction::TenantSuspended]);
+});
+
 test('a suspension without a reason is rejected and changes nothing', function (string $reason) {
     $tenant = Tenant::factory()->create();
 
