@@ -287,6 +287,7 @@ Branch naming and commit messages are separate conventions; commits still follow
 - `.env` is read only when the container is created. After changing it, run `docker compose up -d --force-recreate app`.
 - Recreating or restarting the `app` container resets its source to the image's copy and detaches the running watch, so every uncommitted edit since the last image build disappears *inside the container* — routes 404, new pages vanish. Nothing is lost on the host. Always follow a recreate with `docker compose up --watch` (its `initial_sync` re-copies the host source), then confirm the work is back before reporting anything as broken.
 - Changes to `composer.json` or `composer.lock` rebuild the image automatically while watch is running.
+- Before ending any task that changed files, update the running container. Make sure `docker compose up --watch` is running (start it in the background if it is not), then confirm the container has the work: a changed file's content matches inside `docker compose exec -T app`, and any new route appears in `php artisan route:list` there. If the change touched Blade, CSS or JS, also run `npm run build` on the host: `public/` is bind-mounted, and Tailwind emits only the classes it found at build time, so a new class silently does nothing until then. Tests pass on the host without the container, so they do not prove the app the user sees is current.
 
 ## Timestamp Columns
 
