@@ -308,7 +308,8 @@ Branch naming and commit messages are separate conventions; commits still follow
 
 ## IDE Diagnostics
 
-- Before ending a task, always check the IDE diagnostics (`getDiagnostics`) for every file you created or modified, and resolve every error and warning you introduced.
+- Before ending a task, always check the IDE diagnostics (`getDiagnostics`) for every file you created or modified, and resolve every error and warning in them — including ones that were already there and Intelephense false positives. Never leave one because it predates your change.
+- In Pest tests Intelephense reports `$this->assertModelExists()`, `$this->get()` and similar as "Undefined method", because it does not know Pest binds `$this` to the TestCase. Fix it the project's way: Pest's function helpers (`use function Pest\Laravel\assertModelExists;`, `get`, `actingAs`, `withoutExceptionHandling`) and `expect()` instead of `$this->assert*()`.
 - Check every language the change touched, not only PHP/Intelephense: Blade, CSS, JS, JSON and config files all report separately.
 - Also re-check files you did not edit whose diagnostics the change could affect.
 - When a warning is a false positive from tooling that does not understand valid syntax (for example VS Code's CSS service not knowing Tailwind v4's `@theme`, `@source` or `@apply`), silence it at its source — e.g. `.vscode/css-custom-data.json` — rather than leaving it or rewriting correct code to satisfy it.
