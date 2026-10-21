@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Stancl\Tenancy\Database\Concerns\CentralConnection;
 
@@ -35,6 +36,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property string|null $void_reason
  * @property Carbon|null $created_on
  * @property Carbon|null $updated_on
+ * @property Carbon|null $deleted_on
  */
 #[Fillable([
     'subscription_id',
@@ -59,11 +61,13 @@ class SubscriptionInvoice extends Model
      *
      * @use HasFactory<SubscriptionInvoiceFactory>
      */
-    use CentralConnection, HasFactory;
+    use CentralConnection, HasFactory, SoftDeletes;
 
     const CREATED_AT = 'created_on';
 
     const UPDATED_AT = 'updated_on';
+
+    const DELETED_AT = 'deleted_on';
 
     /**
      * Mirrors the column defaults, so a freshly issued invoice reports Open and
@@ -123,6 +127,28 @@ class SubscriptionInvoice extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(SubscriptionPayment::class);
+    }
+
+    /**
+     * Recompute what has been paid from the payments ledger and derive the
+     * status from it.
+     *
+     * Always a SUM over the payments still on the ledger - a deleted payment
+     * drops out - and never an increment, so the balance cannot drift. A void
+     * invoice stays void: that status is a decision, not a fact about money.
+     * Call it inside the transaction that changed the ledger, with the row
+     * locked.
+     */
+    public function recomputeAmountPaid(): void
+    {
+        $amountPaidMinor = (int) $this->payments()->countingAsPaid()->sum('amount_minor');
+
+        $this->update([
+            'amount_paid_minor' => $amountPaidMinor,
+            'status' => $this->status === SubscriptionInvoiceStatus::Void
+                ? SubscriptionInvoiceStatus::Void
+                : SubscriptionInvoiceStatus::fromAmounts($this->amount_minor, $amountPaidMinor),
+        ]);
     }
 
     /**

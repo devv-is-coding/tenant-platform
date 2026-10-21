@@ -13,18 +13,19 @@ afterEach(function () {
     tenancy()->end();
 
     // Drops the tenant databases created during the test.
-    Tenant::all()->each->delete();
+    Tenant::withTrashed()->get()->each->forceDelete();
 });
 
-test('super admins can open the platform console', function () {
+test('super admins can open the admin dashboard', function () {
     $superAdmin = User::factory()->superAdmin()->create();
 
     actingAs($superAdmin)
         ->get(route('admin.dashboard'))
-        ->assertSee('Platform console');
+        ->assertOk()
+        ->assertSee('Dashboard');
 });
 
-test('the platform console is forbidden to every other role', function (Role $role) {
+test('the admin dashboard is forbidden to every other role', function (Role $role) {
     $user = User::factory()->role($role)->create();
 
     actingAs($user)
@@ -37,12 +38,12 @@ test('the platform console is forbidden to every other role', function (Role $ro
     'customer' => Role::Customer,
 ]);
 
-test('guests opening the platform console are sent to the super admin login', function () {
+test('guests opening the admin dashboard are sent to the admin homepage', function () {
     get(route('admin.dashboard'))
-        ->assertRedirect(route('admin.login'));
+        ->assertRedirect(route('admin.homepage'));
 });
 
-test('tenant domains have no platform console', function () {
+test('tenant domains have no admin dashboard', function () {
     $tenant = Tenant::factory()->create();
     $tenant->domains()->create(['domain' => "{$tenant->id}.localhost"]);
     $staff = User::factory()->role(Role::Staff)->for($tenant)->create();

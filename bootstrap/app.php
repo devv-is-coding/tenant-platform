@@ -47,10 +47,11 @@ return Application::configure(basePath: dirname(__DIR__))
             PreventWritesWhileTenantIsRestricted::class,
         ]);
 
-        // Guests opening the platform console belong at the super admin login,
-        // not the customer one.
+        // Guests opening an admin page are sent to the admin homepage, one step
+        // before the super admin login - not to the customer one. The page they
+        // asked for is still remembered, so signing in returns them to it.
         $middleware->redirectGuestsTo(fn (Request $request): string => $request->routeIs('admin.*')
-            ? route('admin.login')
+            ? route('admin.homepage')
             : route('login'));
     })
     ->withExceptions(function (Exceptions $exceptions): void {

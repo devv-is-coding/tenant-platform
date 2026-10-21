@@ -46,13 +46,13 @@
                             {{ __('Sign in') }}
                         </flux:button>
 
-                        <flux:button :href="route('admin.login')" variant="ghost" icon="shield-check" wire:navigate>
-                            {{ __('Platform console') }}
+                        <flux:button :href="route('admin.homepage')" variant="ghost" icon="shield-check" wire:navigate>
+                            {{ __('Super admin') }}
                         </flux:button>
                     @else
                         @if (auth()->user()->isSuperAdmin())
                             <flux:button :href="route('admin.dashboard')" variant="primary" icon="shield-check" wire:navigate>
-                                {{ __('Open the console') }}
+                                {{ __('Go to dashboard') }}
                             </flux:button>
                         @elseif (auth()->user()->role->isTenantRole())
                             {{--

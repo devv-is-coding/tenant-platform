@@ -12,7 +12,7 @@ afterEach(function () {
     tenancy()->end();
 
     // Drops the tenant databases created during the test.
-    Tenant::all()->each->delete();
+    Tenant::withTrashed()->get()->each->forceDelete();
 });
 
 /**
@@ -111,4 +111,22 @@ test('every money column is an integer with a _minor suffix', function () {
         ->all();
 
     expect($offenders)->toBe([]);
+});
+
+test('every application table can be soft-deleted, as a deleted_on column', function () {
+    // CLAUDE.md: soft deletes are required like created_on and updated_on, even
+    // on a table nothing deletes from yet. Exempt are package plumbing, whose
+    // columns we do not own, and inventory_allocations, which release must
+    // hard-delete: a soft-deleted allocation keeps its unique slot and blocks
+    // resale.
+    $exempt = ['passkeys', 'personal_access_tokens', 'inventory_allocations'];
+
+    $missing = collect(everyApplicationColumn())
+        ->reject(fn (array $column): bool => in_array($column['table'], $exempt, true))
+        ->groupBy(fn (array $column): string => "{$column['connection']}.{$column['table']}")
+        ->reject(fn ($columns): bool => $columns->contains('column', 'deleted_on'))
+        ->keys()
+        ->all();
+
+    expect($missing)->toBe([]);
 });

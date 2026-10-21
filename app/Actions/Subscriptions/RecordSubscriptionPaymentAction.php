@@ -5,8 +5,6 @@ namespace App\Actions\Subscriptions;
 use App\Enums\AuditAction;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentRecordStatus;
-use App\Enums\SubscriptionInvoiceStatus;
-use App\Enums\SubscriptionStatus;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPayment;
@@ -21,7 +19,7 @@ use Illuminate\Validation\ValidationException;
 
 class RecordSubscriptionPaymentAction
 {
-    public function __construct(private AuditRecorder $auditRecorder) {}
+    public function __construct(private AuditRecorder $auditRecorder, private ClearPastDueAction $clearPastDue) {}
 
     /**
      * Record money an agency paid the platform by hand, such as a bank
@@ -55,7 +53,8 @@ class RecordSubscriptionPaymentAction
 
             $payment = $locked->payments()->create([
                 'tenant_id' => $locked->tenant_id,
-                'reference' => 'PLATPAY-'.Str::after($locked->reference, 'PLAT-').'-'.($locked->payments()->count() + 1),
+                // Counted with deleted payments too: they keep their references.
+                'reference' => 'PLATPAY-'.Str::after($locked->reference, 'PLAT-').'-'.($locked->payments()->withTrashed()->count() + 1),
                 'amount_minor' => $amount->minor,
                 'currency' => $amount->currency,
                 'method' => $method,
@@ -66,12 +65,7 @@ class RecordSubscriptionPaymentAction
 
             $previousAmountPaidMinor = $locked->amount_paid_minor;
             $previousStatus = $locked->status;
-            $amountPaidMinor = $this->sumPaidMinor($locked);
-
-            $locked->update([
-                'amount_paid_minor' => $amountPaidMinor,
-                'status' => SubscriptionInvoiceStatus::fromAmounts($locked->amount_minor, $amountPaidMinor),
-            ]);
+            $locked->recomputeAmountPaid();
 
             $this->auditRecorder->recordPlatformEvent(
                 AuditAction::SubscriptionPaymentRecorded,
@@ -84,7 +78,7 @@ class RecordSubscriptionPaymentAction
                 subject: $payment,
             );
 
-            $this->clearPastDueIfSettled($actor, $subscription);
+            $this->clearPastDue->handle($actor, $subscription);
 
             return $payment;
         });
@@ -171,27 +165,5 @@ class RecordSubscriptionPaymentAction
                 ]),
             ]);
         }
-    }
-
-    /**
-     * Move a PastDue subscription back to Active once none of its invoices is
-     * overdue any more.
-     */
-    private function clearPastDueIfSettled(User $actor, Subscription $subscription): void
-    {
-        if ($subscription->status !== SubscriptionStatus::PastDue
-            || $subscription->invoices()->overdue(today())->exists()) {
-            return;
-        }
-
-        $subscription->update(['status' => SubscriptionStatus::Active]);
-
-        $this->auditRecorder->recordPlatformEvent(
-            AuditAction::SubscriptionPastDueCleared,
-            $actor,
-            $subscription->tenant,
-            changes: ['status' => ['old' => SubscriptionStatus::PastDue->value, 'new' => SubscriptionStatus::Active->value]],
-            subject: $subscription,
-        );
     }
 }

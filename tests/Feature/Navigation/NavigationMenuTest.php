@@ -4,6 +4,8 @@ use App\Enums\Role;
 use App\Models\User;
 use App\Services\Navigation\NavigationMenu;
 
+use function Pest\Laravel\get;
+
 /**
  * Flatten every link href in a menu, so a test can assert on what is reachable
  * without walking the section/group/link nesting itself.
@@ -35,7 +37,18 @@ function navigationFor(?User $user, bool $tenantContext = false): array
     return app(NavigationMenu::class)->for($user, $tenantContext);
 }
 
-test('super admins get the console, audit log, agency directory, onboarding and overdue invoices, not the customer dashboard', function () {
+test('super admins open on their dashboard, a top-level link ahead of the platform menu, with no console link left', function () {
+    $sections = navigationFor(User::factory()->superAdmin()->create());
+
+    expect($sections[0]['label'])->toBe('Dashboard')
+        ->and($sections[0]['href'])->toBe(route('admin.dashboard'))
+        ->and($sections[0]['groups'])->toBe([])
+        ->and(collect($sections)->flatMap(fn (array $section): array => $section['groups'])->flatMap(fn (array $group): array => $group['links'])->pluck('label')->all())
+        ->toContain('Audit log')
+        ->not->toContain('Console');
+});
+
+test('super admins get the dashboard, audit log, agency directory, onboarding and overdue invoices, not the customer dashboard', function () {
     $sections = navigationFor(User::factory()->superAdmin()->create());
 
     expect(navigationHrefs($sections))
@@ -113,7 +126,7 @@ test('guests get no authenticated links', function () {
 });
 
 test('a section is marked current when its own route is active', function () {
-    $this->get(route('dashboard'));
+    get(route('dashboard'));
 
     $sections = navigationFor(User::factory()->role(Role::Customer)->create());
 
@@ -121,7 +134,7 @@ test('a section is marked current when its own route is active', function () {
 });
 
 test('a dropdown is marked current when one of its links is active', function () {
-    $this->get(route('profile.edit'));
+    get(route('profile.edit'));
 
     $sections = navigationFor(User::factory()->role(Role::Customer)->create());
     $settings = collect($sections)->firstWhere('label', __('Settings'));

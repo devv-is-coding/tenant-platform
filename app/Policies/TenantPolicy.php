@@ -48,4 +48,13 @@ class TenantPolicy
     {
         return $user->isSuperAdmin();
     }
+
+    /**
+     * Determine whether the user can delete an agency, with its users, domains
+     * and billing records.
+     */
+    public function delete(User $user, Tenant $tenant): bool
+    {
+        return $user->isSuperAdmin();
+    }
 }

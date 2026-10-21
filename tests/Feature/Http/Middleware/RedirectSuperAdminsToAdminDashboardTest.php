@@ -4,7 +4,7 @@ use App\Models\User;
 
 use function Pest\Laravel\actingAs;
 
-test('super admins opening the customer dashboard are sent to the console', function () {
+test('super admins opening the customer dashboard are sent to the admin dashboard', function () {
     $superAdmin = User::factory()->superAdmin()->create();
 
     actingAs($superAdmin)

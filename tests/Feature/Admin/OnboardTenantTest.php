@@ -21,7 +21,7 @@ afterEach(function () {
     tenancy()->end();
 
     // Drops the tenant databases created during the test.
-    Tenant::all()->each->delete();
+    Tenant::withTrashed()->get()->each->forceDelete();
 });
 
 /**

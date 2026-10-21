@@ -7,12 +7,13 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Sends super admins from the customer dashboard to the platform console.
+ * Sends a signed-in super admin to the admin dashboard.
  *
- * Every login path - password, two-factor and passkey - lands on the dashboard,
- * so redirecting here covers all of them in one place.
+ * Guards the pages a super admin has no use for once signed in: the customer
+ * dashboard, which an old bookmark may still open, and the admin homepage,
+ * which exists to lead to the login.
  */
-class RedirectSuperAdminsToConsole
+class RedirectSuperAdminsToAdminDashboard
 {
     /**
      * Handle an incoming request.

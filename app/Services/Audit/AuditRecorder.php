@@ -21,9 +21,11 @@ class AuditRecorder
      * action was unauthenticated - never 0, which is a valid role value.
      *
      * The subject is the record the action was about, such as a subscription,
-     * stored under its morph alias.
+     * stored under its morph alias. The context carries anything else worth
+     * keeping, such as what a cascading delete took with it.
      *
      * @param  array<string, mixed>|null  $changes
+     * @param  array<string, mixed>|null  $context
      */
     public function recordPlatformEvent(
         AuditAction $action,
@@ -32,6 +34,7 @@ class AuditRecorder
         ?string $description = null,
         ?array $changes = null,
         ?Model $subject = null,
+        ?array $context = null,
     ): PlatformAuditEvent {
         return PlatformAuditEvent::create([
             'tenant_id' => $tenant?->id,
@@ -44,6 +47,7 @@ class AuditRecorder
             'subject_id' => $subject?->getKey(),
             'description' => $description,
             'changes' => $changes,
+            'context' => $context,
             'ip_address' => request()->ip(),
             'user_agent' => request()->userAgent(),
         ]);

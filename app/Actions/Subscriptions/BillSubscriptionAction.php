@@ -74,7 +74,9 @@ class BillSubscriptionAction
             return null;
         }
 
-        if ($subscription->invoices()->whereDate('period_start_on', $periodStartOn)->exists()) {
+        // A deleted invoice still counts: the period was billed and then
+        // withdrawn on purpose, and its row still holds the unique key.
+        if ($subscription->invoices()->withTrashed()->whereDate('period_start_on', $periodStartOn)->exists()) {
             return null;
         }
 
@@ -141,13 +143,14 @@ class BillSubscriptionAction
      * Number invoices within the month their period ends in, e.g.
      * PLAT-2026-11-0001 for a period ending in November 2026.
      *
-     * Invoices are voided, never deleted, so the count only grows and a number
-     * is never reused. The unique reference column refuses any collision.
+     * Deleted invoices are counted too - they are only soft-deleted and keep
+     * their references - so the count only grows and a number is never
+     * reused. The unique reference column refuses any collision.
      */
     private function nextReference(CarbonInterface $periodEndOn): string
     {
         $prefix = 'PLAT-'.$periodEndOn->format('Y-m').'-';
-        $sequence = SubscriptionInvoice::query()->where('reference', 'like', $prefix.'%')->count() + 1;
+        $sequence = SubscriptionInvoice::query()->withTrashed()->where('reference', 'like', $prefix.'%')->count() + 1;
 
         return $prefix.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
     }

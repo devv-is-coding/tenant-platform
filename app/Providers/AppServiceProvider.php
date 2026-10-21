@@ -7,6 +7,7 @@ use App\Models\PersonalAccessToken;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPayment;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Date;
@@ -49,6 +50,7 @@ class AppServiceProvider extends ServiceProvider
             'subscription' => Subscription::class,
             'subscription_invoice' => SubscriptionInvoice::class,
             'subscription_payment' => SubscriptionPayment::class,
+            'user' => User::class,
         ]);
     }
 

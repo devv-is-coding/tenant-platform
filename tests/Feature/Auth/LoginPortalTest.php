@@ -20,7 +20,7 @@ afterEach(function () {
     tenancy()->end();
 
     // Drops the tenant databases created during the test.
-    Tenant::all()->each->delete();
+    Tenant::withTrashed()->get()->each->forceDelete();
 });
 
 function tenantOnDomain(string $id): Tenant
@@ -42,7 +42,7 @@ test('super admins can log in through the super admin login', function () {
 
     post(route('admin.login.store'), ['email' => $superAdmin->email, 'password' => 'password'])
         ->assertSessionHasNoErrors()
-        ->assertRedirect(route('dashboard', absolute: false));
+        ->assertRedirect(route('admin.dashboard'));
 
     assertAuthenticatedAs($superAdmin);
 });

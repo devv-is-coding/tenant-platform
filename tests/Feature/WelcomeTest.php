@@ -11,11 +11,11 @@ test('guests are offered both sign-in portals', function () {
         ->assertOk()
         ->assertSee(config('app.name'))
         ->assertSee(route('login'))
-        ->assertSee(route('admin.login'))
+        ->assertSee(route('admin.homepage'))
         ->assertDontSee(route('dashboard'));
 });
 
-test('super admins are pointed at the console', function () {
+test('super admins are pointed at their dashboard', function () {
     actingAs(User::factory()->superAdmin()->create())
         ->get(route('home'))
         ->assertOk()

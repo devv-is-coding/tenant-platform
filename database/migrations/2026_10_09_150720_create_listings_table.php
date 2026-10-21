@@ -85,6 +85,7 @@ return new class extends Migration
 
             $table->timestamp('created_on')->nullable();
             $table->timestamp('updated_on')->nullable();
+            $table->softDeletes('deleted_on');
 
             // Running the sync job twice must yield one row.
             $table->unique(['tenant_id', 'item_id']);

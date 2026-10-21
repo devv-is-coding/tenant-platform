@@ -292,12 +292,13 @@ new #[Title('Audit log')] class extends Component {
                     </flux:table.cell>
 
                     <flux:table.cell class="align-top max-md:hidden">
-                        @if ($event->tenant_id)
+                        @if ($event->tenant_id && $this->tenants->contains('id', $event->tenant_id))
                             <flux:link :href="route('admin.tenants.show', $event->tenant_id)" variant="ghost" wire:navigate>
                                 {{ $event->tenant_label ?? $event->tenant_id }}
                             </flux:link>
-                        @elseif ($event->tenant_label)
-                            {{ $event->tenant_label }}
+                        @elseif ($event->tenant_label || $event->tenant_id)
+                            {{-- The agency was deleted: kept as a row, but no longer shown. --}}
+                            {{ $event->tenant_label ?? $event->tenant_id }}
                             <flux:text size="sm">{{ __('Agency deleted') }}</flux:text>
                         @else
                             <flux:text>{{ __('Platform') }}</flux:text>

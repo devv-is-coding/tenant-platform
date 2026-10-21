@@ -1,6 +1,6 @@
 <x-layouts::auth
     :title="__('Super admin log in')"
-    :panel-title="__('Super admin console')"
+    :panel-title="__('Super admin')"
     :panel-description="__('Provision tenants, manage their databases, and administer platform-wide settings from a single place.')"
     :panel-notice="__('Restricted area. Activity is attributable to your account.')"
 >
@@ -11,7 +11,7 @@
             </flux:badge>
 
             <x-auth-header
-                :title="__('Log in to the console')"
+                :title="__('Log in to the dashboard')"
                 :description="__('Enter your credentials to manage tenants and platform settings')"
             />
         </div>

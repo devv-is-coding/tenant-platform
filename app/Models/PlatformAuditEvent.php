@@ -6,6 +6,7 @@ use App\Enums\AuditAction;
 use App\Enums\Role;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use LogicException;
 use Stancl\Tenancy\Database\Concerns\CentralConnection;
@@ -29,6 +30,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property string|null $ip_address
  * @property string|null $user_agent
  * @property Carbon|null $created_on
+ * @property Carbon|null $deleted_on
  */
 #[Fillable([
     'tenant_id',
@@ -51,11 +53,13 @@ class PlatformAuditEvent extends Model
      * The table lives in the central database, so the model must stay on the
      * central connection even when written from inside tenant context.
      */
-    use CentralConnection;
+    use CentralConnection, SoftDeletes;
 
     const CREATED_AT = 'created_on';
 
     const UPDATED_AT = null;
+
+    const DELETED_AT = 'deleted_on';
 
     /**
      * Get the attributes that should be cast.
