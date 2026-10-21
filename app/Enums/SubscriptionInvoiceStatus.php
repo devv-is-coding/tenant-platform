@@ -22,6 +22,22 @@ enum SubscriptionInvoiceStatus: int
     case Void = 4;
 
     /**
+     * Derive the status of an invoice that has not been voided from what it
+     * charges and what has been paid against it.
+     *
+     * Void is never derived: it is the platform withdrawing the charge, a
+     * decision rather than a fact about the money.
+     */
+    public static function fromAmounts(int $amountMinor, int $amountPaidMinor): self
+    {
+        return match (true) {
+            $amountPaidMinor <= 0 => self::Open,
+            $amountPaidMinor < $amountMinor => self::PartiallyPaid,
+            default => self::Paid,
+        };
+    }
+
+    /**
      * Get the human-readable label for the status.
      */
     public function label(): string

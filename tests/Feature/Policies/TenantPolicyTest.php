@@ -51,3 +51,10 @@ test('only super admins may browse the platform\'s invoices', function (Role $ro
 
     expect($user->can('viewAny', SubscriptionInvoice::class))->toBe($allowed);
 })->with($superAdminsOnly);
+
+test('only super admins may record a payment against an invoice, even the billed agency\'s own admin may not', function (Role $role, bool $allowed) {
+    $invoice = SubscriptionInvoice::factory()->make(['subscription_id' => 1, 'tenant_id' => 'dumaguete']);
+    $user = User::factory()->role($role)->make(['tenant_id' => $role->isTenantRole() ? 'dumaguete' : null]);
+
+    expect($user->can('recordPayment', $invoice))->toBe($allowed);
+})->with($superAdminsOnly);

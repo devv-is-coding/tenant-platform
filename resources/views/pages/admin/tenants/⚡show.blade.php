@@ -1,12 +1,16 @@
 <?php
 
+use App\Actions\Subscriptions\RecordSubscriptionPaymentAction;
 use App\Actions\Subscriptions\StartSubscriptionAction;
 use App\Actions\Tenants\ChangeTenantStatusAction;
 use App\Enums\BillingInterval;
+use App\Enums\PaymentMethod;
+use App\Enums\SubscriptionInvoiceStatus;
 use App\Enums\TenantStatus;
 use App\Models\PlatformAuditEvent;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
+use App\Models\SubscriptionPayment;
 use App\Models\Tenant;
 use App\Models\User;
 use App\ValueObjects\Money;
@@ -16,6 +20,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 /*
@@ -34,6 +39,11 @@ new class extends Component {
      */
     private const RECENT_INVOICES_LIMIT = 10;
 
+    /**
+     * The number of payments listed, most recently paid first.
+     */
+    private const RECENT_PAYMENTS_LIMIT = 10;
+
     public Tenant $tenant;
 
     public string $status_reason = '';
@@ -43,6 +53,19 @@ new class extends Component {
     public string $amount = '';
 
     public int $interval = BillingInterval::Monthly->value;
+
+    /**
+     * The invoice the payment form records against. Set only by
+     * openPaymentForm(), never by the browser.
+     */
+    #[Locked]
+    public ?int $paying_invoice_id = null;
+
+    public string $payment_amount = '';
+
+    public int $payment_method = PaymentMethod::BankTransfer->value;
+
+    public string $payment_paid_on = '';
 
     /**
      * Mount the component.
@@ -93,6 +116,60 @@ new class extends Component {
         Flux::toast(variant: 'success', text: __(':name is now on :plan.', [
             'name' => $this->tenant->name ?? $this->tenant->id,
             'plan' => $subscription->plan_name,
+        ]));
+    }
+
+    /**
+     * Open the payment form for one of the agency's invoices, filled in with
+     * the full balance still owed and today's date.
+     */
+    public function openPaymentForm(int $invoiceId): void
+    {
+        $invoice = $this->tenant->subscriptionInvoices()->findOrFail($invoiceId);
+        $this->authorize('recordPayment', $invoice);
+
+        $this->resetErrorBag();
+        $this->paying_invoice_id = $invoice->id;
+        $this->payment_amount = Money::ofMinor($invoice->outstandingMinor(), $invoice->currency)->toDecimal();
+        $this->payment_method = PaymentMethod::BankTransfer->value;
+        $this->payment_paid_on = today()->toDateString();
+        unset($this->payingInvoice);
+
+        Flux::modal('record-payment')->show();
+    }
+
+    /**
+     * Record a payment received by hand against the invoice the form is open for.
+     *
+     * The invoice is looked up through this agency, so a tampered request
+     * cannot reach another agency's invoice. Authorized here because
+     * Livewire's update requests do not re-run the console's route middleware.
+     */
+    public function recordPayment(RecordSubscriptionPaymentAction $recordSubscriptionPayment): void
+    {
+        $invoice = $this->tenant->subscriptionInvoices()->findOrFail($this->paying_invoice_id);
+        $this->authorize('recordPayment', $invoice);
+
+        try {
+            $payment = $recordSubscriptionPayment->handle(Auth::user(), $invoice, [
+                'amount' => $this->payment_amount,
+                'method' => $this->payment_method,
+                'paid_on' => $this->payment_paid_on,
+            ]);
+        } catch (ValidationException $exception) {
+            // The action's fields share names with the plan form's, so its
+            // errors are moved onto this form's fields.
+            throw ValidationException::withMessages(collect($exception->errors())
+                ->mapWithKeys(fn (array $messages, string $field): array => ["payment_{$field}" => $messages])
+                ->all());
+        }
+
+        $this->reset('paying_invoice_id', 'payment_amount', 'payment_method', 'payment_paid_on');
+        unset($this->subscription, $this->invoices, $this->payments, $this->balanceOwed, $this->recentActivity);
+        Flux::modals()->close();
+        Flux::toast(variant: 'success', text: __(':amount recorded against :reference.', [
+            'amount' => Money::ofMinor($payment->amount_minor, $payment->currency)->format(),
+            'reference' => $invoice->reference,
         ]));
     }
 
@@ -180,6 +257,50 @@ new class extends Component {
             ->latest('id')
             ->limit(self::RECENT_INVOICES_LIMIT)
             ->get();
+    }
+
+    /**
+     * Get what the agency still owes across every invoice it has not settled.
+     *
+     * Summed in minor units by the database, and only ever displayed through
+     * Money. Every invoice is billed in the platform's billing currency.
+     */
+    #[Computed]
+    public function balanceOwed(): Money
+    {
+        $owedMinor = $this->tenant->subscriptionInvoices()
+            ->whereIn('status', [SubscriptionInvoiceStatus::Open, SubscriptionInvoiceStatus::PartiallyPaid])
+            ->selectRaw('COALESCE(SUM(amount_minor - amount_paid_minor), 0) as owed_minor')
+            ->value('owed_minor');
+
+        return Money::ofMinor((int) $owedMinor, config('tenancy.billing_currency'));
+    }
+
+    /**
+     * Get the agency's most recent payments, with the invoice each one paid.
+     *
+     * @return Collection<int, SubscriptionPayment>
+     */
+    #[Computed]
+    public function payments(): Collection
+    {
+        return $this->tenant->subscriptionPayments()
+            ->with(['invoice', 'recorder'])
+            ->latest('paid_on')
+            ->latest('id')
+            ->limit(self::RECENT_PAYMENTS_LIMIT)
+            ->get();
+    }
+
+    /**
+     * Get the invoice the payment form is open for.
+     */
+    #[Computed]
+    public function payingInvoice(): ?SubscriptionInvoice
+    {
+        return $this->paying_invoice_id === null
+            ? null
+            : $this->tenant->subscriptionInvoices()->find($this->paying_invoice_id);
     }
 
     /**
@@ -432,7 +553,14 @@ new class extends Component {
         </section>
 
         <section class="flex flex-col gap-4 lg:col-span-3">
-            <flux:heading size="lg" level="2">{{ __('Invoices') }}</flux:heading>
+            <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <flux:heading size="lg" level="2">{{ __('Invoices') }}</flux:heading>
+
+                <flux:text>
+                    {{ __('Balance owed') }}:
+                    <span class="font-medium text-zinc-800 dark:text-white">{{ $this->balanceOwed->format() }}</span>
+                </flux:text>
+            </div>
 
             <flux:table>
                 <flux:table.columns>
@@ -442,6 +570,7 @@ new class extends Component {
                     <flux:table.column align="end" class="max-md:hidden">{{ __('Paid') }}</flux:table.column>
                     <flux:table.column class="max-sm:hidden">{{ __('Due') }}</flux:table.column>
                     <flux:table.column>{{ __('Status') }}</flux:table.column>
+                    <flux:table.column align="end"><span class="sr-only">{{ __('Actions') }}</span></flux:table.column>
                 </flux:table.columns>
 
                 <flux:table.rows>
@@ -463,10 +592,108 @@ new class extends Component {
                                     @endif
                                 </div>
                             </flux:table.cell>
+                            <flux:table.cell align="end">
+                                @if ($invoice->status->acceptsPayment())
+                                    @can('recordPayment', $invoice)
+                                        <flux:button size="xs" wire:click="openPaymentForm({{ $invoice->id }})" inset="top bottom">
+                                            {{ __('Record payment') }}
+                                        </flux:button>
+                                    @endcan
+                                @endif
+                            </flux:table.cell>
                         </flux:table.row>
                     @empty
                         <flux:table.row>
-                            <flux:table.cell colspan="6" class="py-8 text-center">{{ __('No invoices have been issued to this agency.') }}</flux:table.cell>
+                            <flux:table.cell colspan="7" class="py-8 text-center">{{ __('No invoices have been issued to this agency.') }}</flux:table.cell>
+                        </flux:table.row>
+                    @endforelse
+                </flux:table.rows>
+            </flux:table>
+
+            <flux:modal name="record-payment" class="md:w-[28rem]">
+                @if ($this->payingInvoice)
+                    <form wire:submit="recordPayment" class="space-y-6">
+                        <div>
+                            <flux:heading size="lg">{{ __('Record a payment against :reference', ['reference' => $this->payingInvoice->reference]) }}</flux:heading>
+                            <flux:text class="mt-2">
+                                {{ __(':outstanding of :amount is still owed. Record money already received, such as a bank transfer; card payments are confirmed by the gateway.', [
+                                    'outstanding' => Money::ofMinor($this->payingInvoice->outstandingMinor(), $this->payingInvoice->currency)->format(),
+                                    'amount' => Money::ofMinor($this->payingInvoice->amount_minor, $this->payingInvoice->currency)->format(),
+                                ]) }}
+                            </flux:text>
+                        </div>
+
+                        <flux:field>
+                            <flux:label>{{ __('Amount received') }}</flux:label>
+
+                            <flux:input.group>
+                                <flux:input.group.prefix>{{ $this->payingInvoice->currency }}</flux:input.group.prefix>
+
+                                <flux:input wire:model="payment_amount" inputmode="decimal" required />
+                            </flux:input.group>
+
+                            <flux:error name="payment_amount" />
+                        </flux:field>
+
+                        <flux:select wire:model="payment_method" :label="__('Method')">
+                            @foreach (RecordSubscriptionPaymentAction::manualMethods() as $paymentMethod)
+                                <flux:select.option :value="$paymentMethod->value">{{ $paymentMethod->label() }}</flux:select.option>
+                            @endforeach
+                        </flux:select>
+
+                        <flux:input
+                            type="date"
+                            wire:model="payment_paid_on"
+                            :label="__('Paid on')"
+                            :min="$this->payingInvoice->issued_on->toDateString()"
+                            :max="today()->toDateString()"
+                            required
+                        />
+
+                        <div class="flex justify-end gap-2">
+                            <flux:modal.close>
+                                <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                            </flux:modal.close>
+
+                            <flux:button type="submit" variant="primary">{{ __('Record payment') }}</flux:button>
+                        </div>
+                    </form>
+                @endif
+            </flux:modal>
+        </section>
+
+        <section class="flex flex-col gap-4 lg:col-span-3">
+            <flux:heading size="lg" level="2">{{ __('Payments') }}</flux:heading>
+
+            <flux:table>
+                <flux:table.columns>
+                    <flux:table.column>{{ __('Reference') }}</flux:table.column>
+                    <flux:table.column class="max-md:hidden">{{ __('Invoice') }}</flux:table.column>
+                    <flux:table.column class="max-sm:hidden">{{ __('Method') }}</flux:table.column>
+                    <flux:table.column align="end">{{ __('Amount') }}</flux:table.column>
+                    <flux:table.column class="max-sm:hidden">{{ __('Paid on') }}</flux:table.column>
+                    <flux:table.column class="max-lg:hidden">{{ __('Recorded by') }}</flux:table.column>
+                </flux:table.columns>
+
+                <flux:table.rows>
+                    @forelse ($this->payments as $payment)
+                        <flux:table.row :key="$payment->id">
+                            <flux:table.cell variant="strong">
+                                {{ $payment->reference }}
+
+                                @unless ($payment->status->countsAsPaid())
+                                    <flux:badge color="red" size="sm" inset="top bottom" class="ms-1">{{ $payment->status->label() }}</flux:badge>
+                                @endunless
+                            </flux:table.cell>
+                            <flux:table.cell class="max-md:hidden">{{ $payment->invoice->reference }}</flux:table.cell>
+                            <flux:table.cell class="max-sm:hidden">{{ $payment->method->label() }}</flux:table.cell>
+                            <flux:table.cell align="end">{{ Money::ofMinor($payment->amount_minor, $payment->currency)->format() }}</flux:table.cell>
+                            <flux:table.cell class="max-sm:hidden">{{ $payment->paid_on?->toFormattedDateString() ?? '—' }}</flux:table.cell>
+                            <flux:table.cell class="max-lg:hidden">{{ $payment->method->isGatewaySettled() ? __('Gateway') : ($payment->recorder?->full_name ?? '—') }}</flux:table.cell>
+                        </flux:table.row>
+                    @empty
+                        <flux:table.row>
+                            <flux:table.cell colspan="6" class="py-8 text-center">{{ __('This agency has not paid the platform anything yet.') }}</flux:table.cell>
                         </flux:table.row>
                     @endforelse
                 </flux:table.rows>

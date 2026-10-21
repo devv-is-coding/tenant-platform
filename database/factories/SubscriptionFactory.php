@@ -38,6 +38,16 @@ class SubscriptionFactory extends Factory
     }
 
     /**
+     * Indicate that one of the subscription's invoices went unpaid past its due date.
+     */
+    public function pastDue(): static
+    {
+        return $this->state(fn () => [
+            'status' => SubscriptionStatus::PastDue,
+        ]);
+    }
+
+    /**
      * Indicate that the subscription has lapsed and freed its tenant's active slot.
      */
     public function expired(): static
