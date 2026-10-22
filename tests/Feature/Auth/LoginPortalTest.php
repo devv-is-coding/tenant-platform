@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Role;
+use App\Enums\TenantStatus;
 use App\Models\Passkey;
 use App\Models\Tenant;
 use App\Models\User;
@@ -23,9 +24,9 @@ afterEach(function () {
     Tenant::withTrashed()->get()->each->forceDelete();
 });
 
-function tenantOnDomain(string $id): Tenant
+function tenantOnDomain(string $id, TenantStatus $status = TenantStatus::Active): Tenant
 {
-    $tenant = Tenant::create(['id' => $id, 'name' => ucfirst($id).' Branch']);
+    $tenant = Tenant::create(['id' => $id, 'name' => ucfirst($id).' Branch', 'status' => $status]);
     $tenant->domains()->create(['domain' => "{$id}.localhost"]);
 
     return $tenant;
@@ -151,6 +152,29 @@ test('the tenant login refuses platform-wide roles', function (Role $role) {
     'super admin' => Role::SuperAdmin,
     'customer' => Role::Customer,
 ]);
+
+test('nobody from a pending agency can sign in or keep using a session, since it is not live yet', function () {
+    $admin = User::factory()->role(Role::Admin)->for(tenantOnDomain('acme', TenantStatus::Pending))->create();
+
+    post('http://acme.localhost/login', ['email' => $admin->email, 'password' => 'password'])
+        ->assertSessionHasErrors(['email' => __('auth.failed')]);
+    assertGuest();
+
+    actingAs($admin)->get('http://acme.localhost/dashboard')->assertForbidden();
+});
+
+test('a closed agency\'s staff still sign in, read-only, and are told what is hidden until it resubscribes', function () {
+    $staff = User::factory()->role(Role::Staff)->for(tenantOnDomain('acme', TenantStatus::Closed))->create();
+
+    post('http://acme.localhost/login', ['email' => $staff->email, 'password' => 'password'])
+        ->assertSessionHasNoErrors();
+    assertAuthenticatedAs($staff);
+
+    get('http://acme.localhost/dashboard')
+        ->assertOk()
+        ->assertSee('This agency is closed. You can view its records but not change them.')
+        ->assertSee('details and money figures are hidden until the agency is on a plan again', escape: false);
+});
 
 test('tenant users can open their tenant dashboard', function () {
     $staff = User::factory()->role(Role::Staff)->for(tenantOnDomain('acme'))->create();

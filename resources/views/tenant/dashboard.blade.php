@@ -21,6 +21,10 @@
                 @if (tenant('status_reason'))
                     <flux:callout.text>{{ __('Reason: :reason', ['reason' => tenant('status_reason')]) }}</flux:callout.text>
                 @endif
+
+                @if (tenant('status')->hidesCustomersAndMoney())
+                    <flux:callout.text>{{ __('Customers\' details and money figures are hidden until the agency is on a plan again. Bookings still show their reference, dates and status, so you can honour travel already sold.') }}</flux:callout.text>
+                @endif
             </flux:callout>
         @endif
     </div>

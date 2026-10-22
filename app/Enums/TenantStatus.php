@@ -40,28 +40,65 @@ enum TenantStatus: int
 
     /**
      * Determine if a super admin may move an agency from this status to the
-     * given one. Paused and Closed are not reachable yet, so nothing leads
-     * into or out of them.
+     * given one.
+     *
+     * Nothing returns to Pending: going live is one-way. A closed agency comes
+     * back only to Active, and only once it is on a plan again - which the
+     * status change itself checks, since that is not a fact about statuses.
      */
     public function canTransitionTo(self $status): bool
     {
         return match ($this) {
-            self::Pending, self::Suspended => $status === self::Active,
-            self::Active => $status === self::Suspended,
-            self::Paused, self::Closed => false,
+            self::Pending, self::Closed => $status === self::Active,
+            self::Active => in_array($status, [self::Paused, self::Suspended, self::Closed], true),
+            self::Paused => in_array($status, [self::Active, self::Suspended, self::Closed], true),
+            self::Suspended => in_array($status, [self::Active, self::Closed], true),
         };
+    }
+
+    /**
+     * Determine if moving an agency into this status must say why. Every
+     * status that restricts an agency does: the reason is shown to its staff.
+     */
+    public function requiresReason(): bool
+    {
+        return in_array($this, [self::Paused, self::Suspended, self::Closed], true);
+    }
+
+    /**
+     * Determine if the agency's staff may sign in at all. A pending agency is
+     * not live yet, so nobody can.
+     */
+    public function allowsStaffSignIn(): bool
+    {
+        return $this !== self::Pending;
     }
 
     /**
      * Determine if the agency's staff may look but not change anything.
      *
-     * Read-only rather than locked out: a suspended or paused agency still
-     * owes its customers the travel it already sold, and its staff need their
-     * records to honour it.
+     * Read-only rather than locked out: a paused, suspended or closed agency
+     * still owes its customers the travel it already sold, and its staff need
+     * their records to honour it.
      */
     public function isReadOnly(): bool
     {
-        return in_array($this, [self::Paused, self::Suspended], true);
+        return in_array($this, [self::Paused, self::Suspended, self::Closed], true);
+    }
+
+    /**
+     * Determine if the agency's screens must mask customers' personal details
+     * and money figures - bookings, payments, refunds, reports - until it
+     * subscribes again. Staff still see that a booking exists, its reference,
+     * dates and status, so they can honour it, but cannot work from it.
+     *
+     * Only Closed: a closed agency that wants its records back must return to
+     * a plan. Every tenant-side screen that shows either kind of data must
+     * honour this.
+     */
+    public function hidesCustomersAndMoney(): bool
+    {
+        return $this === self::Closed;
     }
 
     /**

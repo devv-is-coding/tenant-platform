@@ -2,6 +2,7 @@
 
 namespace App\Enums;
 
+use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
 
@@ -39,9 +40,12 @@ enum LoginPortal
         return match ($this) {
             self::SuperAdmin => $user->role === Role::SuperAdmin,
             self::Customer => $user->role === Role::Customer,
+            // A pending agency is not live: nobody signs in until it is activated.
             self::Tenant => $user->role->isTenantRole()
                 && tenancy()->initialized
-                && $user->tenant_id === tenant('id'),
+                && $user->tenant_id === tenant('id')
+                && tenant() instanceof Tenant
+                && tenant()->status->allowsStaffSignIn(),
         };
     }
 }
