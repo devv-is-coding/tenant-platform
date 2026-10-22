@@ -99,6 +99,13 @@ test('only super admins may restore a deleted agency or its records, even the ag
     'payment' => [fn () => SubscriptionPayment::factory()->make(['subscription_invoice_id' => 1, 'tenant_id' => 'dumaguete'])],
 ])->with($superAdminsOnly);
 
+test('only super admins may assign or revoke an agency\'s admins, even its own admin may not', function (Role $role, bool $allowed) {
+    $tenant = Tenant::factory()->make(['id' => 'dumaguete']);
+    $user = User::factory()->role($role)->make(['tenant_id' => $role->isTenantRole() ? 'dumaguete' : null]);
+
+    expect($user->can('manageAdmins', $tenant))->toBe($allowed);
+})->with($superAdminsOnly);
+
 test('a deleted agency can be restored but no longer changed, and a live one cannot be restored', function () {
     $superAdmin = User::factory()->superAdmin()->make();
     $deleted = Tenant::factory()->make(['deleted_at' => now()]);
@@ -108,6 +115,7 @@ test('a deleted agency can be restored but no longer changed, and a live one can
         ->and($superAdmin->can('restore', $live))->toBeFalse()
         ->and($superAdmin->can('changeStatus', $deleted))->toBeFalse()
         ->and($superAdmin->can('manageSubscription', $deleted))->toBeFalse()
+        ->and($superAdmin->can('manageAdmins', $deleted))->toBeFalse()
         ->and($superAdmin->can('delete', $deleted))->toBeFalse();
 });
 

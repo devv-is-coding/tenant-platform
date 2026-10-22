@@ -58,6 +58,7 @@ test('a restricted agency\'s staff are refused any write', function (TenantStatu
 })->with([
     'suspended' => TenantStatus::Suspended,
     'paused' => TenantStatus::Paused,
+    'closed' => TenantStatus::Closed,
 ]);
 
 test('a restricted agency\'s staff can still open their dashboard and are told why it is read-only', function () {

@@ -50,6 +50,14 @@ class TenantPolicy
     }
 
     /**
+     * Determine whether the user can assign the agency an admin or revoke one.
+     */
+    public function manageAdmins(User $user, Tenant $tenant): bool
+    {
+        return $user->isSuperAdmin() && ! $tenant->trashed();
+    }
+
+    /**
      * Determine whether the user can delete an agency, with its users, domains
      * and billing records.
      */

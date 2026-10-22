@@ -7,11 +7,14 @@ use App\Actions\Subscriptions\DeleteSubscriptionInvoiceAction;
 use App\Actions\Subscriptions\DeleteSubscriptionPaymentAction;
 use App\Actions\Subscriptions\RecordSubscriptionPaymentAction;
 use App\Actions\Subscriptions\StartSubscriptionAction;
+use App\Actions\Tenants\AssignAgencyAdminAction;
 use App\Actions\Tenants\ChangeTenantStatusAction;
 use App\Actions\Tenants\DeleteAgencyUserAction;
 use App\Actions\Tenants\DeleteTenantAction;
+use App\Actions\Tenants\RevokeAgencyAdminAction;
 use App\Enums\AuditAction;
 use App\Enums\PaymentMethod;
+use App\Enums\Role;
 use App\Enums\SubscriptionInvoiceStatus;
 use App\Enums\TenantStatus;
 use App\Models\PlatformAuditEvent;
@@ -56,6 +59,40 @@ new class extends Component {
     public Tenant $tenant;
 
     public string $status_reason = '';
+
+    /**
+     * The agency admin who asked for a pause.
+     */
+    public ?int $requested_by = null;
+
+    /**
+     * Whether the admin form creates a new account or promotes someone
+     * already at the agency.
+     */
+    public string $assign_mode = 'create';
+
+    public string $first_name = '';
+
+    public string $last_name = '';
+
+    public string $username = '';
+
+    public string $email = '';
+
+    public string $password = '';
+
+    public string $password_confirmation = '';
+
+    public ?int $user_id = null;
+
+    /**
+     * The admin the revoke confirmation is open for. Set only by
+     * confirmRevoke(), never by the browser.
+     */
+    #[Locked]
+    public ?int $revoking_id = null;
+
+    public string $revoke_reason = '';
 
     public ?int $subscription_plan_id = null;
 
@@ -117,9 +154,10 @@ new class extends Component {
         $target = TenantStatus::tryFrom($status)
             ?? throw ValidationException::withMessages(['status' => __('That is not an agency status.')]);
 
-        $this->tenant = $changeTenantStatus->handle(Auth::user(), $this->tenant, $target, $this->only('status_reason'));
+        $this->tenant = $changeTenantStatus->handle(Auth::user(), $this->tenant, $target, $this->only('status_reason', 'requested_by'));
 
-        $this->reset('status_reason');
+        $this->reset('status_reason', 'requested_by');
+        unset($this->statusActions, $this->subscription, $this->subscriptions, $this->recentActivity);
         Flux::modals()->close();
         Flux::toast(variant: 'success', text: __(':name is now :status.', [
             'name' => $this->tenant->name ?? $this->tenant->id,
@@ -451,7 +489,7 @@ new class extends Component {
      * Get the status changes open to the agency from where it stands now,
      * with the wording for each confirmation.
      *
-     * @return list<array{status: TenantStatus, label: string, heading: string, description: string, reasonRequired: bool, variant: string}>
+     * @return list<array{status: TenantStatus, label: string, heading: string, description: string, reasonRequired: bool, needsRequester: bool, variant: string}>
      */
     #[Computed]
     public function statusActions(): array
@@ -461,37 +499,157 @@ new class extends Component {
         }
 
         $name = $this->tenant->name ?? $this->tenant->id;
+        $current = $this->tenant->status;
 
         return collect(TenantStatus::cases())
-            ->filter(fn (TenantStatus $status): bool => $this->tenant->status->canTransitionTo($status))
-            ->map(fn (TenantStatus $status): array => match (true) {
-                $status === TenantStatus::Suspended => [
-                    'status' => $status,
-                    'label' => __('Suspend'),
-                    'heading' => __('Suspend :name?', ['name' => $name]),
-                    'description' => __('Its staff keep read-only access, so they can still honour travel already sold. The reason is written into the agency\'s own audit log.'),
-                    'reasonRequired' => true,
-                    'variant' => 'danger',
-                ],
-                $this->tenant->status === TenantStatus::Pending => [
-                    'status' => $status,
-                    'label' => __('Activate'),
-                    'heading' => __('Activate :name?', ['name' => $name]),
-                    'description' => __('The agency goes live and its staff get full access.'),
-                    'reasonRequired' => false,
-                    'variant' => 'primary',
-                ],
-                default => [
-                    'status' => $status,
-                    'label' => __('Reactivate'),
-                    'heading' => __('Reactivate :name?', ['name' => $name]),
-                    'description' => __('Its staff get full access back. Payment alone never does this; it is your decision.'),
-                    'reasonRequired' => false,
-                    'variant' => 'primary',
-                ],
-            })
+            ->filter(fn (TenantStatus $status): bool => $current->canTransitionTo($status))
+            ->map(fn (TenantStatus $status): array => [
+                'status' => $status,
+                'reasonRequired' => $status->requiresReason(),
+                'needsRequester' => $status === TenantStatus::Paused,
+                ...match (true) {
+                    $status === TenantStatus::Paused => [
+                        'label' => __('Pause'),
+                        'heading' => __('Pause :name?', ['name' => $name]),
+                        'description' => __('At the agency\'s own request, such as a seasonal hiatus. Its staff keep read-only access. The reason is written into the agency\'s own audit log.'),
+                        'variant' => 'filled',
+                    ],
+                    $status === TenantStatus::Suspended => [
+                        'label' => __('Suspend'),
+                        'heading' => __('Suspend :name?', ['name' => $name]),
+                        'description' => __('Its staff keep read-only access, so they can still honour travel already sold. The reason is written into the agency\'s own audit log.'),
+                        'variant' => 'danger',
+                    ],
+                    $status === TenantStatus::Closed => [
+                        'label' => __('Close'),
+                        'heading' => __('Close :name?', ['name' => $name]),
+                        'description' => __('It stops trading and its live subscription is cancelled. Its staff keep read-only access, with customers\' details and money figures hidden until it is on a plan again. Nothing is deleted.'),
+                        'variant' => 'danger',
+                    ],
+                    $current === TenantStatus::Pending => [
+                        'label' => __('Activate'),
+                        'heading' => __('Activate :name?', ['name' => $name]),
+                        'description' => __('The agency goes live and its staff can sign in with full access.'),
+                        'variant' => 'primary',
+                    ],
+                    $current === TenantStatus::Closed => [
+                        'label' => __('Reopen'),
+                        'heading' => __('Reopen :name?', ['name' => $name]),
+                        'description' => __('Only once it is on a plan again: start its subscription first. Its staff get full access back.'),
+                        'variant' => 'primary',
+                    ],
+                    default => [
+                        'label' => __('Reactivate'),
+                        'heading' => __('Reactivate :name?', ['name' => $name]),
+                        'description' => __('Its staff get full access back. Payment alone never does this; it is your decision.'),
+                        'variant' => 'primary',
+                    ],
+                },
+            ])
             ->values()
             ->all();
+    }
+
+    /**
+     * Get the agency's active admins, one of whom must have asked for a pause.
+     *
+     * @return Collection<int, User>
+     */
+    #[Computed]
+    public function activeAdmins(): Collection
+    {
+        return $this->tenant->users()->where('role', Role::Admin)->where('is_active', true)->orderBy('first_name')->orderBy('last_name')->get();
+    }
+
+    /**
+     * Get the agency's active managers and staff, who can be promoted to admin.
+     *
+     * @return Collection<int, User>
+     */
+    #[Computed]
+    public function promotableUsers(): Collection
+    {
+        return $this->tenant->users()
+            ->whereIn('role', [Role::Manager, Role::Staff])
+            ->where('is_active', true)
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
+    }
+
+    /**
+     * Open the form for giving the agency another admin.
+     */
+    public function openAssignAdmin(): void
+    {
+        $this->authorize('manageAdmins', $this->tenant);
+
+        $this->resetErrorBag();
+        $this->reset('assign_mode', 'first_name', 'last_name', 'username', 'email', 'password', 'password_confirmation', 'user_id');
+
+        Flux::modal('assign-admin')->show();
+    }
+
+    /**
+     * Give the agency an admin, by creating their account or promoting one of
+     * its managers or staff.
+     *
+     * Authorized here because Livewire's update requests do not re-run the
+     * console's route middleware.
+     */
+    public function assignAdmin(AssignAgencyAdminAction $assignAdmin): void
+    {
+        $this->authorize('manageAdmins', $this->tenant);
+
+        $admin = $this->assign_mode === 'promote'
+            ? $assignAdmin->promote(Auth::user(), $this->tenant, $this->only('user_id'))
+            : $assignAdmin->create(Auth::user(), $this->tenant, $this->only(['first_name', 'last_name', 'username', 'email', 'password', 'password_confirmation']));
+
+        $this->reset('assign_mode', 'first_name', 'last_name', 'username', 'email', 'password', 'password_confirmation', 'user_id');
+        unset($this->users, $this->activeAdmins, $this->promotableUsers, $this->recentActivity);
+        Flux::modals()->close();
+        Flux::toast(variant: 'success', text: __(':name is now an admin of :agency.', ['name' => $admin->full_name, 'agency' => $this->tenant->name ?? $this->tenant->id]));
+    }
+
+    /**
+     * Open the revoke confirmation for one of the agency's admins.
+     */
+    public function confirmRevoke(int $id): void
+    {
+        $this->authorize('manageAdmins', $this->tenant);
+        $admin = $this->tenant->users()->where('role', Role::Admin)->findOrFail($id);
+
+        $this->resetErrorBag();
+        $this->reset('revoke_reason');
+        $this->revoking_id = $admin->id;
+        unset($this->revoking);
+
+        Flux::modal('revoke-admin')->show();
+    }
+
+    /**
+     * Revoke the admin the confirmation is open for.
+     */
+    public function revokeAdmin(RevokeAgencyAdminAction $revokeAdmin): void
+    {
+        $this->authorize('manageAdmins', $this->tenant);
+        $admin = $this->tenant->users()->where('role', Role::Admin)->findOrFail($this->revoking_id);
+
+        $revokeAdmin->handle(Auth::user(), $this->tenant, $admin, $this->only('revoke_reason'));
+
+        $this->reset('revoking_id', 'revoke_reason');
+        unset($this->users, $this->activeAdmins, $this->deletedRecords, $this->recentActivity, $this->revoking);
+        Flux::modals()->close();
+        Flux::toast(variant: 'success', text: __(':name\'s admin access was revoked.', ['name' => $admin->full_name]));
+    }
+
+    /**
+     * Get the admin the revoke confirmation is open for.
+     */
+    #[Computed]
+    public function revoking(): ?User
+    {
+        return $this->revoking_id === null ? null : $this->tenant->users()->find($this->revoking_id);
     }
 
     /**
@@ -675,6 +833,8 @@ new class extends Component {
 
                     <flux:textarea wire:model="delete_reason" :label="__('Reason')" rows="3" required />
 
+                    <flux:error name="admin" />
+
                     <div class="flex justify-end gap-2">
                         <flux:modal.close>
                             <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
@@ -747,6 +907,14 @@ new class extends Component {
                         :required="$action['reasonRequired']"
                     />
 
+                    @if ($action['needsRequester'])
+                        <flux:select wire:model="requested_by" :label="__('Requested by')" :placeholder="__('Choose the agency admin who asked…')" required>
+                            @foreach ($this->activeAdmins as $admin)
+                                <flux:select.option :value="$admin->id" wire:key="requester-{{ $admin->id }}">{{ $admin->full_name }}</flux:select.option>
+                            @endforeach
+                        </flux:select>
+                    @endif
+
                     <flux:error name="status" />
 
                     <div class="flex justify-end gap-2">
@@ -763,7 +931,13 @@ new class extends Component {
 
     <div class="grid gap-8 lg:grid-cols-3">
         <section class="flex flex-col gap-4 lg:col-span-2">
-            <flux:heading size="lg" level="2">{{ __('Users') }}</flux:heading>
+            <div class="flex items-center justify-between gap-3">
+                <flux:heading size="lg" level="2">{{ __('Users') }}</flux:heading>
+
+                @can('manageAdmins', $tenant)
+                    <flux:button size="sm" icon="user-plus" wire:click="openAssignAdmin">{{ __('Assign admin') }}</flux:button>
+                @endcan
+            </div>
 
             <flux:table>
                 <flux:table.columns>
@@ -792,9 +966,17 @@ new class extends Component {
                             </flux:table.cell>
 
                             <flux:table.cell align="end">
-                                @can('delete', $user)
-                                    <flux:button size="xs" variant="ghost" icon="trash" inset="top bottom" wire:click="confirmDelete('user', {{ $user->id }})" :aria-label="__('Delete :name', ['name' => $user->full_name])" />
-                                @endcan
+                                <div class="flex justify-end gap-1">
+                                    @if ($user->role === Role::Admin && $user->is_active)
+                                        @can('manageAdmins', $tenant)
+                                            <flux:button size="xs" variant="ghost" icon="user-minus" inset="top bottom" wire:click="confirmRevoke({{ $user->id }})" :aria-label="__('Revoke :name\'s admin access', ['name' => $user->full_name])" />
+                                        @endcan
+                                    @endif
+
+                                    @can('delete', $user)
+                                        <flux:button size="xs" variant="ghost" icon="trash" inset="top bottom" wire:click="confirmDelete('user', {{ $user->id }})" :aria-label="__('Delete :name', ['name' => $user->full_name])" />
+                                    @endcan
+                                </div>
                             </flux:table.cell>
                         </flux:table.row>
                     @empty
@@ -804,6 +986,75 @@ new class extends Component {
                     @endforelse
                 </flux:table.rows>
             </flux:table>
+
+            <flux:modal name="assign-admin" class="md:w-[32rem]">
+                <form wire:submit="assignAdmin" class="space-y-6">
+                    <div>
+                        <flux:heading size="lg">{{ __('Assign an admin to :name', ['name' => $tenant->name ?? $tenant->id]) }}</flux:heading>
+                        <flux:text class="mt-2">{{ __('Admins govern the agency: its settings, its people and its approvals.') }}</flux:text>
+                    </div>
+
+                    <flux:radio.group wire:model.live="assign_mode" :label="__('Who becomes admin')" variant="segmented">
+                        <flux:radio value="create" :label="__('A new account')" />
+                        <flux:radio value="promote" :label="__('Someone already here')" />
+                    </flux:radio.group>
+
+                    @if ($assign_mode === 'promote')
+                        @if ($this->promotableUsers->isEmpty())
+                            <flux:text>{{ __('The agency has no active managers or staff to promote. Create a new account instead.') }}</flux:text>
+                        @else
+                            <flux:select wire:model="user_id" :label="__('Person')" :placeholder="__('Choose a manager or staff member…')" required>
+                                @foreach ($this->promotableUsers as $promotable)
+                                    <flux:select.option :value="$promotable->id" wire:key="promotable-{{ $promotable->id }}">
+                                        {{ $promotable->full_name }} · {{ $promotable->role->label() }}
+                                    </flux:select.option>
+                                @endforeach
+                            </flux:select>
+                        @endif
+                    @else
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <flux:input wire:model="first_name" :label="__('First name')" required />
+                            <flux:input wire:model="last_name" :label="__('Last name')" required />
+                        </div>
+
+                        <flux:input wire:model="username" :label="__('Username')" required />
+                        <flux:input wire:model="email" type="email" :label="__('Email')" required />
+                        <flux:input wire:model="password" type="password" :label="__('Password')" viewable required />
+                        <flux:input wire:model="password_confirmation" type="password" :label="__('Confirm password')" viewable required />
+                    @endif
+
+                    <div class="flex justify-end gap-2">
+                        <flux:modal.close>
+                            <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                        </flux:modal.close>
+
+                        <flux:button type="submit" variant="primary">{{ __('Assign admin') }}</flux:button>
+                    </div>
+                </form>
+            </flux:modal>
+
+            <flux:modal name="revoke-admin" class="md:w-[28rem]">
+                @if ($this->revoking)
+                    <form wire:submit="revokeAdmin" class="space-y-6">
+                        <div>
+                            <flux:heading size="lg">{{ __('Revoke :name\'s admin access?', ['name' => $this->revoking->full_name]) }}</flux:heading>
+                            <flux:text class="mt-2">{{ __('Their account is deactivated and they can no longer sign in. They stay on record as the person who did everything they did here.') }}</flux:text>
+                        </div>
+
+                        <flux:textarea wire:model="revoke_reason" :label="__('Reason')" rows="3" required />
+
+                        <flux:error name="admin" />
+
+                        <div class="flex justify-end gap-2">
+                            <flux:modal.close>
+                                <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                            </flux:modal.close>
+
+                            <flux:button type="submit" variant="danger">{{ __('Revoke access') }}</flux:button>
+                        </div>
+                    </form>
+                @endif
+            </flux:modal>
         </section>
 
         <aside class="flex flex-col gap-4">
