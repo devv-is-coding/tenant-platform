@@ -10,8 +10,8 @@ use Illuminate\Database\Seeder;
 class UserSeeder extends Seeder
 {
     /**
-     * Seed one platform-wide super admin and customer, plus an admin, manager and
-     * staff member for every tenant. Run TenantSeeder first.
+     * Seed one platform-wide super admin and customer, plus an admin, two managers
+     * and two staff members for every tenant. Run TenantSeeder first.
      *
      * Users are keyed by username so the seeder can be re-run. The role is always
      * set explicitly because the column default is super admin. Every seeded
@@ -24,7 +24,7 @@ class UserSeeder extends Seeder
 
         // A handful of extra named customers, so marketplace mock data (wishlists,
         // bookings, reviews) has more than one customer to spread across.
-        foreach (['beatriz', 'tomas', 'carmela', 'julio', 'nadia'] as $username) {
+        foreach (['beatriz', 'tomas', 'carmela', 'julio', 'nadia', 'rafael', 'liza', 'miguel', 'andrea', 'paolo'] as $username) {
             $this->seedCustomer($username);
         }
 
@@ -33,6 +33,12 @@ class UserSeeder extends Seeder
         Tenant::query()->each(function (Tenant $tenant): void {
             foreach ([Role::Admin, Role::Manager, Role::Staff] as $role) {
                 $this->seedUser("{$tenant->id}_".strtolower($role->name), $role, $tenant);
+            }
+
+            // A second manager and staff member, so a team has more than one
+            // person per role. Catalog and booking seeders keep using the first.
+            foreach ([Role::Manager, Role::Staff] as $role) {
+                $this->seedUser("{$tenant->id}_".strtolower($role->name).'2', $role, $tenant);
             }
         });
     }

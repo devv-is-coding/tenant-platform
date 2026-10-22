@@ -27,13 +27,14 @@ class SubscriptionSeeder extends Seeder
      */
     public function run(): void
     {
-        if (DB::table('subscriptions')->exists()) {
-            return;
-        }
-
         $superAdminId = User::query()->where('role', Role::SuperAdmin)->value('id');
 
         Tenant::query()->each(function (Tenant $tenant) use ($superAdminId): void {
+            // Per tenant, so agencies added later are billed on a re-run.
+            if (DB::table('subscriptions')->where('tenant_id', $tenant->id)->exists()) {
+                return;
+            }
+
             $this->seedSubscription($tenant, $superAdminId);
         });
     }
@@ -202,7 +203,9 @@ class SubscriptionSeeder extends Seeder
     {
         return match ($tenantId) {
             'dumaguete' => 350000,
+            'bayawan' => 280000,
             'tanjay' => 250000,
+            'dauin' => 220000,
             default => 180000,
         };
     }
@@ -212,6 +215,8 @@ class SubscriptionSeeder extends Seeder
         return match ($tenantId) {
             'dumaguete' => 'DGTE',
             'tanjay' => 'TNJY',
+            'dauin' => 'DAUN',
+            'bayawan' => 'BYWN',
             default => 'ZMB',
         };
     }
