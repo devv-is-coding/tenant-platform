@@ -43,11 +43,11 @@ function agencyDatabaseKept(Tenant $tenant): bool
 
 test('deleting an agency soft-deletes it with its users, domains and billing, and keeps its database', function () {
     $tenant = Tenant::factory()->create(['id' => 'dumaguete', 'name' => 'Dumaguete Travel']);
-    $tenant->domains()->create(['domain' => 'dumaguete.localhost']);
+    $domain = $tenant->domains()->create(['domain' => 'dumaguete.localhost']);
     $admin = User::factory()->role(Role::Admin)->for($tenant)->create();
     $live = Subscription::factory()->for($tenant)->create();
     $invoice = SubscriptionInvoice::factory()->for($live)->create();
-    SubscriptionPayment::factory()->for($invoice, 'invoice')->create();
+    $payment = SubscriptionPayment::factory()->for($invoice, 'invoice')->create();
     $superAdmin = User::factory()->superAdmin()->create();
 
     Livewire::actingAs($superAdmin)
@@ -72,11 +72,11 @@ test('deleting an agency soft-deletes it with its users, domains and billing, an
     expect($central->tenant_id)->toBe('dumaguete')
         ->and($central->description)->toBe('Agency closed its business.')
         ->and($central->context)->toBe(['cascaded' => [
-            'subscription' => 1,
-            'subscription_invoice' => 1,
-            'subscription_payment' => 1,
-            'user' => 1,
-            'domain' => 1,
+            'subscription' => [$live->id],
+            'subscription_invoice' => [$invoice->id],
+            'subscription_payment' => [$payment->id],
+            'user' => [$admin->id],
+            'domain' => [$domain->id],
         ]]);
 
     $notice = $tenant->run(fn () => AuditEvent::sole());

@@ -83,9 +83,9 @@ test('deleting a payment on a void invoice leaves it void', function () {
     expect($invoice->refresh()->status)->toBe(SubscriptionInvoiceStatus::Void);
 });
 
-test('deleting an invoice deletes its payments with it and records how many', function () {
+test('deleting an invoice deletes its payments with it and records which', function () {
     $invoice = SubscriptionInvoice::factory()->create();
-    SubscriptionPayment::factory()->for($invoice, 'invoice')->count(2)->create();
+    $payments = SubscriptionPayment::factory()->for($invoice, 'invoice')->count(2)->create();
 
     deleteFromAgencyPage($invoice->tenant, 'invoice', $invoice->id)->assertHasNoErrors();
 
@@ -95,7 +95,7 @@ test('deleting an invoice deletes its payments with it and records how many', fu
         ->and(SubscriptionPayment::onlyTrashed()->count())->toBe(2);
 
     $event = PlatformAuditEvent::query()->where('action', AuditAction::SubscriptionInvoiceDeleted)->sole();
-    expect($event->context)->toBe(['cascaded' => ['subscription_payment' => 2]]);
+    expect($event->context)->toBe(['cascaded' => ['subscription_payment' => $payments->modelKeys()]]);
 });
 
 test('deleting the last overdue invoice moves a past-due subscription back to active', function () {
@@ -126,7 +126,7 @@ test('the billing run neither re-issues a deleted invoice\'s period nor reuses i
 test('deleting a subscription deletes its invoices and their payments', function () {
     $subscription = Subscription::factory()->expired()->create();
     $invoice = SubscriptionInvoice::factory()->for($subscription)->create();
-    SubscriptionPayment::factory()->for($invoice, 'invoice')->create();
+    $payment = SubscriptionPayment::factory()->for($invoice, 'invoice')->create();
 
     deleteFromAgencyPage($subscription->tenant, 'subscription', $subscription->id)->assertHasNoErrors();
 
@@ -134,7 +134,7 @@ test('deleting a subscription deletes its invoices and their payments', function
         ->and(SubscriptionInvoice::count())->toBe(0)
         ->and(SubscriptionPayment::count())->toBe(0)
         ->and(PlatformAuditEvent::query()->where('action', AuditAction::SubscriptionDeleted)->sole()->context)
-        ->toBe(['cascaded' => ['subscription_payment' => 1, 'subscription_invoice' => 1]]);
+        ->toBe(['cascaded' => ['subscription_payment' => [$payment->id], 'subscription_invoice' => [$invoice->id]]]);
 });
 
 test('deleting a live subscription frees the agency to be put on a new plan', function () {

@@ -32,4 +32,13 @@ class SubscriptionInvoicePolicy
     {
         return $user->isSuperAdmin();
     }
+
+    /**
+     * Determine whether the user can bring back a deleted invoice, with the
+     * payments deleted along with it.
+     */
+    public function restore(User $user, SubscriptionInvoice $subscriptionInvoice): bool
+    {
+        return $user->isSuperAdmin();
+    }
 }

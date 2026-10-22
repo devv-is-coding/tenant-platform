@@ -35,7 +35,8 @@ class DeleteSubscriptionInvoiceAction
             $subscription = Subscription::query()->whereKey($invoice->subscription_id)->lockForUpdate()->firstOrFail();
             $locked = SubscriptionInvoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
 
-            $paymentsDeleted = $locked->payments()->delete();
+            $paymentIds = $locked->payments()->pluck('id')->all();
+            $locked->payments()->whereKey($paymentIds)->delete();
             $locked->delete();
 
             $this->auditRecorder->recordPlatformEvent(
@@ -44,7 +45,7 @@ class DeleteSubscriptionInvoiceAction
                 $subscription->tenant,
                 $reason,
                 subject: $locked,
-                context: ['cascaded' => ['subscription_payment' => $paymentsDeleted]],
+                context: ['cascaded' => ['subscription_payment' => $paymentIds]],
             );
 
             $this->clearPastDue->handle($actor, $subscription);

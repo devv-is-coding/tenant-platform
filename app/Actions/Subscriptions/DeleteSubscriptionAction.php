@@ -60,17 +60,23 @@ class DeleteSubscriptionAction
     }
 
     /**
-     * Soft-delete a subscription's invoices and their payments.
+     * Soft-delete a subscription's invoices and their payments, returning the
+     * ids deleted. Rows already deleted on their own are left out, so a
+     * restore of this cascade brings back only what it took.
      *
-     * @return array{subscription_invoice: int, subscription_payment: int}
+     * @return array{subscription_invoice: list<int>, subscription_payment: list<int>}
      */
     public function deleteBillingRecordsOf(Subscription $subscription): array
     {
-        $invoiceIds = $subscription->invoices()->pluck('id');
+        $invoiceIds = array_values(array_map(intval(...), $subscription->invoices()->pluck('id')->all()));
+        $paymentIds = array_values(array_map(intval(...), SubscriptionPayment::query()->whereIn('subscription_invoice_id', $invoiceIds)->pluck('id')->all()));
+
+        SubscriptionPayment::query()->whereKey($paymentIds)->delete();
+        SubscriptionInvoice::query()->whereKey($invoiceIds)->delete();
 
         return [
-            'subscription_payment' => SubscriptionPayment::query()->whereIn('subscription_invoice_id', $invoiceIds)->delete(),
-            'subscription_invoice' => SubscriptionInvoice::query()->whereKey($invoiceIds)->delete(),
+            'subscription_payment' => $paymentIds,
+            'subscription_invoice' => $invoiceIds,
         ];
     }
 }

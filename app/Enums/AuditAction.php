@@ -29,6 +29,7 @@ enum AuditAction: string
     case UserCreated = 'user.created';
     case UserUpdated = 'user.updated';
     case UserDeleted = 'user.deleted';
+    case UserRestored = 'user.restored';
     case UserProfileUpdated = 'user.profile_updated';
 
     case TenantCreated = 'tenant.created';
@@ -36,23 +37,30 @@ enum AuditAction: string
     case TenantSuspended = 'tenant.suspended';
     case TenantReactivated = 'tenant.reactivated';
     case TenantDeleted = 'tenant.deleted';
+    case TenantRestored = 'tenant.restored';
 
     case SubscriptionCreated = 'subscription.created';
     case SubscriptionPlanChanged = 'subscription.plan_changed';
     case SubscriptionCancelled = 'subscription.cancelled';
     case SubscriptionDeleted = 'subscription.deleted';
+    case SubscriptionRestored = 'subscription.restored';
     case SubscriptionMarkedPastDue = 'subscription.past_due';
     case SubscriptionPastDueCleared = 'subscription.past_due_cleared';
     case SubscriptionInvoiceIssued = 'subscription.invoice_issued';
     case SubscriptionInvoiceVoided = 'subscription.invoice_voided';
     case SubscriptionInvoiceDeleted = 'subscription.invoice_deleted';
+    case SubscriptionInvoiceRestored = 'subscription.invoice_restored';
     case SubscriptionPaymentRecorded = 'subscription.payment_recorded';
     case SubscriptionPaymentDeleted = 'subscription.payment_deleted';
+    case SubscriptionPaymentRestored = 'subscription.payment_restored';
     case SubscriptionPaymentFailed = 'subscription.payment_failed';
 
     case PlanCreated = 'plan.created';
     case PlanUpdated = 'plan.updated';
     case PlanDeleted = 'plan.deleted';
+
+    case RestoreRequested = 'restore.requested';
+    case RestoreDeclined = 'restore.declined';
 
     case SettingsUpdated = 'settings.updated';
 

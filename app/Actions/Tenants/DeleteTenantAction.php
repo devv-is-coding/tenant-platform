@@ -43,12 +43,13 @@ class DeleteTenantAction
         $tenant->getConnection()->transaction(function () use ($actor, $tenant, $reason): void {
             $locked = Tenant::query()->whereKey($tenant->id)->lockForUpdate()->firstOrFail();
 
-            $cascaded = ['subscription' => 0, 'subscription_invoice' => 0, 'subscription_payment' => 0];
+            // The ids each cascade took, so a restore brings back exactly these.
+            $cascaded = ['subscription' => [], 'subscription_invoice' => [], 'subscription_payment' => []];
 
             Subscription::query()->where('tenant_id', $locked->id)->each(function (Subscription $subscription) use (&$cascaded): void {
                 $billing = $this->deleteSubscription->deleteBillingRecordsOf($subscription);
-                $cascaded['subscription_invoice'] += $billing['subscription_invoice'];
-                $cascaded['subscription_payment'] += $billing['subscription_payment'];
+                $cascaded['subscription_invoice'] = [...$cascaded['subscription_invoice'], ...$billing['subscription_invoice']];
+                $cascaded['subscription_payment'] = [...$cascaded['subscription_payment'], ...$billing['subscription_payment']];
             });
 
             // Out of the active slot first, as for a single subscription, so
@@ -61,10 +62,14 @@ class DeleteTenantAction
                 'next_billing_on' => null,
                 'ends_on' => today(),
             ]);
-            $cascaded['subscription'] = Subscription::query()->where('tenant_id', $locked->id)->delete();
+            $cascaded['subscription'] = Subscription::query()->where('tenant_id', $locked->id)->pluck('id')->all();
+            Subscription::query()->whereKey($cascaded['subscription'])->delete();
 
-            $cascaded['user'] = $locked->users()->delete();
-            $cascaded['domain'] = $locked->domains()->delete();
+            $cascaded['user'] = $locked->users()->pluck('id')->all();
+            $locked->users()->whereKey($cascaded['user'])->delete();
+
+            $cascaded['domain'] = $locked->domains()->pluck('id')->all();
+            $locked->domains()->whereKey($cascaded['domain'])->delete();
 
             $locked->delete();
 
