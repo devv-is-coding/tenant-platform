@@ -31,7 +31,7 @@ class SubscriptionPaymentFactory extends Factory
             'currency' => 'PHP',
             'method' => PaymentMethod::BankTransfer,
             'status' => PaymentRecordStatus::Succeeded,
-            'paid_on' => now(),
+            'paid_at' => now(),
         ];
     }
 
@@ -43,7 +43,7 @@ class SubscriptionPaymentFactory extends Factory
         return $this->state(fn () => [
             'method' => PaymentMethod::Stripe,
             'status' => PaymentRecordStatus::Failed,
-            'paid_on' => null,
+            'paid_at' => null,
             'failure_reason' => 'Card declined.',
         ]);
     }

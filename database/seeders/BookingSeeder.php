@@ -67,7 +67,7 @@ class BookingSeeder extends Seeder
     {
         $customer = User::query()->where('username', $plan['customer'])->first();
         $now = now();
-        $createdOn = $now->copy()->subDays(21 - $sequence);
+        $createdAt = $now->copy()->subDays(21 - $sequence);
 
         $lines = [];
         $subtotal = 0;
@@ -95,12 +95,12 @@ class BookingSeeder extends Seeder
             'total_minor' => $subtotal,
             'amount_paid_minor' => 0,
             'amount_refunded_minor' => 0,
-            'approved_on' => $plan['approval'] === BookingApprovalStatus::Approved ? $createdOn->copy()->addHour() : null,
-            'rejected_on' => $plan['approval'] === BookingApprovalStatus::Rejected ? $createdOn->copy()->addHour() : null,
+            'approved_at' => $plan['approval'] === BookingApprovalStatus::Approved ? $createdAt->copy()->addHour() : null,
+            'rejected_at' => $plan['approval'] === BookingApprovalStatus::Rejected ? $createdAt->copy()->addHour() : null,
             'created_by' => $customer->id,
             'approved_by' => $plan['approval'] === BookingApprovalStatus::Approved ? $managerId : null,
-            'created_on' => $createdOn,
-            'updated_on' => $createdOn,
+            'created_at' => $createdAt,
+            'updated_at' => $createdAt,
         ]);
 
         $lineIds = [];
@@ -120,8 +120,8 @@ class BookingSeeder extends Seeder
                 'starts_on' => $line['starts_on'],
                 'ends_on' => $line['ends_on'],
                 'line_total_minor' => $line['line_total_minor'],
-                'created_on' => $createdOn,
-                'updated_on' => $createdOn,
+                'created_at' => $createdAt,
+                'updated_at' => $createdAt,
             ]);
             $lineIds[] = $lineId;
 
@@ -137,10 +137,10 @@ class BookingSeeder extends Seeder
             'subject_type' => 'booking',
             'subject_id' => $bookingId,
             'changes' => null,
-            'created_on' => $createdOn,
+            'created_at' => $createdAt,
         ]);
 
-        $this->notify($tenant, $customer->id, 4, 'Booking created', "Your booking {$reference} has been received.", $bookingId, $createdOn);
+        $this->notify($tenant, $customer->id, 4, 'Booking created', "Your booking {$reference} has been received.", $bookingId, $createdAt);
 
         if ($plan['approval'] === BookingApprovalStatus::Approved) {
             DB::table('audit_events')->insert([
@@ -150,9 +150,9 @@ class BookingSeeder extends Seeder
                 'subject_type' => 'booking',
                 'subject_id' => $bookingId,
                 'changes' => null,
-                'created_on' => $createdOn->copy()->addHour(),
+                'created_at' => $createdAt->copy()->addHour(),
             ]);
-            $this->notify($tenant, $customer->id, 5, 'Booking approved', "Your booking {$reference} has been approved.", $bookingId, $createdOn->copy()->addHour());
+            $this->notify($tenant, $customer->id, 5, 'Booking approved', "Your booking {$reference} has been approved.", $bookingId, $createdAt->copy()->addHour());
         } elseif ($plan['approval'] === BookingApprovalStatus::Rejected) {
             DB::table('audit_events')->insert([
                 'actor_id' => $managerId,
@@ -161,9 +161,9 @@ class BookingSeeder extends Seeder
                 'subject_type' => 'booking',
                 'subject_id' => $bookingId,
                 'changes' => json_encode(['approval_status' => ['old' => BookingApprovalStatus::Pending->value, 'new' => BookingApprovalStatus::Rejected->value]]),
-                'created_on' => $createdOn->copy()->addHour(),
+                'created_at' => $createdAt->copy()->addHour(),
             ]);
-            $this->notify($tenant, $customer->id, 6, 'Booking rejected', "Your booking {$reference} was rejected: {$plan['rejection_reason']}", $bookingId, $createdOn->copy()->addHour());
+            $this->notify($tenant, $customer->id, 6, 'Booking rejected', "Your booking {$reference} was rejected: {$plan['rejection_reason']}", $bookingId, $createdAt->copy()->addHour());
 
             return;
         }
@@ -180,12 +180,12 @@ class BookingSeeder extends Seeder
                 'currency' => $currency,
                 'method' => $payment['method']->value,
                 'status' => PaymentRecordStatus::Succeeded->value,
-                'paid_on' => $payment['paid_on'],
+                'paid_at' => $payment['paid_at'],
                 'recorded_by' => $payment['method']->isRecordedByStaff() ? $staffId : null,
                 'idempotency_key' => $payment['method']->isGatewaySettled() ? "evt_{$reference}_{$paymentIndex}" : null,
                 'stripe_payment_intent_id' => $payment['method'] === PaymentMethod::Stripe ? "pi_{$reference}_{$paymentIndex}" : null,
-                'created_on' => $payment['paid_on'],
-                'updated_on' => $payment['paid_on'],
+                'created_at' => $payment['paid_at'],
+                'updated_at' => $payment['paid_at'],
             ]);
 
             DB::table('audit_events')->insert([
@@ -195,7 +195,7 @@ class BookingSeeder extends Seeder
                 'subject_type' => 'booking',
                 'subject_id' => $bookingId,
                 'changes' => null,
-                'created_on' => $payment['paid_on'],
+                'created_at' => $payment['paid_at'],
             ]);
 
             $paymentStatus = $this->derivePaymentStatus($amountPaid, 0, $subtotal);
@@ -211,7 +211,7 @@ class BookingSeeder extends Seeder
                 'Payment received',
                 'We have received your payment of '.$this->money($payment['amount_minor']).'.',
                 $bookingId,
-                $payment['paid_on'],
+                $payment['paid_at'],
             );
         }
 
@@ -229,10 +229,10 @@ class BookingSeeder extends Seeder
                 'itinerary_stop_id' => $itineraryStopId,
                 'stop_label' => $plan['checkin']['stop_sequence'] === null ? null : DB::table('itinerary_stops')->where('id', $itineraryStopId)->value('location'),
                 'customer_id' => $customer->id,
-                'checked_in_on' => $plan['checkin']['checked_in_on'],
+                'checked_in_at' => $plan['checkin']['checked_in_at'],
                 'recorded_by' => $itineraryStopId === null ? $staffId : null,
-                'created_on' => $plan['checkin']['checked_in_on'],
-                'updated_on' => $plan['checkin']['checked_in_on'],
+                'created_at' => $plan['checkin']['checked_in_at'],
+                'updated_at' => $plan['checkin']['checked_in_at'],
             ]);
 
             DB::table('audit_events')->insert([
@@ -242,7 +242,7 @@ class BookingSeeder extends Seeder
                 'subject_type' => 'booking',
                 'subject_id' => $bookingId,
                 'changes' => null,
-                'created_on' => $plan['checkin']['checked_in_on'],
+                'created_at' => $plan['checkin']['checked_in_at'],
             ]);
         }
 
@@ -329,8 +329,8 @@ class BookingSeeder extends Seeder
                     'booking_line_id' => $lineId,
                     'occupied_on' => $date,
                     'unit_index' => $startIndex + $unit,
-                    'created_on' => $now,
-                    'updated_on' => $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ];
             }
         }
@@ -374,8 +374,8 @@ class BookingSeeder extends Seeder
             'rating' => $review['rating'],
             'is_approved' => true,
             'is_featured' => $review['is_featured'],
-            'created_on' => $now,
-            'updated_on' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
         ]);
 
         DB::table('audit_events')->insert([
@@ -385,7 +385,7 @@ class BookingSeeder extends Seeder
             'subject_type' => 'booking',
             'subject_id' => $bookingId,
             'changes' => null,
-            'created_on' => $now,
+            'created_at' => $now,
         ]);
 
         DB::connection(config('tenancy.database.central_connection'))->table('listings')
@@ -394,7 +394,7 @@ class BookingSeeder extends Seeder
             ->update([
                 'rating_avg' => sprintf('%.2f', $review['rating']),
                 'reviews_count' => 1,
-                'synced_on' => $now,
+                'synced_at' => $now,
             ]);
     }
 
@@ -425,9 +425,9 @@ class BookingSeeder extends Seeder
             'currency' => $currency,
             'reason' => $refund['reason'],
             'requested_by' => $customer->id,
-            'requested_on' => $now->copy()->subDays(2),
-            'created_on' => $now->copy()->subDays(2),
-            'updated_on' => $now->copy()->subDays(2),
+            'requested_at' => $now->copy()->subDays(2),
+            'created_at' => $now->copy()->subDays(2),
+            'updated_at' => $now->copy()->subDays(2),
         ]);
 
         $this->notify($tenant, $customer->id, 9, 'Refund requested', 'Your refund request for '.$this->money($refund['amount_minor']).' has been received.', $bookingId, $now->copy()->subDays(2));
@@ -435,10 +435,10 @@ class BookingSeeder extends Seeder
         DB::table('refunds')->where('id', $refundId)->update([
             'status' => RefundStatus::Processed->value,
             'decided_by' => $managerId,
-            'decided_on' => $now->copy()->subDay(),
-            'processed_on' => $now,
+            'decided_at' => $now->copy()->subDay(),
+            'processed_at' => $now,
             'stripe_refund_id' => "re_{$bookingId}_{$refundId}",
-            'updated_on' => $now,
+            'updated_at' => $now,
         ]);
 
         DB::table('audit_events')->insert([
@@ -449,7 +449,7 @@ class BookingSeeder extends Seeder
                 'subject_type' => 'booking',
                 'subject_id' => $bookingId,
                 'changes' => null,
-                'created_on' => $now->copy()->subDay(),
+                'created_at' => $now->copy()->subDay(),
             ],
             [
                 'actor_id' => $managerId,
@@ -458,7 +458,7 @@ class BookingSeeder extends Seeder
                 'subject_type' => 'booking',
                 'subject_id' => $bookingId,
                 'changes' => null,
-                'created_on' => $now,
+                'created_at' => $now,
             ],
         ]);
 
@@ -506,7 +506,7 @@ class BookingSeeder extends Seeder
         return BookingPaymentStatus::Unpaid;
     }
 
-    private function notify(Tenant $tenant, int $userId, int $notificationType, string $title, string $message, int $bookingId, string|CarbonInterface $createdOn): void
+    private function notify(Tenant $tenant, int $userId, int $notificationType, string $title, string $message, int $bookingId, string|CarbonInterface $createdAt): void
     {
         DB::connection(config('tenancy.database.central_connection'))->table('notifications')->insert([
             'user_id' => $userId,
@@ -517,8 +517,8 @@ class BookingSeeder extends Seeder
             'subject_type' => 'booking',
             'subject_id' => $bookingId,
             'is_read' => false,
-            'created_on' => $createdOn,
-            'updated_on' => $createdOn,
+            'created_at' => $createdAt,
+            'updated_at' => $createdAt,
         ]);
     }
 
@@ -561,11 +561,11 @@ class BookingSeeder extends Seeder
                     ['item_slug' => 'hotel-palwa', 'option_name' => 'Room 101', 'quantity' => 2, 'nights' => 3, 'starts_on' => '2026-12-01'],
                 ],
                 'payments' => [
-                    ['method' => PaymentMethod::Cash, 'amount_minor' => 47760, 'paid_on' => '2026-10-15 10:22:00'],
-                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 71640, 'paid_on' => '2026-10-20 09:05:00'],
+                    ['method' => PaymentMethod::Cash, 'amount_minor' => 47760, 'paid_at' => '2026-10-15 10:22:00'],
+                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 71640, 'paid_at' => '2026-10-20 09:05:00'],
                 ],
                 'fulfilment' => FulfilmentStatus::CheckedIn,
-                'checkin' => ['stop_sequence' => null, 'checked_in_on' => '2026-12-01 14:12:00'],
+                'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2026-12-01 14:12:00'],
             ],
             [
                 'customer' => 'tomas',
@@ -574,10 +574,10 @@ class BookingSeeder extends Seeder
                     ['item_slug' => 'japan-discovery', 'option_name' => 'Couple', 'quantity' => 1],
                 ],
                 'payments' => [
-                    ['method' => PaymentMethod::Cash, 'amount_minor' => 27960, 'paid_on' => '2026-10-11 10:22:00'],
+                    ['method' => PaymentMethod::Cash, 'amount_minor' => 27960, 'paid_at' => '2026-10-11 10:22:00'],
                 ],
                 'fulfilment' => FulfilmentStatus::CheckedIn,
-                'checkin' => ['stop_sequence' => 1, 'checked_in_on' => '2026-12-02 09:40:00'],
+                'checkin' => ['stop_sequence' => 1, 'checked_in_at' => '2026-12-02 09:40:00'],
             ],
             [
                 'customer' => 'carmela',
@@ -604,10 +604,10 @@ class BookingSeeder extends Seeder
                     ['item_slug' => 'hotel-palwa', 'option_name' => 'Standard Double, 2 Queen Beds', 'quantity' => 2, 'nights' => 2, 'starts_on' => '2027-01-05'],
                 ],
                 'payments' => [
-                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 64000, 'paid_on' => '2026-10-16 11:00:00'],
+                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 64000, 'paid_at' => '2026-10-16 11:00:00'],
                 ],
                 'fulfilment' => FulfilmentStatus::Completed,
-                'checkin' => ['stop_sequence' => null, 'checked_in_on' => '2027-01-05 14:05:00'],
+                'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2027-01-05 14:05:00'],
                 'review' => ['rating' => 5, 'title' => 'Worth every peso', 'content' => 'Hokkaido in December was extraordinary.', 'is_featured' => true],
                 'refund' => ['line_index' => 0, 'unit_index_released' => 1, 'amount_minor' => 32000, 'reason' => 'Travelling companion hospitalised; requesting one place back.'],
             ],
@@ -627,11 +627,11 @@ class BookingSeeder extends Seeder
                     ['item_slug' => 'zamboanguita-dive-resort', 'option_name' => 'Garden View Room', 'quantity' => 1, 'nights' => 3, 'starts_on' => '2026-11-25'],
                 ],
                 'payments' => [
-                    ['method' => PaymentMethod::Cash, 'amount_minor' => 264000, 'paid_on' => '2026-10-12 10:00:00'],
-                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 396000, 'paid_on' => '2026-10-18 09:15:00'],
+                    ['method' => PaymentMethod::Cash, 'amount_minor' => 264000, 'paid_at' => '2026-10-12 10:00:00'],
+                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 396000, 'paid_at' => '2026-10-18 09:15:00'],
                 ],
                 'fulfilment' => FulfilmentStatus::CheckedIn,
-                'checkin' => ['stop_sequence' => null, 'checked_in_on' => '2026-11-25 13:50:00'],
+                'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2026-11-25 13:50:00'],
             ],
             [
                 'customer' => 'beatriz',
@@ -640,10 +640,10 @@ class BookingSeeder extends Seeder
                     ['item_slug' => 'siquijor-island-hopping', 'option_name' => 'Couple', 'quantity' => 1],
                 ],
                 'payments' => [
-                    ['method' => PaymentMethod::Cash, 'amount_minor' => 91960, 'paid_on' => '2026-10-13 10:22:00'],
+                    ['method' => PaymentMethod::Cash, 'amount_minor' => 91960, 'paid_at' => '2026-10-13 10:22:00'],
                 ],
                 'fulfilment' => FulfilmentStatus::CheckedIn,
-                'checkin' => ['stop_sequence' => 1, 'checked_in_on' => '2026-11-20 08:30:00'],
+                'checkin' => ['stop_sequence' => 1, 'checked_in_at' => '2026-11-20 08:30:00'],
             ],
             [
                 'customer' => 'tomas',
@@ -670,10 +670,10 @@ class BookingSeeder extends Seeder
                     ['item_slug' => 'zamboanguita-dive-resort', 'option_name' => 'Beachfront Cabana', 'quantity' => 2, 'nights' => 2, 'starts_on' => '2027-01-08'],
                 ],
                 'payments' => [
-                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 1400000, 'paid_on' => '2026-10-17 11:00:00'],
+                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 1400000, 'paid_at' => '2026-10-17 11:00:00'],
                 ],
                 'fulfilment' => FulfilmentStatus::Completed,
-                'checkin' => ['stop_sequence' => null, 'checked_in_on' => '2027-01-08 14:00:00'],
+                'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2027-01-08 14:00:00'],
                 'review' => ['rating' => 5, 'title' => 'Best dive base in Negros Oriental', 'content' => 'The house reef alone is worth the trip.', 'is_featured' => true],
                 'refund' => ['line_index' => 0, 'unit_index_released' => 1, 'amount_minor' => 700000, 'reason' => 'Dive buddy had to cancel; requesting one cabana back.'],
             ],
@@ -693,11 +693,11 @@ class BookingSeeder extends Seeder
                     ['item_slug' => 'tanjay-heritage-hotel', 'option_name' => 'Deluxe Room', 'quantity' => 2, 'nights' => 3, 'starts_on' => '2026-11-28'],
                 ],
                 'payments' => [
-                    ['method' => PaymentMethod::Cash, 'amount_minor' => 432000, 'paid_on' => '2026-10-14 10:30:00'],
-                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 648000, 'paid_on' => '2026-10-19 09:45:00'],
+                    ['method' => PaymentMethod::Cash, 'amount_minor' => 432000, 'paid_at' => '2026-10-14 10:30:00'],
+                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 648000, 'paid_at' => '2026-10-19 09:45:00'],
                 ],
                 'fulfilment' => FulfilmentStatus::CheckedIn,
-                'checkin' => ['stop_sequence' => null, 'checked_in_on' => '2026-11-28 14:10:00'],
+                'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2026-11-28 14:10:00'],
             ],
             [
                 'customer' => 'nadia',
@@ -706,10 +706,10 @@ class BookingSeeder extends Seeder
                     ['item_slug' => 'seoul-busan-explorer', 'option_name' => 'Solo', 'quantity' => 1],
                 ],
                 'payments' => [
-                    ['method' => PaymentMethod::Cash, 'amount_minor' => 235960, 'paid_on' => '2026-10-15 10:22:00'],
+                    ['method' => PaymentMethod::Cash, 'amount_minor' => 235960, 'paid_at' => '2026-10-15 10:22:00'],
                 ],
                 'fulfilment' => FulfilmentStatus::CheckedIn,
-                'checkin' => ['stop_sequence' => 1, 'checked_in_on' => '2027-01-10 09:00:00'],
+                'checkin' => ['stop_sequence' => 1, 'checked_in_at' => '2027-01-10 09:00:00'],
             ],
             [
                 'customer' => 'beatriz',
@@ -736,10 +736,10 @@ class BookingSeeder extends Seeder
                     ['item_slug' => 'tanjay-heritage-hotel', 'option_name' => 'Suite', 'quantity' => 2, 'nights' => 2, 'starts_on' => '2027-01-12'],
                 ],
                 'payments' => [
-                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 1280000, 'paid_on' => '2026-10-16 11:20:00'],
+                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 1280000, 'paid_at' => '2026-10-16 11:20:00'],
                 ],
                 'fulfilment' => FulfilmentStatus::Completed,
-                'checkin' => ['stop_sequence' => null, 'checked_in_on' => '2027-01-12 14:00:00'],
+                'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2027-01-12 14:00:00'],
                 'review' => ['rating' => 4, 'title' => 'Lovely courtyard', 'content' => 'Quiet, central, and the breakfast was generous.', 'is_featured' => false],
                 'refund' => ['line_index' => 0, 'unit_index_released' => 1, 'amount_minor' => 640000, 'reason' => 'Travel plans changed; requesting one suite back.'],
             ],

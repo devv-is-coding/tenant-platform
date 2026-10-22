@@ -58,7 +58,7 @@ test('deleting an agency soft-deletes it with its users, domains and billing, an
         ->assertRedirect(route('admin.tenants.index'));
 
     expect(Tenant::find('dumaguete'))->toBeNull()
-        ->and(Tenant::withTrashed()->find('dumaguete')?->deleted_on)->not->toBeNull()
+        ->and(Tenant::withTrashed()->find('dumaguete')?->deleted_at)->not->toBeNull()
         ->and(User::find($admin->id))->toBeNull()
         ->and(Domain::query()->where('tenant_id', 'dumaguete')->count())->toBe(0)
         ->and(Subscription::query()->where('tenant_id', 'dumaguete')->count())->toBe(0)
@@ -107,7 +107,7 @@ test('deleting an agency needs a reason, and nothing is deleted without one', fu
         ->call('deleteAgency')
         ->assertHasErrors(['delete_reason' => 'Say why this is being deleted. The reason is kept in the audit log.']);
 
-    expect($tenant->fresh()?->deleted_on)->toBeNull()
+    expect($tenant->fresh()?->deleted_at)->toBeNull()
         ->and(PlatformAuditEvent::count())->toBe(0);
 });
 

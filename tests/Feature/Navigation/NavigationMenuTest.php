@@ -48,7 +48,7 @@ test('super admins open on their dashboard, a top-level link ahead of the platfo
         ->not->toContain('Console');
 });
 
-test('super admins get the dashboard, audit log, agency directory, onboarding and overdue invoices, not the customer dashboard', function () {
+test('super admins get the dashboard, audit log, agency directory, onboarding, plans and overdue invoices, not the customer dashboard', function () {
     $sections = navigationFor(User::factory()->superAdmin()->create());
 
     expect(navigationHrefs($sections))
@@ -56,6 +56,7 @@ test('super admins get the dashboard, audit log, agency directory, onboarding an
         ->toContain(route('admin.audit.index'))
         ->toContain(route('admin.tenants.index'))
         ->toContain(route('admin.tenants.create'))
+        ->toContain(route('admin.plans.index'))
         ->toContain(route('admin.invoices.overdue'))
         ->not->toContain(route('dashboard'));
 });
@@ -69,6 +70,7 @@ test('every other central role gets the dashboard and never the console', functi
         ->not->toContain(route('admin.audit.index'))
         ->not->toContain(route('admin.tenants.index'))
         ->not->toContain(route('admin.tenants.create'))
+        ->not->toContain(route('admin.plans.index'))
         ->not->toContain(route('admin.invoices.overdue'));
 })->with([
     'customer' => Role::Customer,

@@ -49,9 +49,8 @@ return new class extends Migration
             // approval.
             $table->boolean('requires_listing_approval')->default(true);
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
         });
     }
 

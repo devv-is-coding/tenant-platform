@@ -73,11 +73,11 @@ return new class extends Migration
             // Inventory is allocated at booking creation, not at payment - the
             // legacy allocated at payment, so two customers could both hold
             // unpaid bookings for the last room. This is the hold's expiry.
-            $table->timestamp('expires_on')->nullable()->index();
+            $table->timestamp('expires_at')->nullable()->index();
 
-            $table->timestamp('approved_on')->nullable();
-            $table->timestamp('rejected_on')->nullable();
-            $table->timestamp('cancelled_on')->nullable();
+            $table->timestamp('approved_at')->nullable();
+            $table->timestamp('rejected_at')->nullable();
+            $table->timestamp('cancelled_at')->nullable();
 
             // Central users; not real foreign keys.
             $table->foreignId('created_by')->nullable()->index();
@@ -87,13 +87,12 @@ return new class extends Migration
             $table->string('stripe_customer_id')->nullable();
             $table->string('stripe_invoice_url', 500)->nullable();
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             // The two queues staff work from.
-            $table->index(['approval_status', 'created_on']);
-            $table->index(['payment_status', 'created_on']);
+            $table->index(['approval_status', 'created_at']);
+            $table->index(['payment_status', 'created_at']);
         });
     }
 

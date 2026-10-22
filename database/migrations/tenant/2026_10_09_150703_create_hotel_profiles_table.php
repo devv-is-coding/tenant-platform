@@ -28,9 +28,8 @@ return new class extends Migration
             $table->time('check_in_time');
             $table->time('check_out_time');
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
         });
     }
 

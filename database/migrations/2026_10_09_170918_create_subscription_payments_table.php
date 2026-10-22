@@ -15,7 +15,7 @@ return new class extends Migration
      * real as a deposit on a booking.
      *
      * The shape mirrors the tenant-side `payments` table deliberately, including
-     * `paid_on` as a real timestamp rather than the legacy's `int(11)` unix
+     * `paid_at` as a real timestamp rather than the legacy's `int(11)` unix
      * integer (defect 10), and the unique `idempotency_key` so a replayed
      * gateway webhook cannot credit an invoice twice.
      *
@@ -44,7 +44,7 @@ return new class extends Migration
             $table->unsignedTinyInteger('method');
             $table->unsignedTinyInteger('status');
 
-            $table->timestamp('paid_on')->nullable();
+            $table->timestamp('paid_at')->nullable();
 
             // The super admin who recorded a manual payment. A bare column with
             // no foreign key, and NULL for gateway-settled payments.
@@ -59,15 +59,14 @@ return new class extends Migration
 
             $table->string('failure_reason')->nullable();
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             // The SUM that recomputes the invoice balance.
             $table->index(['subscription_invoice_id', 'status']);
 
             // One agency's payment history, newest first.
-            $table->index(['tenant_id', 'paid_on']);
+            $table->index(['tenant_id', 'paid_at']);
 
             $table->foreign('tenant_id')->references('id')->on('tenants')->cascadeOnUpdate()->restrictOnDelete();
         });

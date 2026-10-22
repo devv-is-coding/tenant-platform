@@ -48,7 +48,7 @@ new #[Title('Security settings')] class extends Component {
         $this->canManageTwoFactor = Features::canManageTwoFactorAuthentication();
 
         if ($this->canManageTwoFactor) {
-            if (Fortify::confirmsTwoFactorAuthentication() && is_null(auth()->user()->two_factor_confirmed_on)) {
+            if (Fortify::confirmsTwoFactorAuthentication() && is_null(auth()->user()->two_factor_confirmed_at)) {
                 $disableTwoFactorAuthentication(auth()->user());
             }
 
@@ -94,15 +94,15 @@ new #[Title('Security settings')] class extends Component {
     public function loadPasskeys(): void
     {
         $this->passkeys = auth()->user()->passkeys()
-            ->select(['id', 'name', 'credential', 'created_on', 'last_used_on'])
+            ->select(['id', 'name', 'credential', 'created_at', 'last_used_at'])
             ->latest()
             ->get()
             ->map(fn ($passkey) => [
                 'id' => $passkey->id,
                 'name' => $passkey->name,
                 'authenticator' => $passkey->authenticator,
-                'created_on_diff' => $passkey->created_on->diffForHumans(),
-                'last_used_on_diff' => $passkey->last_used_on?->diffForHumans(),
+                'created_at_diff' => $passkey->created_at->diffForHumans(),
+                'last_used_at_diff' => $passkey->last_used_at?->diffForHumans(),
             ])
             ->toArray();
     }
@@ -273,10 +273,10 @@ new #[Title('Security settings')] class extends Component {
                                             @endif
                                         </div>
                                         <p class="text-zinc-500 dark:text-zinc-400 text-xs">
-                                            {{ __('Added :time', ['time' => $passkey['created_on_diff']]) }}
-                                            @if ($passkey['last_used_on_diff'])
+                                            {{ __('Added :time', ['time' => $passkey['created_at_diff']]) }}
+                                            @if ($passkey['last_used_at_diff'])
                                                 <span class="opacity-50 mx-1">/</span>
-                                                {{ __('Last used :time', ['time' => $passkey['last_used_on_diff']]) }}
+                                                {{ __('Last used :time', ['time' => $passkey['last_used_at_diff']]) }}
                                             @endif
                                         </p>
                                     </div>

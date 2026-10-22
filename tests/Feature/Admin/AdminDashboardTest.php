@@ -57,9 +57,9 @@ function seedPlatform(): array
 
     // Received this month: 1,000.00. A failed payment this month and a
     // payment last month do not count.
-    $recent = SubscriptionPayment::factory()->for($partlyPaid, 'invoice')->create(['amount_minor' => 100000, 'paid_on' => '2026-10-20 10:00:00']);
-    SubscriptionPayment::factory()->for($partlyPaid, 'invoice')->failed()->create(['amount_minor' => 99900, 'paid_on' => '2026-10-21 08:00:00']);
-    $lastMonth = SubscriptionPayment::factory()->for($partlyPaid, 'invoice')->create(['amount_minor' => 50000, 'paid_on' => '2026-09-30 23:00:00']);
+    $recent = SubscriptionPayment::factory()->for($partlyPaid, 'invoice')->create(['amount_minor' => 100000, 'paid_at' => '2026-10-20 10:00:00']);
+    SubscriptionPayment::factory()->for($partlyPaid, 'invoice')->failed()->create(['amount_minor' => 99900, 'paid_at' => '2026-10-21 08:00:00']);
+    $lastMonth = SubscriptionPayment::factory()->for($partlyPaid, 'invoice')->create(['amount_minor' => 50000, 'paid_at' => '2026-09-30 23:00:00']);
 
     // People: Dumaguete has an active admin, Tanjay only a manager, and the
     // other two nobody - so three agencies lack an active admin.

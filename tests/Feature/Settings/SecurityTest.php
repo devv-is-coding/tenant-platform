@@ -65,7 +65,7 @@ test('two factor authentication disabled when confirmation abandoned between req
     $user->forceFill([
         'two_factor_secret' => encrypt('test-secret'),
         'two_factor_recovery_codes' => encrypt(json_encode(['code1', 'code2'])),
-        'two_factor_confirmed_on' => null,
+        'two_factor_confirmed_at' => null,
     ])->save();
 
     actingAs($user);

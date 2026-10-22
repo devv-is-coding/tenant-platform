@@ -28,9 +28,8 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->foreignUlid('listing_id')->constrained()->cascadeOnDelete();
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             $table->unique(['user_id', 'listing_id']);
         });

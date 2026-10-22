@@ -58,6 +58,8 @@ Route::domain((string) parse_url((string) config('app.url'), PHP_URL_HOST))->gro
 
             Route::livewire('tenants/{tenant}', 'pages::admin.tenants.show')->name('tenants.show');
 
+            Route::livewire('plans', 'pages::admin.plans.index')->name('plans.index');
+
             Route::livewire('invoices/overdue', 'pages::admin.invoices.overdue')->name('invoices.overdue');
 
             Route::livewire('audit', 'pages::admin.audit.index')->name('audit.index');

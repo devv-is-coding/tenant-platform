@@ -32,7 +32,7 @@ test('a status change is stored in its own columns and reads back typed', functi
     $tenant->update([
         'status' => TenantStatus::Suspended,
         'status_reason' => 'Subscription unpaid 14 days past due.',
-        'status_changed_on' => now(),
+        'status_changed_at' => now(),
         'status_changed_by' => 1,
     ]);
 
@@ -40,10 +40,10 @@ test('a status change is stored in its own columns and reads back typed', functi
     expect($row->status)->toEqual(4)
         ->and($row->status_reason)->toBe('Subscription unpaid 14 days past due.')
         ->and($row->status_changed_by)->toEqual(1)
-        ->and(json_decode($row->data, true))->not->toHaveKeys(['status', 'status_reason', 'status_changed_on', 'status_changed_by']);
+        ->and(json_decode($row->data, true))->not->toHaveKeys(['status', 'status_reason', 'status_changed_at', 'status_changed_by']);
     $tenant = $tenant->fresh();
     expect($tenant?->status)->toBe(TenantStatus::Suspended)
-        ->and($tenant?->status_changed_on)->toEqual(now())
+        ->and($tenant?->status_changed_at)->toEqual(now())
         ->and($tenant?->status_changed_by)->toBe(1);
 });
 

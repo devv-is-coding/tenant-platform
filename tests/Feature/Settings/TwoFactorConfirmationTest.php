@@ -32,5 +32,5 @@ test('confirming two factor authentication records the confirmation time', funct
         ]);
 
     $response->assertSessionHasNoErrors();
-    expect($user->refresh()->two_factor_confirmed_on)->toEqual(now());
+    expect($user->refresh()->two_factor_confirmed_at)->toEqual(now());
 });

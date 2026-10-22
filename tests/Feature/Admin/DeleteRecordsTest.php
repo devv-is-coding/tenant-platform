@@ -3,7 +3,6 @@
 use App\Actions\Subscriptions\BillSubscriptionAction;
 use App\Actions\Subscriptions\RecordSubscriptionPaymentAction;
 use App\Enums\AuditAction;
-use App\Enums\BillingInterval;
 use App\Enums\PaymentMethod;
 use App\Enums\Role;
 use App\Enums\SubscriptionInvoiceStatus;
@@ -12,6 +11,7 @@ use App\Models\PlatformAuditEvent;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPayment;
+use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Support\Facades\Event;
@@ -42,13 +42,13 @@ function deleteFromAgencyPage(Tenant $tenant, string $type, int $id, string $rea
 test('deleting a payment keeps the row and recalculates what the invoice has been paid', function () {
     $superAdmin = User::factory()->superAdmin()->create();
     $invoice = SubscriptionInvoice::factory()->create(['amount_minor' => 250000]);
-    $kept = app(RecordSubscriptionPaymentAction::class)->handle($superAdmin, $invoice, ['amount' => '1000', 'method' => PaymentMethod::Cash->value, 'paid_on' => today()->toDateString()]);
-    $mistake = app(RecordSubscriptionPaymentAction::class)->handle($superAdmin, $invoice, ['amount' => '1500', 'method' => PaymentMethod::Cash->value, 'paid_on' => today()->toDateString()]);
+    $kept = app(RecordSubscriptionPaymentAction::class)->handle($superAdmin, $invoice, ['amount' => '1000', 'method' => PaymentMethod::Cash->value, 'paid_at' => today()->toDateString()]);
+    $mistake = app(RecordSubscriptionPaymentAction::class)->handle($superAdmin, $invoice, ['amount' => '1500', 'method' => PaymentMethod::Cash->value, 'paid_at' => today()->toDateString()]);
     expect($invoice->refresh()->status)->toBe(SubscriptionInvoiceStatus::Paid);
 
     deleteFromAgencyPage($invoice->tenant, 'payment', $mistake->id, superAdmin: $superAdmin)->assertHasNoErrors();
 
-    expect(SubscriptionPayment::withTrashed()->find($mistake->id)?->deleted_on)->not->toBeNull()
+    expect(SubscriptionPayment::withTrashed()->find($mistake->id)?->deleted_at)->not->toBeNull()
         ->and(SubscriptionPayment::query()->pluck('id')->all())->toBe([$kept->id])
         ->and($invoice->refresh()->amount_paid_minor)->toBe(100000)
         ->and($invoice->status)->toBe(SubscriptionInvoiceStatus::PartiallyPaid);
@@ -66,10 +66,10 @@ test('deleting a payment keeps the row and recalculates what the invoice has bee
 test('a payment recorded after one was deleted takes the next reference, not the deleted one', function () {
     $superAdmin = User::factory()->superAdmin()->create();
     $invoice = SubscriptionInvoice::factory()->create(['reference' => 'PLAT-2026-11-0007']);
-    $first = app(RecordSubscriptionPaymentAction::class)->handle($superAdmin, $invoice, ['amount' => '100', 'method' => PaymentMethod::Cash->value, 'paid_on' => today()->toDateString()]);
+    $first = app(RecordSubscriptionPaymentAction::class)->handle($superAdmin, $invoice, ['amount' => '100', 'method' => PaymentMethod::Cash->value, 'paid_at' => today()->toDateString()]);
     deleteFromAgencyPage($invoice->tenant, 'payment', $first->id, superAdmin: $superAdmin);
 
-    $next = app(RecordSubscriptionPaymentAction::class)->handle($superAdmin, $invoice, ['amount' => '100', 'method' => PaymentMethod::Cash->value, 'paid_on' => today()->toDateString()]);
+    $next = app(RecordSubscriptionPaymentAction::class)->handle($superAdmin, $invoice, ['amount' => '100', 'method' => PaymentMethod::Cash->value, 'paid_at' => today()->toDateString()]);
 
     expect($next->reference)->toBe('PLATPAY-2026-11-0007-2');
 });
@@ -149,7 +149,7 @@ test('deleting a live subscription frees the agency to be put on a new plan', fu
 
     Livewire::actingAs(User::factory()->superAdmin()->create())
         ->test('pages::admin.tenants.show', ['tenant' => $tenant])
-        ->set(['plan_name' => 'Agency Plus', 'amount' => '9000', 'interval' => BillingInterval::Monthly->value])
+        ->set('subscription_plan_id', SubscriptionPlan::factory()->create(['name' => 'Agency Plus'])->id)
         ->call('startSubscription')
         ->assertHasNoErrors();
 
@@ -163,7 +163,7 @@ test('deleting an agency user soft-deletes the account and records it', function
     deleteFromAgencyPage($tenant, 'user', $staff->id)->assertHasNoErrors();
 
     expect(User::find($staff->id))->toBeNull()
-        ->and(User::withTrashed()->find($staff->id)?->deleted_on)->not->toBeNull();
+        ->and(User::withTrashed()->find($staff->id)?->deleted_at)->not->toBeNull();
 
     $event = PlatformAuditEvent::query()->where('action', AuditAction::UserDeleted)->sole();
     expect($event->tenant_id)->toBe($tenant->id)
@@ -178,7 +178,7 @@ test('every delete needs a reason, and nothing is deleted without one', function
     deleteFromAgencyPage($tenant, $type, $record->id, reason: '   ')
         ->assertHasErrors(['delete_reason' => 'Say why this is being deleted. The reason is kept in the audit log.']);
 
-    expect($record->fresh()?->deleted_on)->toBeNull()
+    expect($record->fresh()?->deleted_at)->toBeNull()
         ->and(PlatformAuditEvent::count())->toBe(0);
 })->with([
     'a user' => ['user', fn () => User::factory()->role(Role::Staff)->for(Tenant::factory())->create()],
@@ -196,7 +196,7 @@ test('another agency\'s record cannot be deleted from this agency\'s page', func
         ->call('confirmDelete', $type, $otherAgencysRecord->id)
         ->assertNotFound();
 
-    expect($otherAgencysRecord->fresh()?->deleted_on)->toBeNull();
+    expect($otherAgencysRecord->fresh()?->deleted_at)->toBeNull();
 })->with([
     'a user' => ['user', fn () => User::factory()->role(Role::Staff)->for(Tenant::factory())->create()],
     'a subscription' => ['subscription', fn () => Subscription::factory()->create()],
@@ -223,5 +223,5 @@ test('the record a delete confirmation is open for cannot be swapped from the br
         ->set('deleting_id', $other->id))
         ->toThrow(CannotUpdateLockedPropertyException::class);
 
-    expect($other->fresh()?->deleted_on)->toBeNull();
+    expect($other->fresh()?->deleted_at)->toBeNull();
 });

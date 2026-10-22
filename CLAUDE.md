@@ -291,11 +291,11 @@ Branch naming and commit messages are separate conventions; commits still follow
 
 ## Timestamp Columns
 
-- Use `_on`, not `_at`, for timestamp columns: `created_on`, `updated_on`, `deleted_on`.
-- This applies to Eloquent's timestamps and to domain timestamps (`approved_on`, `paid_on`, `requested_on`).
-- Models declare `CREATED_AT`, `UPDATED_AT` and `DELETED_AT` accordingly — see `app/Models/User.php` for the pattern.
-- Declare soft deletes as `$table->softDeletes('deleted_on')`.
-- Soft deletes are required, like `created_on` and `updated_on`: every table the project creates gets `deleted_on`, even when nothing deletes from it yet, and its model uses `SoftDeletes`. Deleting is always a soft delete; `forceDelete()` is only for tests and deliberate data repair.
+- Use `_at` for date-and-time columns (`paid_at`, `approved_at`) and `_on` only where it fits the grammar: plain `date` columns (`starts_on`, `due_on`).
+
+## Soft Deletes
+
+- Soft deletes are required: every table the project creates gets `$table->softDeletes()`, even when nothing deletes from it yet, and its model uses `SoftDeletes`. Deleting is always a soft delete; `forceDelete()` is only for tests and deliberate data repair.
 - Exempt: framework and package plumbing (`sessions`, `cache`, `jobs`, `password_reset_tokens`, `passkeys`, `personal_access_tokens`), and `inventory_allocations`, which must be hard-deleted on release — a soft-deleted allocation still holds its unique slot and would block resale (see that migration).
 - A soft-deleted row still occupies its unique keys, so an existence check or a "count + 1" reference number guarding a unique column must use `withTrashed()`.
 

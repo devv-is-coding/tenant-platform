@@ -103,6 +103,13 @@ class NavigationMenu
                 ]),
                 $this->group(__('Billing'), [
                     $this->link(
+                        __('Plans'),
+                        __('The price list agencies are put on.'),
+                        route('admin.plans.index'),
+                        'tag',
+                        'admin.plans.index',
+                    ),
+                    $this->link(
                         __('Overdue invoices'),
                         __('Agencies still owing after the due date.'),
                         route('admin.invoices.overdue'),

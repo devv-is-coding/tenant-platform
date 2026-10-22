@@ -43,7 +43,7 @@ function recordPayment(SubscriptionInvoice $invoice, array $input = []): Subscri
     return app(RecordSubscriptionPaymentAction::class)->handle(User::factory()->superAdmin()->create(), $invoice, [
         'amount' => '1000.00',
         'method' => PaymentMethod::BankTransfer->value,
-        'paid_on' => today()->toDateString(),
+        'paid_at' => today()->toDateString(),
         ...$input,
     ]);
 }
@@ -57,10 +57,10 @@ test('recording part of an invoice stores the payment, recomputes what is paid a
     paymentsPage($tenant, $superAdmin)
         ->call('openPaymentForm', $invoice->id)
         ->assertSet('payment_amount', '2500.00')
-        ->assertSet('payment_paid_on', '2026-10-21')
+        ->assertSet('payment_paid_at', '2026-10-21')
         ->set('payment_amount', '1000')
         ->set('payment_method', PaymentMethod::Cash->value)
-        ->set('payment_paid_on', '2026-10-20')
+        ->set('payment_paid_at', '2026-10-20')
         ->call('recordPayment')
         ->assertHasNoErrors()
         ->assertSet('paying_invoice_id', null)
@@ -77,7 +77,7 @@ test('recording part of an invoice stores the payment, recomputes what is paid a
         ->and($payment->currency)->toBe('PHP')
         ->and($payment->method)->toBe(PaymentMethod::Cash)
         ->and($payment->status)->toBe(PaymentRecordStatus::Succeeded)
-        ->and($payment->paid_on?->toDateTimeString())->toBe('2026-10-20 00:00:00')
+        ->and($payment->paid_at?->toDateTimeString())->toBe('2026-10-20 00:00:00')
         ->and($payment->recorded_by)->toBe($superAdmin->id)
         ->and($payment->idempotency_key)->toBeNull();
 
@@ -155,7 +155,7 @@ test('settling the last overdue invoice moves a past-due subscription back to ac
     app(RecordSubscriptionPaymentAction::class)->handle($superAdmin, $invoice, [
         'amount' => '2500',
         'method' => PaymentMethod::BankTransfer->value,
-        'paid_on' => '2026-10-21',
+        'paid_at' => '2026-10-21',
     ]);
 
     expect($subscription->refresh()->status)->toBe(SubscriptionStatus::Active)
@@ -238,8 +238,8 @@ test('an invalid payment is rejected on the form\'s own fields and changes nothi
     'three decimal places' => [['payment_amount' => '1.234'], 'payment_amount', 'Enter the amount as a number with at most two decimal places, without commas.'],
     'thousands separator' => [['payment_amount' => '1,000'], 'payment_amount', 'Enter the amount as a number with at most two decimal places, without commas.'],
     'a gateway method' => [['payment_method' => PaymentMethod::Stripe->value], 'payment_method', 'The selected method is invalid.'],
-    'in the future' => [['payment_paid_on' => '2026-10-22'], 'payment_paid_on', 'The payment date cannot be in the future.'],
-    'before the invoice was issued' => [['payment_paid_on' => '2026-10-09'], 'payment_paid_on', 'The payment date cannot be before the invoice was issued.'],
+    'in the future' => [['payment_paid_at' => '2026-10-22'], 'payment_paid_at', 'The payment date cannot be in the future.'],
+    'before the invoice was issued' => [['payment_paid_at' => '2026-10-09'], 'payment_paid_at', 'The payment date cannot be before the invoice was issued.'],
 ]);
 
 test('another agency\'s invoice cannot be opened for payment from this agency\'s page', function () {
@@ -301,8 +301,8 @@ test('the balance owed counts only this agency\'s unsettled invoices', function 
 
 test('the payments list shows only this agency\'s payments, most recently paid first', function () {
     $invoice = SubscriptionInvoice::factory()->create();
-    $older = SubscriptionPayment::factory()->for($invoice, 'invoice')->create(['reference' => 'PLATPAY-OLDER', 'paid_on' => now()->subDays(3)]);
-    $newer = SubscriptionPayment::factory()->for($invoice, 'invoice')->create(['reference' => 'PLATPAY-NEWER', 'paid_on' => now()->subDay()]);
+    $older = SubscriptionPayment::factory()->for($invoice, 'invoice')->create(['reference' => 'PLATPAY-OLDER', 'paid_at' => now()->subDays(3)]);
+    $newer = SubscriptionPayment::factory()->for($invoice, 'invoice')->create(['reference' => 'PLATPAY-NEWER', 'paid_at' => now()->subDay()]);
     SubscriptionPayment::factory()->create(['reference' => 'PLATPAY-ANOTHER-AGENCY']);
 
     $page = paymentsPage($invoice->tenant, User::factory()->superAdmin()->create());

@@ -43,9 +43,8 @@ return new class extends Migration
 
             $table->foreignId('added_by')->nullable()->index();
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['option_id', 'effective_from', 'effective_to']);
         });

@@ -3,13 +3,12 @@
 namespace App\Actions\Subscriptions;
 
 use App\Enums\AuditAction;
-use App\Enums\BillingInterval;
 use App\Enums\SubscriptionStatus;
 use App\Models\Subscription;
+use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Audit\AuditRecorder;
-use App\ValueObjects\Money;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -20,10 +19,12 @@ class StartSubscriptionAction
     public function __construct(private AuditRecorder $auditRecorder) {}
 
     /**
-     * Put an agency on a plan, starting today, and end the plan it was on.
+     * Put an agency on a plan from the price list, starting today, and end the
+     * plan it was on.
      *
-     * The plan's name, price and interval are snapshotted onto the row: there
-     * is no plans table, and the row records what the agency agreed to.
+     * The plan's name, price and interval are snapshotted onto the row, which
+     * records what the agency agreed to: repricing or withdrawing the plan
+     * later never changes it.
      *
      * An agency has at most one live subscription, which the unique
      * `active_for_tenant_id` slot enforces. The live one is ended first, with
@@ -37,11 +38,9 @@ class StartSubscriptionAction
     {
         $validated = Validator::make($input, $this->rules(), $this->messages())->validate();
 
-        $planName = trim($validated['plan_name']);
-        $amount = Money::parse($validated['amount'], config('tenancy.billing_currency'));
-        $interval = BillingInterval::from((int) $validated['interval']);
+        $plan = SubscriptionPlan::query()->whereKey($validated['subscription_plan_id'])->firstOrFail();
 
-        return $tenant->getConnection()->transaction(function () use ($actor, $tenant, $planName, $amount, $interval): Subscription {
+        return $tenant->getConnection()->transaction(function () use ($actor, $tenant, $plan): Subscription {
             $locked = Tenant::query()->whereKey($tenant->id)->lockForUpdate()->firstOrFail();
             $today = today();
 
@@ -50,8 +49,8 @@ class StartSubscriptionAction
             $previous?->update([
                 'active_for_tenant_id' => null,
                 'status' => SubscriptionStatus::Cancelled,
-                'cancelled_on' => now(),
-                'cancel_reason' => __('Replaced by :plan.', ['plan' => $planName]),
+                'cancelled_at' => now(),
+                'cancel_reason' => __('Replaced by :plan.', ['plan' => $plan->name]),
                 'next_billing_on' => null,
                 'ends_on' => $today,
             ]);
@@ -60,20 +59,21 @@ class StartSubscriptionAction
                 $subscription = Subscription::create([
                     'tenant_id' => $locked->id,
                     'active_for_tenant_id' => $locked->id,
-                    'plan_name' => $planName,
-                    'amount_minor' => $amount->minor,
-                    'currency' => $amount->currency,
-                    'interval' => $interval,
+                    'subscription_plan_id' => $plan->id,
+                    'plan_name' => $plan->name,
+                    'amount_minor' => $plan->amount_minor,
+                    'currency' => $plan->currency,
+                    'interval' => $plan->interval,
                     'status' => SubscriptionStatus::Active,
                     'starts_on' => $today,
                     'current_period_start_on' => $today,
-                    'current_period_end_on' => $interval->advance($today)->subDay(),
-                    'next_billing_on' => $interval->advance($today),
+                    'current_period_end_on' => $plan->interval->advance($today)->subDay(),
+                    'next_billing_on' => $plan->interval->advance($today),
                     'created_by' => $actor->id,
                 ]);
             } catch (UniqueConstraintViolationException) {
                 throw ValidationException::withMessages([
-                    'plan_name' => __('This agency was put on another plan at the same moment. Reload the page to see it.'),
+                    'subscription_plan_id' => __('This agency was put on another plan at the same moment. Reload the page to see it.'),
                 ]);
             }
 
@@ -90,17 +90,15 @@ class StartSubscriptionAction
     }
 
     /**
-     * Get the validation rules. Amounts are typed in major units, with at
-     * most two decimal places and no thousands separators.
+     * Get the validation rules. Only a plan still in the price list can be
+     * chosen.
      *
      * @return array<string, array<int, mixed>>
      */
     public function rules(): array
     {
         return [
-            'plan_name' => ['required', 'string', 'max:255'],
-            'amount' => ['required', 'string', 'regex:/^\d{1,9}(\.\d{1,2})?$/', 'not_regex:/^0*(\.0*)?$/'],
-            'interval' => ['required', Rule::enum(BillingInterval::class)],
+            'subscription_plan_id' => ['required', 'integer', Rule::exists(SubscriptionPlan::class, 'id')->withoutTrashed()],
         ];
     }
 
@@ -112,8 +110,8 @@ class StartSubscriptionAction
     public function messages(): array
     {
         return [
-            'amount.regex' => __('Enter the amount as a number with at most two decimal places, without commas.'),
-            'amount.not_regex' => __('The amount must be more than zero.'),
+            'subscription_plan_id.required' => __('Choose a plan.'),
+            'subscription_plan_id.exists' => __('That plan is no longer offered. Choose another.'),
         ];
     }
 

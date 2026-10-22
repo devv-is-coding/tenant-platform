@@ -54,7 +54,7 @@ class ChangeTenantStatusAction
             $locked->update([
                 'status' => $status,
                 'status_reason' => $reason,
-                'status_changed_on' => now(),
+                'status_changed_at' => now(),
                 'status_changed_by' => $actor->id,
             ]);
 

@@ -44,20 +44,19 @@ return new class extends Migration
 
             // Central users; not real foreign keys.
             $table->foreignId('requested_by')->nullable()->index();
-            $table->timestamp('requested_on')->nullable();
+            $table->timestamp('requested_at')->nullable();
 
             $table->foreignId('decided_by')->nullable()->index();
-            $table->timestamp('decided_on')->nullable();
+            $table->timestamp('decided_at')->nullable();
 
             // Mandatory when the decision is a rejection.
             $table->text('decision_reason')->nullable();
 
-            $table->timestamp('processed_on')->nullable();
+            $table->timestamp('processed_at')->nullable();
             $table->string('stripe_refund_id')->nullable();
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['booking_id', 'status']);
         });

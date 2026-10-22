@@ -50,7 +50,7 @@ new #[Title('Profile settings')] class extends Component {
         ]);
 
         if ($user->isDirty('email')) {
-            $user->email_verified_on = null;
+            $user->email_verified_at = null;
         }
 
         $user->save();

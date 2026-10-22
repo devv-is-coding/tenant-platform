@@ -42,9 +42,9 @@ class RecordSubscriptionPaymentAction
         $validated = Validator::make($input, $this->rules($invoice), $this->messages())->validate();
 
         $method = PaymentMethod::from((int) $validated['method']);
-        $paidOn = CarbonImmutable::parse($validated['paid_on'])->startOfDay();
+        $paidAt = CarbonImmutable::parse($validated['paid_at'])->startOfDay();
 
-        return $invoice->getConnection()->transaction(function () use ($actor, $invoice, $validated, $method, $paidOn): SubscriptionPayment {
+        return $invoice->getConnection()->transaction(function () use ($actor, $invoice, $validated, $method, $paidAt): SubscriptionPayment {
             $subscription = Subscription::query()->whereKey($invoice->subscription_id)->lockForUpdate()->firstOrFail();
             $locked = SubscriptionInvoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
 
@@ -59,7 +59,7 @@ class RecordSubscriptionPaymentAction
                 'currency' => $amount->currency,
                 'method' => $method,
                 'status' => PaymentRecordStatus::Succeeded,
-                'paid_on' => $paidOn,
+                'paid_at' => $paidAt,
                 'recorded_by' => $actor->id,
             ]);
 
@@ -97,7 +97,7 @@ class RecordSubscriptionPaymentAction
         return [
             'amount' => ['required', 'string', 'regex:/^\d{1,9}(\.\d{1,2})?$/', 'not_regex:/^0*(\.0*)?$/'],
             'method' => ['required', Rule::enum(PaymentMethod::class)->only(self::manualMethods())],
-            'paid_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:today', 'after_or_equal:'.$invoice->issued_on->toDateString()],
+            'paid_at' => ['required', 'date_format:Y-m-d', 'before_or_equal:today', 'after_or_equal:'.$invoice->issued_on->toDateString()],
         ];
     }
 
@@ -111,8 +111,8 @@ class RecordSubscriptionPaymentAction
         return [
             'amount.regex' => __('Enter the amount as a number with at most two decimal places, without commas.'),
             'amount.not_regex' => __('The amount must be more than zero.'),
-            'paid_on.before_or_equal' => __('The payment date cannot be in the future.'),
-            'paid_on.after_or_equal' => __('The payment date cannot be before the invoice was issued.'),
+            'paid_at.before_or_equal' => __('The payment date cannot be in the future.'),
+            'paid_at.after_or_equal' => __('The payment date cannot be before the invoice was issued.'),
         ];
     }
 

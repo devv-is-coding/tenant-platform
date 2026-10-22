@@ -27,15 +27,15 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property string $currency
  * @property PaymentMethod $method
  * @property PaymentRecordStatus $status
- * @property Carbon|null $paid_on
+ * @property Carbon|null $paid_at
  * @property int|null $recorded_by
  * @property string|null $idempotency_key
  * @property string|null $stripe_payment_intent_id
  * @property string|null $stripe_charge_id
  * @property string|null $failure_reason
- * @property Carbon|null $created_on
- * @property Carbon|null $updated_on
- * @property Carbon|null $deleted_on
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property Carbon|null $deleted_at
  */
 #[Fillable([
     'subscription_invoice_id',
@@ -45,7 +45,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
     'currency',
     'method',
     'status',
-    'paid_on',
+    'paid_at',
     'recorded_by',
     'idempotency_key',
     'stripe_payment_intent_id',
@@ -62,12 +62,6 @@ class SubscriptionPayment extends Model
      */
     use CentralConnection, HasFactory, SoftDeletes;
 
-    const CREATED_AT = 'created_on';
-
-    const UPDATED_AT = 'updated_on';
-
-    const DELETED_AT = 'deleted_on';
-
     /**
      * Get the attributes that should be cast.
      *
@@ -79,7 +73,7 @@ class SubscriptionPayment extends Model
             'method' => PaymentMethod::class,
             'status' => PaymentRecordStatus::class,
             'amount_minor' => 'integer',
-            'paid_on' => 'datetime',
+            'paid_at' => 'datetime',
         ];
     }
 

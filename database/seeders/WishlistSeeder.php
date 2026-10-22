@@ -41,8 +41,8 @@ class WishlistSeeder extends Seeder
                 DB::table('wishlist_items')->insert([
                     'user_id' => $userId,
                     'listing_id' => $listingId,
-                    'created_on' => $now,
-                    'updated_on' => $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ]);
             }
         }

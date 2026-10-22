@@ -52,10 +52,10 @@ class CatalogSeeder extends Seeder
     private function seedItem(Tenant $tenant, array $item, ?int $staffId, ?int $managerId, string $currency): void
     {
         $now = now();
-        $createdOn = $now->copy()->subDays(30);
-        $submittedOn = $now->copy()->subDays(20);
-        $approvedOn = $now->copy()->subDays(15);
-        $publishedOn = $now->copy()->subDays(14);
+        $createdAt = $now->copy()->subDays(30);
+        $submittedAt = $now->copy()->subDays(20);
+        $approvedAt = $now->copy()->subDays(15);
+        $publishedAt = $now->copy()->subDays(14);
 
         $status = $item['status'];
 
@@ -66,18 +66,18 @@ class CatalogSeeder extends Seeder
             'description' => $item['description'],
             'item_status' => $status->value,
             'rejection_reason' => $status === ItemStatus::Rejected ? $item['rejection_reason'] : null,
-            'submitted_on' => $submittedOn,
-            'approved_on' => $status === ItemStatus::Published ? $approvedOn : null,
-            'rejected_on' => $status === ItemStatus::Rejected ? $approvedOn : null,
-            'published_on' => $status === ItemStatus::Published ? $publishedOn : null,
+            'submitted_at' => $submittedAt,
+            'approved_at' => $status === ItemStatus::Published ? $approvedAt : null,
+            'rejected_at' => $status === ItemStatus::Rejected ? $approvedAt : null,
+            'published_at' => $status === ItemStatus::Published ? $publishedAt : null,
             'created_by' => $staffId,
             'approved_by' => in_array($status, [ItemStatus::Published, ItemStatus::Rejected], true) ? $managerId : null,
             'is_active' => true,
-            'created_on' => $createdOn,
-            'updated_on' => $publishedOn,
+            'created_at' => $createdAt,
+            'updated_at' => $publishedAt,
         ]);
 
-        $this->seedAuditTrail($itemId, $status, $staffId, $managerId, $submittedOn, $approvedOn, $publishedOn);
+        $this->seedAuditTrail($itemId, $status, $staffId, $managerId, $submittedAt, $approvedAt, $publishedAt);
         $this->seedProfile($itemId, $item);
 
         if ($item['type'] === ItemType::Tour) {
@@ -88,7 +88,7 @@ class CatalogSeeder extends Seeder
         $prices = $this->seedOptions($itemId, $item['options'], $staffId);
 
         if ($status === ItemStatus::Published) {
-            $this->projectListing($tenant, $itemId, $item, $prices, $featuredMedia, $currency, $publishedOn);
+            $this->projectListing($tenant, $itemId, $item, $prices, $featuredMedia, $currency, $publishedAt);
         }
     }
 
@@ -97,9 +97,9 @@ class CatalogSeeder extends Seeder
         ItemStatus $status,
         ?int $staffId,
         ?int $managerId,
-        CarbonInterface $submittedOn,
-        CarbonInterface $approvedOn,
-        CarbonInterface $publishedOn,
+        CarbonInterface $submittedAt,
+        CarbonInterface $approvedAt,
+        CarbonInterface $publishedAt,
     ): void {
         $rows = [
             [
@@ -109,7 +109,7 @@ class CatalogSeeder extends Seeder
                 'subject_type' => 'item',
                 'subject_id' => $itemId,
                 'changes' => null,
-                'created_on' => $submittedOn,
+                'created_at' => $submittedAt,
             ],
         ];
 
@@ -121,7 +121,7 @@ class CatalogSeeder extends Seeder
                 'subject_type' => 'item',
                 'subject_id' => $itemId,
                 'changes' => null,
-                'created_on' => $approvedOn,
+                'created_at' => $approvedAt,
             ];
             $rows[] = [
                 'actor_id' => $managerId,
@@ -130,7 +130,7 @@ class CatalogSeeder extends Seeder
                 'subject_type' => 'item',
                 'subject_id' => $itemId,
                 'changes' => null,
-                'created_on' => $publishedOn,
+                'created_at' => $publishedAt,
             ];
         } elseif ($status === ItemStatus::Rejected) {
             $rows[] = [
@@ -140,7 +140,7 @@ class CatalogSeeder extends Seeder
                 'subject_type' => 'item',
                 'subject_id' => $itemId,
                 'changes' => json_encode(['item_status' => ['old' => ItemStatus::Pending->value, 'new' => ItemStatus::Rejected->value]]),
-                'created_on' => $approvedOn,
+                'created_at' => $approvedAt,
             ];
         }
 
@@ -155,8 +155,8 @@ class CatalogSeeder extends Seeder
         $now = now();
         $profile = $item['profile'];
         $profile['item_id'] = $itemId;
-        $profile['created_on'] = $now;
-        $profile['updated_on'] = $now;
+        $profile['created_at'] = $now;
+        $profile['updated_at'] = $now;
 
         if (isset($profile['inclusions'])) {
             $profile['inclusions'] = json_encode($profile['inclusions']);
@@ -184,8 +184,8 @@ class CatalogSeeder extends Seeder
             fn (array $stop): array => [
                 ...$stop,
                 'item_id' => $itemId,
-                'created_on' => $now,
-                'updated_on' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
             ],
             $stops,
         ));
@@ -212,8 +212,8 @@ class CatalogSeeder extends Seeder
                 'mime_type' => 'image/jpeg',
                 'featured_for_item_id' => $file['featured'] ? $itemId : null,
                 'sort_order' => $sortOrder,
-                'created_on' => $now,
-                'updated_on' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
             ];
 
             if ($file['featured']) {
@@ -244,8 +244,8 @@ class CatalogSeeder extends Seeder
                 'max_nights' => $option['max_nights'] ?? null,
                 'is_active' => true,
                 'created_by' => $staffId,
-                'created_on' => $now,
-                'updated_on' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
             ]);
 
             // Only options whose mode tracks stock carry a batch quantity;
@@ -257,8 +257,8 @@ class CatalogSeeder extends Seeder
                     'reason' => InventoryBatchReason::InitialStock->value,
                     'notes' => 'Opening allocation',
                     'added_by' => $staffId,
-                    'created_on' => $now,
-                    'updated_on' => $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ]);
             }
         }
@@ -280,7 +280,7 @@ class CatalogSeeder extends Seeder
         array $prices,
         ?array $featuredMedia,
         string $currency,
-        CarbonInterface $syncedOn,
+        CarbonInterface $syncedAt,
     ): void {
         DB::connection(config('tenancy.database.central_connection'))->table('listings')->insert([
             'id' => (string) Str::ulid(),
@@ -304,9 +304,9 @@ class CatalogSeeder extends Seeder
             'featured_media_path' => $featuredMedia['path'] ?? null,
             'latitude' => $item['stops'][0]['latitude'] ?? null,
             'longitude' => $item['stops'][0]['longitude'] ?? null,
-            'synced_on' => $syncedOn,
-            'created_on' => $syncedOn,
-            'updated_on' => $syncedOn,
+            'synced_at' => $syncedAt,
+            'created_at' => $syncedAt,
+            'updated_at' => $syncedAt,
         ]);
     }
 

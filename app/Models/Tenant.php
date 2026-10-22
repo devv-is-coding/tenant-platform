@@ -28,21 +28,15 @@ use Stancl\Tenancy\Events;
  * @property string|null $name
  * @property TenantStatus $status
  * @property string|null $status_reason
- * @property Carbon|null $status_changed_on
+ * @property Carbon|null $status_changed_at
  * @property int|null $status_changed_by
- * @property Carbon|null $deleted_on
+ * @property Carbon|null $deleted_at
  * @property-read Subscription|null $latestSubscription
  */
 class Tenant extends BaseTenant implements TenantWithDatabase
 {
     /** @use HasFactory<TenantFactory> */
     use HasDatabase, HasDomains, HasFactory, SoftDeletes;
-
-    const CREATED_AT = 'created_on';
-
-    const UPDATED_AT = 'updated_on';
-
-    const DELETED_AT = 'deleted_on';
 
     /**
      * stancl's model events, except that deleting is mapped to a *force*
@@ -88,11 +82,11 @@ class Tenant extends BaseTenant implements TenantWithDatabase
             'id',
             'status',
             'status_reason',
-            'status_changed_on',
+            'status_changed_at',
             'status_changed_by',
-            'created_on',
-            'updated_on',
-            'deleted_on',
+            'created_at',
+            'updated_at',
+            'deleted_at',
         ];
     }
 
@@ -105,7 +99,7 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     {
         return [
             'status' => TenantStatus::class,
-            'status_changed_on' => 'datetime',
+            'status_changed_at' => 'datetime',
         ];
     }
 

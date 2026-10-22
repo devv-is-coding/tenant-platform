@@ -14,7 +14,7 @@ return new class extends Migration
      *
      * Three fixes from the legacy `payments` table:
      *
-     * `paid_on` was an `int(11)` unix timestamp; it is a real timestamp here.
+     * `paid_at` was an `int(11)` unix timestamp; it is a real timestamp here.
      * Defect 10.
      *
      * `amount_paid` was `double(10,2)`; money is now integer minor units.
@@ -49,7 +49,7 @@ return new class extends Migration
             $table->unsignedTinyInteger('method');
             $table->unsignedTinyInteger('status');
 
-            $table->timestamp('paid_on')->nullable();
+            $table->timestamp('paid_at')->nullable();
 
             // The staff member who recorded a cash payment. A central user, so
             // not a real foreign key, and NULL for gateway-settled payments.
@@ -65,9 +65,8 @@ return new class extends Migration
 
             $table->string('failure_reason')->nullable();
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['booking_id', 'status']);
         });

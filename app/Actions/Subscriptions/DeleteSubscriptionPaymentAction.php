@@ -20,7 +20,7 @@ class DeleteSubscriptionPaymentAction
      * Soft-delete a payment, such as one recorded by mistake, and recompute
      * what its invoice has been paid.
      *
-     * The payment stays in the table with `deleted_on` set, but drops out of
+     * The payment stays in the table with `deleted_at` set, but drops out of
      * the SUM, so the invoice's paid amount and status correct themselves.
      * Rows are locked subscription first, invoice second, as billing does.
      *

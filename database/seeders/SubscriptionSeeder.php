@@ -42,7 +42,7 @@ class SubscriptionSeeder extends Seeder
     {
         $now = now();
         $startsOn = $now->copy()->subMonths(2)->startOfMonth();
-        $amountMinor = 250000;
+        $amountMinor = $this->monthlyPriceFor($tenant->id);
         $currency = 'PHP';
         $interval = BillingInterval::Monthly;
 
@@ -59,8 +59,8 @@ class SubscriptionSeeder extends Seeder
             'current_period_end_on' => $interval->advance($interval->advance($startsOn))->subDay(),
             'next_billing_on' => $interval->advance($interval->advance($startsOn)),
             'created_by' => $superAdminId,
-            'created_on' => $startsOn,
-            'updated_on' => $startsOn,
+            'created_at' => $startsOn,
+            'updated_at' => $startsOn,
         ]);
 
         $this->platformAudit($tenant, $superAdminId, 'subscription.created', $subscriptionId, $startsOn);
@@ -70,17 +70,19 @@ class SubscriptionSeeder extends Seeder
         // never incremented.
         $lastPeriodStart = $startsOn;
         $lastPeriodEnd = $interval->advance($lastPeriodStart)->subDay();
+        $depositMinor = intdiv($amountMinor * 2, 5);
         $this->seedInvoice(
             $tenant,
             $subscriptionId,
             $superAdminId,
+            $amountMinor,
             sequence: 1,
             periodStart: $lastPeriodStart,
             periodEnd: $lastPeriodEnd,
             issuedOn: $lastPeriodStart,
             payments: [
-                ['method' => PaymentMethod::BankTransfer, 'amount_minor' => 100000, 'paid_on' => $lastPeriodStart->copy()->addDays(3)],
-                ['method' => PaymentMethod::Stripe, 'amount_minor' => 150000, 'paid_on' => $lastPeriodStart->copy()->addDays(5)],
+                ['method' => PaymentMethod::BankTransfer, 'amount_minor' => $depositMinor, 'paid_at' => $lastPeriodStart->copy()->addDays(3)],
+                ['method' => PaymentMethod::Stripe, 'amount_minor' => $amountMinor - $depositMinor, 'paid_at' => $lastPeriodStart->copy()->addDays(5)],
             ],
         );
 
@@ -95,6 +97,7 @@ class SubscriptionSeeder extends Seeder
             $tenant,
             $subscriptionId,
             $superAdminId,
+            $amountMinor,
             sequence: 2,
             periodStart: $thisPeriodStart,
             periodEnd: $thisPeriodEnd,
@@ -109,12 +112,13 @@ class SubscriptionSeeder extends Seeder
     }
 
     /**
-     * @param  list<array{method: PaymentMethod, amount_minor: int, paid_on: CarbonInterface}>  $payments
+     * @param  list<array{method: PaymentMethod, amount_minor: int, paid_at: CarbonInterface}>  $payments
      */
     private function seedInvoice(
         Tenant $tenant,
         int $subscriptionId,
         ?int $superAdminId,
+        int $amountMinor,
         int $sequence,
         CarbonInterface $periodStart,
         CarbonInterface $periodEnd,
@@ -122,7 +126,6 @@ class SubscriptionSeeder extends Seeder
         array $payments,
         ?CarbonInterface $dueOn = null,
     ): void {
-        $amountMinor = 250000;
         $currency = 'PHP';
 
         $invoiceId = DB::table('subscription_invoices')->insertGetId([
@@ -137,8 +140,8 @@ class SubscriptionSeeder extends Seeder
             'currency' => $currency,
             'amount_paid_minor' => 0,
             'status' => SubscriptionInvoiceStatus::Open->value,
-            'created_on' => $issuedOn,
-            'updated_on' => $issuedOn,
+            'created_at' => $issuedOn,
+            'updated_at' => $issuedOn,
         ]);
 
         $this->platformAudit($tenant, $superAdminId, 'subscription.invoice_issued', $invoiceId, $issuedOn);
@@ -156,14 +159,14 @@ class SubscriptionSeeder extends Seeder
                 'currency' => $currency,
                 'method' => $payment['method']->value,
                 'status' => PaymentRecordStatus::Succeeded->value,
-                'paid_on' => $payment['paid_on'],
+                'paid_at' => $payment['paid_at'],
                 'recorded_by' => $payment['method']->isRecordedByStaff() ? $superAdminId : null,
                 'idempotency_key' => $payment['method']->isGatewaySettled() ? "evt_plat_{$invoiceId}_{$index}" : null,
-                'created_on' => $payment['paid_on'],
-                'updated_on' => $payment['paid_on'],
+                'created_at' => $payment['paid_at'],
+                'updated_at' => $payment['paid_at'],
             ]);
 
-            $this->platformAudit($tenant, $superAdminId, 'subscription.payment_recorded', $paymentId, $payment['paid_on']);
+            $this->platformAudit($tenant, $superAdminId, 'subscription.payment_recorded', $paymentId, $payment['paid_at']);
 
             DB::table('subscription_invoices')->where('id', $invoiceId)->update([
                 'amount_paid_minor' => $amountPaid,
@@ -172,7 +175,7 @@ class SubscriptionSeeder extends Seeder
         }
     }
 
-    private function platformAudit(Tenant $tenant, ?int $actorId, string $action, int $subjectId, CarbonInterface $createdOn): void
+    private function platformAudit(Tenant $tenant, ?int $actorId, string $action, int $subjectId, CarbonInterface $createdAt): void
     {
         DB::table('platform_audit_events')->insert([
             'tenant_id' => $tenant->id,
@@ -186,8 +189,22 @@ class SubscriptionSeeder extends Seeder
                 default => 'subscription',
             },
             'subject_id' => $subjectId,
-            'created_on' => $createdOn,
+            'created_at' => $createdAt,
         ]);
+    }
+
+    /**
+     * Get the agency's monthly price in minor units. It varies by locality:
+     * the provincial capital's market is the largest, a municipality's the
+     * smallest.
+     */
+    private function monthlyPriceFor(string $tenantId): int
+    {
+        return match ($tenantId) {
+            'dumaguete' => 350000,
+            'tanjay' => 250000,
+            default => 180000,
+        };
     }
 
     private function tenantCode(string $tenantId): string
