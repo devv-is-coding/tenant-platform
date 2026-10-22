@@ -18,10 +18,6 @@ class WishlistSeeder extends Seeder
      */
     public function run(): void
     {
-        if (DB::table('wishlist_items')->exists()) {
-            return;
-        }
-
         $now = now();
 
         foreach ($this->wishlists() as $username => $slugs) {
@@ -35,6 +31,15 @@ class WishlistSeeder extends Seeder
                 $listingId = DB::table('listings')->where('slug', $slug)->value('id');
 
                 if ($listingId === null) {
+                    continue;
+                }
+
+                $alreadySaved = DB::table('wishlist_items')
+                    ->where('user_id', $userId)
+                    ->where('listing_id', $listingId)
+                    ->exists();
+
+                if ($alreadySaved) {
                     continue;
                 }
 
@@ -59,6 +64,11 @@ class WishlistSeeder extends Seeder
             'carmela' => ['japan-discovery', 'zamboanguita-dive-resort'],
             'julio' => ['south-korea-evisa'],
             'nadia' => ['japan-evisa', 'taiwan-evisa'],
+            'rafael' => ['dauin-beach-villas', 'singapore-evisa'],
+            'liza' => ['apo-island-dive-snorkel', 'bayawan-sunrise-hotel'],
+            'miguel' => ['mabinay-caves-adventure'],
+            'andrea' => ['vietnam-evisa', 'dauin-beach-villas'],
+            'paolo' => ['mabinay-caves-adventure', 'seoul-busan-explorer'],
         ];
     }
 }

@@ -318,6 +318,8 @@ class CatalogSeeder extends Seeder
         return match ($tenantId) {
             'dumaguete' => $this->dumagueteCatalog(),
             'tanjay' => $this->tanjayCatalog(),
+            'dauin' => $this->dauinCatalog(),
+            'bayawan' => $this->bayawanCatalog(),
             default => $this->zamboanguitaCatalog(),
         };
     }
@@ -710,6 +712,266 @@ class CatalogSeeder extends Seeder
                 'media' => [],
                 'options' => [
                     ['name' => 'Single Room', 'mode' => AvailabilityMode::Nightly, 'price_minor' => 7000, 'min_nights' => 1, 'max_nights' => 14, 'batch_quantity' => 3],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function dauinCatalog(): array
+    {
+        return [
+            [
+                'type' => ItemType::Tour,
+                'name' => 'Apo Island Dive & Snorkel Trip',
+                'slug' => 'apo-island-dive-snorkel',
+                'description' => 'A boat trip from Dauin to Apo Island for guided dives or snorkeling with sea turtles.',
+                'status' => ItemStatus::Published,
+                'country_code' => 'PH',
+                'profile' => [
+                    'max_adults' => 8,
+                    'max_kids' => 2,
+                    'baggage_allowance_kg' => null,
+                    'meeting_point' => 'Dauin Poblacion Beach',
+                    'inclusions' => ['Boat transfers', 'Dive or snorkel guide', 'Lunch', 'Marine sanctuary fee'],
+                    'departs_on' => '2026-11-24',
+                    'returns_on' => '2026-11-24',
+                ],
+                'stops' => [
+                    ['sequence' => 1, 'location' => 'Dauin Poblacion Beach', 'country_code' => 'PH', 'starts_on' => '2026-11-24', 'ends_on' => '2026-11-24', 'latitude' => 9.191700, 'longitude' => 123.263900],
+                    ['sequence' => 2, 'location' => 'Apo Island Marine Sanctuary', 'country_code' => 'PH', 'starts_on' => '2026-11-24', 'ends_on' => '2026-11-24', 'latitude' => 9.073900, 'longitude' => 123.264700],
+                ],
+                'media' => [
+                    ['path' => 'items/apo-island-dive-snorkel/sea-turtle.jpg', 'file_name' => 'sea-turtle.jpg', 'featured' => true],
+                    ['path' => 'items/apo-island-dive-snorkel/reef.jpg', 'file_name' => 'reef.jpg', 'featured' => false],
+                ],
+                'options' => [
+                    ['name' => 'Solo', 'mode' => AvailabilityMode::Capacity, 'price_minor' => 149900, 'batch_quantity' => 20],
+                    ['name' => 'Couple', 'mode' => AvailabilityMode::Capacity, 'price_minor' => 279900, 'batch_quantity' => 20],
+                    ['name' => 'Group (5)', 'mode' => AvailabilityMode::Capacity, 'price_minor' => 649900, 'batch_quantity' => 8],
+                ],
+            ],
+            [
+                'type' => ItemType::Hotel,
+                'name' => 'Dauin Beach Villas',
+                'slug' => 'dauin-beach-villas',
+                'description' => 'Garden rooms and beachfront villas a short walk from Dauin\'s muck-dive sites.',
+                'status' => ItemStatus::Published,
+                'country_code' => 'PH',
+                'profile' => [
+                    'max_adults' => 3,
+                    'amenities' => ['Wi-Fi', 'Air conditioning', 'Pool', 'Dive gear rinse area'],
+                    'check_in_time' => '14:00:00',
+                    'check_out_time' => '11:00:00',
+                ],
+                'stops' => [],
+                'media' => [
+                    ['path' => 'items/dauin-beach-villas/pool.jpg', 'file_name' => 'pool.jpg', 'featured' => true],
+                    ['path' => 'items/dauin-beach-villas/villa.jpg', 'file_name' => 'villa.jpg', 'featured' => false],
+                ],
+                'options' => [
+                    ['name' => 'Garden Room', 'mode' => AvailabilityMode::Nightly, 'price_minor' => 250000, 'min_nights' => 1, 'max_nights' => 21, 'batch_quantity' => 4],
+                    ['name' => 'Beach Villa', 'mode' => AvailabilityMode::Nightly, 'price_minor' => 400000, 'min_nights' => 2, 'max_nights' => 14, 'batch_quantity' => 2],
+                ],
+            ],
+            [
+                'type' => ItemType::Visa,
+                'name' => 'Singapore Tourist e-Visa',
+                'slug' => 'singapore-evisa',
+                'description' => 'Tourist visa processing for Singapore.',
+                'status' => ItemStatus::Published,
+                'country_code' => 'SG',
+                'profile' => [
+                    'processing_days_min' => 3,
+                    'processing_days_max' => 6,
+                    'validity_days' => 30,
+                    'requirements' => ['Valid passport (6+ months)', 'Proof of funds', 'Return ticket'],
+                ],
+                'stops' => [],
+                'media' => [
+                    ['path' => 'items/singapore-evisa/marina-bay.jpg', 'file_name' => 'marina-bay.jpg', 'featured' => true],
+                ],
+                'options' => [
+                    ['name' => 'e-Visa', 'mode' => AvailabilityMode::Unlimited, 'price_minor' => 42900],
+                    ['name' => 'Express Processing', 'mode' => AvailabilityMode::Unlimited, 'price_minor' => 62900],
+                ],
+            ],
+            [
+                'type' => ItemType::Tour,
+                'name' => 'Dauin Mangrove Kayak Tour',
+                'slug' => 'dauin-mangrove-kayak',
+                'description' => 'A guided morning paddle through the Dauin river mangroves.',
+                'status' => ItemStatus::Pending,
+                'country_code' => 'PH',
+                'profile' => [
+                    'max_adults' => 8,
+                    'max_kids' => 2,
+                    'baggage_allowance_kg' => null,
+                    'meeting_point' => 'Dauin Poblacion Beach',
+                    'inclusions' => ['Kayak and paddle', 'Life vest', 'Guide'],
+                    'departs_on' => '2026-11-26',
+                    'returns_on' => '2026-11-26',
+                ],
+                'stops' => [
+                    ['sequence' => 1, 'location' => 'Dauin River Mouth', 'country_code' => 'PH', 'starts_on' => '2026-11-26', 'ends_on' => '2026-11-26', 'latitude' => 9.194000, 'longitude' => 123.265000],
+                ],
+                'media' => [
+                    ['path' => 'items/dauin-mangrove-kayak/mangrove.jpg', 'file_name' => 'mangrove.jpg', 'featured' => true],
+                ],
+                'options' => [
+                    ['name' => 'Per person', 'mode' => AvailabilityMode::Capacity, 'price_minor' => 69900, 'batch_quantity' => 12],
+                ],
+            ],
+            [
+                'type' => ItemType::Hotel,
+                'name' => 'Dauin Backpackers Hostel',
+                'slug' => 'dauin-backpackers-hostel',
+                'description' => 'Dorm beds near the Dauin market.',
+                'status' => ItemStatus::Rejected,
+                'rejection_reason' => 'No photographs, and the room descriptions are missing.',
+                'country_code' => 'PH',
+                'profile' => [
+                    'max_adults' => 1,
+                    'amenities' => ['Fan', 'Shared bathroom'],
+                    'check_in_time' => '14:00:00',
+                    'check_out_time' => '11:00:00',
+                ],
+                'stops' => [],
+                'media' => [],
+                'options' => [
+                    ['name' => 'Dorm Bed', 'mode' => AvailabilityMode::Nightly, 'price_minor' => 50000, 'min_nights' => 1, 'max_nights' => 14, 'batch_quantity' => 8],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function bayawanCatalog(): array
+    {
+        return [
+            [
+                'type' => ItemType::Tour,
+                'name' => 'Mabinay Caves Adventure Day Tour',
+                'slug' => 'mabinay-caves-adventure',
+                'description' => 'A guided day of cave exploring in Mabinay, with a lunch stop on the way back to Bayawan.',
+                'status' => ItemStatus::Published,
+                'country_code' => 'PH',
+                'profile' => [
+                    'max_adults' => 8,
+                    'max_kids' => 2,
+                    'baggage_allowance_kg' => null,
+                    'meeting_point' => 'Bayawan City Hall',
+                    'inclusions' => ['Van transfers', 'Cave guide', 'Helmets and headlamps', 'Lunch'],
+                    'departs_on' => '2026-11-27',
+                    'returns_on' => '2026-11-27',
+                ],
+                'stops' => [
+                    ['sequence' => 1, 'location' => 'Bayawan City Hall', 'country_code' => 'PH', 'starts_on' => '2026-11-27', 'ends_on' => '2026-11-27', 'latitude' => 9.366700, 'longitude' => 122.804200],
+                    ['sequence' => 2, 'location' => 'Mabinay Caves', 'country_code' => 'PH', 'starts_on' => '2026-11-27', 'ends_on' => '2026-11-27', 'latitude' => 9.725800, 'longitude' => 122.918600],
+                ],
+                'media' => [
+                    ['path' => 'items/mabinay-caves-adventure/cave-entrance.jpg', 'file_name' => 'cave-entrance.jpg', 'featured' => true],
+                    ['path' => 'items/mabinay-caves-adventure/stalactites.jpg', 'file_name' => 'stalactites.jpg', 'featured' => false],
+                ],
+                'options' => [
+                    ['name' => 'Solo', 'mode' => AvailabilityMode::Capacity, 'price_minor' => 119900, 'batch_quantity' => 16],
+                    ['name' => 'Couple', 'mode' => AvailabilityMode::Capacity, 'price_minor' => 219900, 'batch_quantity' => 16],
+                    ['name' => 'Group (5)', 'mode' => AvailabilityMode::Capacity, 'price_minor' => 499900, 'batch_quantity' => 6],
+                ],
+            ],
+            [
+                'type' => ItemType::Hotel,
+                'name' => 'Bayawan Sunrise Hotel',
+                'slug' => 'bayawan-sunrise-hotel',
+                'description' => 'A comfortable city hotel a few minutes from the Bayawan boulevard.',
+                'status' => ItemStatus::Published,
+                'country_code' => 'PH',
+                'profile' => [
+                    'max_adults' => 3,
+                    'amenities' => ['Wi-Fi', 'Air conditioning', 'Breakfast included', 'Parking'],
+                    'check_in_time' => '14:00:00',
+                    'check_out_time' => '12:00:00',
+                ],
+                'stops' => [],
+                'media' => [
+                    ['path' => 'items/bayawan-sunrise-hotel/lobby.jpg', 'file_name' => 'lobby.jpg', 'featured' => true],
+                    ['path' => 'items/bayawan-sunrise-hotel/family-room.jpg', 'file_name' => 'family-room.jpg', 'featured' => false],
+                ],
+                'options' => [
+                    ['name' => 'Standard Room', 'mode' => AvailabilityMode::Nightly, 'price_minor' => 200000, 'min_nights' => 1, 'max_nights' => 30, 'batch_quantity' => 5],
+                    ['name' => 'Family Room', 'mode' => AvailabilityMode::Nightly, 'price_minor' => 340000, 'min_nights' => 1, 'max_nights' => 14, 'batch_quantity' => 2],
+                ],
+            ],
+            [
+                'type' => ItemType::Visa,
+                'name' => 'Vietnam Tourist e-Visa',
+                'slug' => 'vietnam-evisa',
+                'description' => 'Tourist e-visa processing for Vietnam.',
+                'status' => ItemStatus::Published,
+                'country_code' => 'VN',
+                'profile' => [
+                    'processing_days_min' => 3,
+                    'processing_days_max' => 5,
+                    'validity_days' => 90,
+                    'requirements' => ['Valid passport (6+ months)', 'Passport-size photo', 'Return ticket'],
+                ],
+                'stops' => [],
+                'media' => [
+                    ['path' => 'items/vietnam-evisa/ha-long-bay.jpg', 'file_name' => 'ha-long-bay.jpg', 'featured' => true],
+                ],
+                'options' => [
+                    ['name' => 'e-Visa', 'mode' => AvailabilityMode::Unlimited, 'price_minor' => 34900],
+                    ['name' => 'Express Processing', 'mode' => AvailabilityMode::Unlimited, 'price_minor' => 54900],
+                ],
+            ],
+            [
+                'type' => ItemType::Tour,
+                'name' => 'Bayawan Heritage & Sunset Tour',
+                'slug' => 'bayawan-heritage-sunset',
+                'description' => 'An afternoon city tour ending with sunset on the Bayawan boulevard.',
+                'status' => ItemStatus::Pending,
+                'country_code' => 'PH',
+                'profile' => [
+                    'max_adults' => 10,
+                    'max_kids' => 4,
+                    'baggage_allowance_kg' => null,
+                    'meeting_point' => 'Bayawan City Hall',
+                    'inclusions' => ['Tricycle transfers', 'Local guide', 'Merienda'],
+                    'departs_on' => '2026-11-29',
+                    'returns_on' => '2026-11-29',
+                ],
+                'stops' => [
+                    ['sequence' => 1, 'location' => 'Bayawan Boulevard', 'country_code' => 'PH', 'starts_on' => '2026-11-29', 'ends_on' => '2026-11-29', 'latitude' => 9.362000, 'longitude' => 122.801000],
+                ],
+                'media' => [
+                    ['path' => 'items/bayawan-heritage-sunset/boulevard.jpg', 'file_name' => 'boulevard.jpg', 'featured' => true],
+                ],
+                'options' => [
+                    ['name' => 'Per person', 'mode' => AvailabilityMode::Capacity, 'price_minor' => 59900, 'batch_quantity' => 15],
+                ],
+            ],
+            [
+                'type' => ItemType::Hotel,
+                'name' => 'Bayawan Transient House',
+                'slug' => 'bayawan-transient-house',
+                'description' => 'Simple rooms near the Bayawan public market.',
+                'status' => ItemStatus::Rejected,
+                'rejection_reason' => 'No photographs, and the room descriptions are missing.',
+                'country_code' => 'PH',
+                'profile' => [
+                    'max_adults' => 2,
+                    'amenities' => ['Fan'],
+                    'check_in_time' => '14:00:00',
+                    'check_out_time' => '12:00:00',
+                ],
+                'stops' => [],
+                'media' => [],
+                'options' => [
+                    ['name' => 'Single Room', 'mode' => AvailabilityMode::Nightly, 'price_minor' => 6500, 'min_nights' => 1, 'max_nights' => 14, 'batch_quantity' => 3],
                 ],
             ],
         ];

@@ -58,6 +58,16 @@ class TenantSeeder extends Seeder
                 'locality_type' => 'Component City',
                 'domain' => 'tanjay.localhost',
             ],
+            'dauin' => [
+                'name' => 'Dauin',
+                'locality_type' => 'Municipality',
+                'domain' => 'dauin.localhost',
+            ],
+            'bayawan' => [
+                'name' => 'Bayawan City',
+                'locality_type' => 'Component City',
+                'domain' => 'bayawan.localhost',
+            ],
         ];
     }
 }

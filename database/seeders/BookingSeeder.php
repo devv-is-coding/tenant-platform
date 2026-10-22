@@ -532,6 +532,8 @@ class BookingSeeder extends Seeder
         return match ($tenantId) {
             'dumaguete' => 'DGTE',
             'tanjay' => 'TNJY',
+            'dauin' => 'DAUN',
+            'bayawan' => 'BYWN',
             default => 'ZMB',
         };
     }
@@ -544,6 +546,8 @@ class BookingSeeder extends Seeder
         return match ($tenantId) {
             'dumaguete' => $this->dumagueteBookings(),
             'tanjay' => $this->tanjayBookings(),
+            'dauin' => $this->dauinBookings(),
+            'bayawan' => $this->bayawanBookings(),
             default => $this->zamboanguitaBookings(),
         };
     }
@@ -742,6 +746,138 @@ class BookingSeeder extends Seeder
                 'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2027-01-12 14:00:00'],
                 'review' => ['rating' => 4, 'title' => 'Lovely courtyard', 'content' => 'Quiet, central, and the breakfast was generous.', 'is_featured' => false],
                 'refund' => ['line_index' => 0, 'unit_index_released' => 1, 'amount_minor' => 640000, 'reason' => 'Travel plans changed; requesting one suite back.'],
+            ],
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function dauinBookings(): array
+    {
+        return [
+            [
+                'customer' => 'rafael',
+                'approval' => BookingApprovalStatus::Approved,
+                'lines' => [
+                    ['item_slug' => 'dauin-beach-villas', 'option_name' => 'Garden Room', 'quantity' => 1, 'nights' => 3, 'starts_on' => '2026-12-05'],
+                ],
+                'payments' => [
+                    ['method' => PaymentMethod::Cash, 'amount_minor' => 300000, 'paid_at' => '2026-10-14 10:00:00'],
+                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 450000, 'paid_at' => '2026-10-19 09:30:00'],
+                ],
+                'fulfilment' => FulfilmentStatus::CheckedIn,
+                'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2026-12-05 14:05:00'],
+            ],
+            [
+                'customer' => 'liza',
+                'approval' => BookingApprovalStatus::Approved,
+                'lines' => [
+                    ['item_slug' => 'apo-island-dive-snorkel', 'option_name' => 'Couple', 'quantity' => 1],
+                ],
+                'payments' => [
+                    ['method' => PaymentMethod::Cash, 'amount_minor' => 100000, 'paid_at' => '2026-10-13 10:22:00'],
+                ],
+                'fulfilment' => FulfilmentStatus::CheckedIn,
+                'checkin' => ['stop_sequence' => 1, 'checked_in_at' => '2026-11-24 07:45:00'],
+            ],
+            [
+                'customer' => 'miguel',
+                'approval' => BookingApprovalStatus::Pending,
+                'lines' => [
+                    ['item_slug' => 'apo-island-dive-snorkel', 'option_name' => 'Solo', 'quantity' => 1],
+                    ['item_slug' => 'singapore-evisa', 'option_name' => 'e-Visa', 'quantity' => 1],
+                ],
+                'payments' => [],
+            ],
+            [
+                'customer' => 'andrea',
+                'approval' => BookingApprovalStatus::Rejected,
+                'rejection_reason' => 'Departure is full; offered the following week instead.',
+                'lines' => [
+                    ['item_slug' => 'apo-island-dive-snorkel', 'option_name' => 'Group (5)', 'quantity' => 1],
+                ],
+                'payments' => [],
+            ],
+            [
+                'customer' => 'rafael',
+                'approval' => BookingApprovalStatus::Approved,
+                'lines' => [
+                    ['item_slug' => 'dauin-beach-villas', 'option_name' => 'Beach Villa', 'quantity' => 2, 'nights' => 2, 'starts_on' => '2027-01-15'],
+                ],
+                'payments' => [
+                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 1600000, 'paid_at' => '2026-10-17 11:00:00'],
+                ],
+                'fulfilment' => FulfilmentStatus::Completed,
+                'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2027-01-15 14:00:00'],
+                'review' => ['rating' => 5, 'title' => 'Perfect base for muck diving', 'content' => 'Great villas, and the dive sites are a short walk away.', 'is_featured' => true],
+                'refund' => ['line_index' => 0, 'unit_index_released' => 1, 'amount_minor' => 800000, 'reason' => 'Travel companion cancelled; requesting one villa back.'],
+            ],
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function bayawanBookings(): array
+    {
+        return [
+            [
+                'customer' => 'paolo',
+                'approval' => BookingApprovalStatus::Approved,
+                'lines' => [
+                    ['item_slug' => 'bayawan-sunrise-hotel', 'option_name' => 'Standard Room', 'quantity' => 2, 'nights' => 2, 'starts_on' => '2026-12-10'],
+                ],
+                'payments' => [
+                    ['method' => PaymentMethod::Cash, 'amount_minor' => 320000, 'paid_at' => '2026-10-15 10:30:00'],
+                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 480000, 'paid_at' => '2026-10-20 09:10:00'],
+                ],
+                'fulfilment' => FulfilmentStatus::CheckedIn,
+                'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2026-12-10 14:15:00'],
+            ],
+            [
+                'customer' => 'nadia',
+                'approval' => BookingApprovalStatus::Approved,
+                'lines' => [
+                    ['item_slug' => 'mabinay-caves-adventure', 'option_name' => 'Couple', 'quantity' => 1],
+                ],
+                'payments' => [
+                    ['method' => PaymentMethod::Cash, 'amount_minor' => 90000, 'paid_at' => '2026-10-16 10:22:00'],
+                ],
+                'fulfilment' => FulfilmentStatus::CheckedIn,
+                'checkin' => ['stop_sequence' => 1, 'checked_in_at' => '2026-11-27 07:30:00'],
+            ],
+            [
+                'customer' => 'julio',
+                'approval' => BookingApprovalStatus::Pending,
+                'lines' => [
+                    ['item_slug' => 'mabinay-caves-adventure', 'option_name' => 'Solo', 'quantity' => 1],
+                    ['item_slug' => 'vietnam-evisa', 'option_name' => 'e-Visa', 'quantity' => 1],
+                ],
+                'payments' => [],
+            ],
+            [
+                'customer' => 'beatriz',
+                'approval' => BookingApprovalStatus::Rejected,
+                'rejection_reason' => 'Departure is full; offered the following week instead.',
+                'lines' => [
+                    ['item_slug' => 'mabinay-caves-adventure', 'option_name' => 'Group (5)', 'quantity' => 1],
+                ],
+                'payments' => [],
+            ],
+            [
+                'customer' => 'paolo',
+                'approval' => BookingApprovalStatus::Approved,
+                'lines' => [
+                    ['item_slug' => 'bayawan-sunrise-hotel', 'option_name' => 'Family Room', 'quantity' => 2, 'nights' => 2, 'starts_on' => '2027-01-20'],
+                ],
+                'payments' => [
+                    ['method' => PaymentMethod::Stripe, 'amount_minor' => 1360000, 'paid_at' => '2026-10-18 11:00:00'],
+                ],
+                'fulfilment' => FulfilmentStatus::Completed,
+                'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2027-01-20 14:00:00'],
+                'review' => ['rating' => 4, 'title' => 'Clean and central', 'content' => 'Spacious family rooms and a generous breakfast.', 'is_featured' => false],
+                'refund' => ['line_index' => 0, 'unit_index_released' => 1, 'amount_minor' => 680000, 'reason' => 'Plans changed; requesting one family room back.'],
             ],
         ];
     }
