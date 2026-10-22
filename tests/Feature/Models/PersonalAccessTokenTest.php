@@ -5,7 +5,7 @@ use App\Models\User;
 
 use function Pest\Laravel\freezeSecond;
 
-test('sanctum expiry and last used writes are stored in the _on columns', function () {
+test('sanctum expiry and last used writes are stored on the token', function () {
     freezeSecond();
     $user = User::factory()->create();
 
@@ -18,7 +18,7 @@ test('sanctum expiry and last used writes are stored in the _on columns', functi
     $token->forceFill(['last_used_at' => now()])->save();
 
     $token->refresh();
-    expect($token->expires_on)->toEqual(now()->addDay())
-        ->and($token->last_used_on)->toEqual(now())
+    expect($token->expires_at)->toEqual(now()->addDay())
+        ->and($token->last_used_at)->toEqual(now())
         ->and($token->created_at)->toEqual(now());
 });

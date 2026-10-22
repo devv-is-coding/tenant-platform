@@ -29,7 +29,7 @@ use LogicException;
  * @property array<string, mixed>|null $context
  * @property string|null $ip_address
  * @property string|null $user_agent
- * @property Carbon|null $created_on
+ * @property Carbon|null $created_at
  */
 #[Fillable([
     'actor_id',
@@ -48,11 +48,7 @@ class AuditEvent extends Model
 {
     use SoftDeletes;
 
-    const CREATED_AT = 'created_on';
-
     const UPDATED_AT = null;
-
-    const DELETED_AT = 'deleted_on';
 
     /**
      * Get the attributes that should be cast.

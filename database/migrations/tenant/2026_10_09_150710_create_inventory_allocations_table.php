@@ -34,7 +34,7 @@ return new class extends Migration
      *
      * Release hard-deletes these rows, never soft-deletes them: a tombstone
      * would still occupy its slot in the unique index and block resale, and the
-     * UNIQUE(..., deleted_on) trick fails for the same NULL reason. This
+     * UNIQUE(..., deleted_at) trick fails for the same NULL reason. This
      * deliberately reverses the legacy, which soft-deleted slots on refund.
      * History lives in the audit log, not in tombstones.
      *
@@ -58,8 +58,7 @@ return new class extends Migration
             // currently free indices and reusable once released.
             $table->unsignedSmallInteger('unit_index');
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
+            $table->timestamps();
 
             // The guarantee.
             $table->unique(['option_id', 'occupied_on', 'unit_index']);

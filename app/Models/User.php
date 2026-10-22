@@ -4,7 +4,6 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\Role;
-use Carbon\CarbonInterface;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -33,15 +32,15 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property Role $role
  * @property string|null $tenant_id
  * @property bool $is_active
- * @property Carbon|null $email_verified_on
+ * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
- * @property Carbon|null $two_factor_confirmed_on
+ * @property Carbon|null $two_factor_confirmed_at
  * @property string|null $remember_token
- * @property Carbon|null $created_on
- * @property Carbon|null $updated_on
- * @property Carbon|null $deleted_on
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property Carbon|null $deleted_at
  * @property-read string $full_name
  * @property-read Tenant|null $tenant
  */
@@ -69,12 +68,6 @@ class User extends Authenticatable implements PasskeyUser
      */
     use CentralConnection, HasFactory, Notifiable, PasskeyAuthenticatable, SoftDeletes, TwoFactorAuthenticatable;
 
-    const CREATED_AT = 'created_on';
-
-    const UPDATED_AT = 'updated_on';
-
-    const DELETED_AT = 'deleted_on';
-
     /**
      * Get the attributes that should be cast.
      *
@@ -83,10 +76,9 @@ class User extends Authenticatable implements PasskeyUser
     protected function casts(): array
     {
         return [
-            'email_verified_on' => 'datetime',
+            'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'two_factor_confirmed_on' => 'datetime',
-            'deleted_on' => 'datetime',
+            'two_factor_confirmed_at' => 'datetime',
             'role' => Role::class,
             'is_active' => 'boolean',
         ];
@@ -102,32 +94,6 @@ class User extends Authenticatable implements PasskeyUser
         return Attribute::get(fn (): string => collect([$this->first_name, $this->middle_name, $this->last_name])
             ->filter()
             ->implode(' '));
-    }
-
-    /**
-     * Alias for the framework's MustVerifyEmail, which hardcodes the `_at` name.
-     *
-     * @return Attribute<CarbonInterface|null, mixed>
-     */
-    protected function emailVerifiedAt(): Attribute
-    {
-        return Attribute::make(
-            get: fn (): ?CarbonInterface => $this->email_verified_on,
-            set: fn (mixed $value): array => ['email_verified_on' => $value],
-        )->withoutObjectCaching();
-    }
-
-    /**
-     * Alias for Fortify, which hardcodes the `_at` name.
-     *
-     * @return Attribute<CarbonInterface|null, mixed>
-     */
-    protected function twoFactorConfirmedAt(): Attribute
-    {
-        return Attribute::make(
-            get: fn (): ?CarbonInterface => $this->two_factor_confirmed_on,
-            set: fn (mixed $value): array => ['two_factor_confirmed_on' => $value],
-        )->withoutObjectCaching();
     }
 
     /**

@@ -24,7 +24,7 @@ return new class extends Migration
      * an operational action. `actor_role = SuperAdmin` against anything other
      * than a `tenant.*` action is a governance violation.
      *
-     * There is no `updated_on` and no soft delete: audit rows are never modified
+     * There is no `updated_at` and no soft delete: audit rows are never modified
      * or removed, which the model enforces in `booted()`. Retention is handled
      * by pruning old rows outright.
      */
@@ -62,8 +62,8 @@ return new class extends Migration
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
 
-            $table->timestamp('created_on')->nullable()->index();
-            $table->softDeletes('deleted_on');
+            $table->timestamp('created_at')->nullable()->index();
+            $table->softDeletes();
 
             $table->index(['subject_type', 'subject_id']);
         });

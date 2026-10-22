@@ -72,9 +72,8 @@ return new class extends Migration
             $table->unsignedSmallInteger('kids')->default(0);
             $table->unsignedSmallInteger('baggage_count')->nullable();
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['option_id', 'starts_on', 'ends_on']);
         });

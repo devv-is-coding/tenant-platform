@@ -15,7 +15,7 @@ return new class extends Migration
      * the tenancy package's resource syncing is built for central-to-many
      * mirroring rather than many-to-one aggregation. So published items are
      * projected here by queued domain events, reconciled nightly, with
-     * `synced_on` making staleness observable. A search engine would later index
+     * `synced_at` making staleness observable. A search engine would later index
      * this same table, which makes adopting one a config change rather than a
      * re-architecture.
      *
@@ -81,11 +81,10 @@ return new class extends Migration
 
             // Makes projection drift observable; a max() over this column is the
             // health check for a dead queue worker.
-            $table->timestamp('synced_on')->nullable()->index();
+            $table->timestamp('synced_at')->nullable()->index();
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             // Running the sync job twice must yield one row.
             $table->unique(['tenant_id', 'item_id']);

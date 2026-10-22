@@ -50,6 +50,10 @@ enum AuditAction: string
     case SubscriptionPaymentDeleted = 'subscription.payment_deleted';
     case SubscriptionPaymentFailed = 'subscription.payment_failed';
 
+    case PlanCreated = 'plan.created';
+    case PlanUpdated = 'plan.updated';
+    case PlanDeleted = 'plan.deleted';
+
     case SettingsUpdated = 'settings.updated';
 
     case ItemCreated = 'item.created';

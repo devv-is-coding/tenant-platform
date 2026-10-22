@@ -33,10 +33,10 @@ return new class extends Migration
             $table->unsignedTinyInteger('item_status')->default(0);
             $table->string('rejection_reason')->nullable();
 
-            $table->timestamp('submitted_on')->nullable();
-            $table->timestamp('approved_on')->nullable();
-            $table->timestamp('rejected_on')->nullable();
-            $table->timestamp('published_on')->nullable();
+            $table->timestamp('submitted_at')->nullable();
+            $table->timestamp('approved_at')->nullable();
+            $table->timestamp('rejected_at')->nullable();
+            $table->timestamp('published_at')->nullable();
 
             // Staff and managers are central users, so none of these can be real
             // foreign keys - the row lives in another database. Mirrors
@@ -48,9 +48,8 @@ return new class extends Migration
 
             $table->boolean('is_active')->default(true);
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['item_status', 'item_type']);
         });

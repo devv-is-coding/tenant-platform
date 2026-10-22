@@ -59,12 +59,11 @@ return new class extends Migration
             // Defaults to Open (1). Derived from the amounts, never assigned.
             $table->unsignedTinyInteger('status')->default(1);
 
-            $table->timestamp('voided_on')->nullable();
+            $table->timestamp('voided_at')->nullable();
             $table->string('void_reason')->nullable();
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             // Issuing a period twice must produce one invoice, so the monthly
             // billing job is idempotent by construction rather than by

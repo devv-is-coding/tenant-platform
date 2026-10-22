@@ -69,7 +69,7 @@ new #[Title('Agencies')] class extends Component {
             ->withCount('users')
             ->when($search !== '', fn (Builder $query) => $query->search($search))
             ->when(TenantStatus::tryFrom((int) $this->status), fn (Builder $query, TenantStatus $status) => $query->where('status', $status))
-            ->latest('created_on')
+            ->latest('created_at')
             ->orderBy('id')
             ->paginate(15);
     }
@@ -134,7 +134,7 @@ new #[Title('Agencies')] class extends Component {
 
                     <flux:table.cell class="max-sm:hidden" align="end">{{ $tenant->users_count }}</flux:table.cell>
 
-                    <flux:table.cell class="max-lg:hidden">{{ $tenant->created_on?->toFormattedDateString() }}</flux:table.cell>
+                    <flux:table.cell class="max-lg:hidden">{{ $tenant->created_at?->toFormattedDateString() }}</flux:table.cell>
                 </flux:table.row>
             @empty
                 <flux:table.row>

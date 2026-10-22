@@ -131,9 +131,9 @@ new #[Title('Audit log')] class extends Component {
             ->when($this->actor === self::SYSTEM_ACTOR, fn (Builder $query) => $query->whereNull('actor_id'))
             ->when(ctype_digit($this->actor), fn (Builder $query) => $query->where('actor_id', (int) $this->actor))
             ->when(AuditAction::tryFrom($this->action), fn (Builder $query, AuditAction $action) => $query->where('action', $action))
-            ->when($from, fn (Builder $query, string $from) => $query->whereDate('created_on', '>=', $from))
-            ->when($to, fn (Builder $query, string $to) => $query->whereDate('created_on', '<=', $to))
-            ->latest('created_on')
+            ->when($from, fn (Builder $query, string $from) => $query->whereDate('created_at', '>=', $from))
+            ->when($to, fn (Builder $query, string $to) => $query->whereDate('created_at', '<=', $to))
+            ->latest('created_at')
             ->latest('id')
             ->paginate(25);
     }
@@ -268,8 +268,8 @@ new #[Title('Audit log')] class extends Component {
             @forelse ($this->events as $event)
                 <flux:table.row :key="$event->id">
                     <flux:table.cell class="whitespace-nowrap align-top">
-                        <time datetime="{{ $event->created_on?->toIso8601String() }}">{{ $event->created_on?->toDayDateTimeString() }}</time>
-                        <flux:text size="sm">{{ $event->created_on?->diffForHumans() }}</flux:text>
+                        <time datetime="{{ $event->created_at?->toIso8601String() }}">{{ $event->created_at?->toDayDateTimeString() }}</time>
+                        <flux:text size="sm">{{ $event->created_at?->diffForHumans() }}</flux:text>
                     </flux:table.cell>
 
                     <flux:table.cell class="align-top">

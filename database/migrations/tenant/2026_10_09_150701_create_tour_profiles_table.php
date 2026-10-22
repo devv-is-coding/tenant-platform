@@ -43,9 +43,8 @@ return new class extends Migration
             $table->date('departs_on');
             $table->date('returns_on');
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
         });
     }
 

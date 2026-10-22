@@ -32,11 +32,11 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property string $currency
  * @property int $amount_paid_minor
  * @property SubscriptionInvoiceStatus $status
- * @property Carbon|null $voided_on
+ * @property Carbon|null $voided_at
  * @property string|null $void_reason
- * @property Carbon|null $created_on
- * @property Carbon|null $updated_on
- * @property Carbon|null $deleted_on
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property Carbon|null $deleted_at
  */
 #[Fillable([
     'subscription_id',
@@ -50,7 +50,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
     'currency',
     'amount_paid_minor',
     'status',
-    'voided_on',
+    'voided_at',
     'void_reason',
 ])]
 class SubscriptionInvoice extends Model
@@ -62,12 +62,6 @@ class SubscriptionInvoice extends Model
      * @use HasFactory<SubscriptionInvoiceFactory>
      */
     use CentralConnection, HasFactory, SoftDeletes;
-
-    const CREATED_AT = 'created_on';
-
-    const UPDATED_AT = 'updated_on';
-
-    const DELETED_AT = 'deleted_on';
 
     /**
      * Mirrors the column defaults, so a freshly issued invoice reports Open and
@@ -95,7 +89,7 @@ class SubscriptionInvoice extends Model
             'period_end_on' => 'date',
             'issued_on' => 'date',
             'due_on' => 'date',
-            'voided_on' => 'datetime',
+            'voided_at' => 'datetime',
         ];
     }
 

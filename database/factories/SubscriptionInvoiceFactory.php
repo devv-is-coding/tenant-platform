@@ -76,7 +76,7 @@ class SubscriptionInvoiceFactory extends Factory
     {
         return $this->state(fn () => [
             'status' => SubscriptionInvoiceStatus::Void,
-            'voided_on' => now(),
+            'voided_at' => now(),
             'void_reason' => 'Issued in error.',
         ]);
     }

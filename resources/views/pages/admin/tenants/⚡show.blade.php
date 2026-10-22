@@ -8,7 +8,6 @@ use App\Actions\Subscriptions\StartSubscriptionAction;
 use App\Actions\Tenants\ChangeTenantStatusAction;
 use App\Actions\Tenants\DeleteAgencyUserAction;
 use App\Actions\Tenants\DeleteTenantAction;
-use App\Enums\BillingInterval;
 use App\Enums\PaymentMethod;
 use App\Enums\SubscriptionInvoiceStatus;
 use App\Enums\TenantStatus;
@@ -16,6 +15,7 @@ use App\Models\PlatformAuditEvent;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPayment;
+use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use App\Models\User;
 use App\ValueObjects\Money;
@@ -53,11 +53,7 @@ new class extends Component {
 
     public string $status_reason = '';
 
-    public string $plan_name = '';
-
-    public string $amount = '';
-
-    public int $interval = BillingInterval::Monthly->value;
+    public ?int $subscription_plan_id = null;
 
     /**
      * The invoice the payment form records against. Set only by
@@ -70,7 +66,7 @@ new class extends Component {
 
     public int $payment_method = PaymentMethod::BankTransfer->value;
 
-    public string $payment_paid_on = '';
+    public string $payment_paid_at = '';
 
     /**
      * What the delete confirmation is open for: a user, subscription, invoice
@@ -126,9 +122,9 @@ new class extends Component {
     {
         $this->authorize('manageSubscription', $this->tenant);
 
-        $subscription = $startSubscription->handle(Auth::user(), $this->tenant, $this->only(['plan_name', 'amount', 'interval']));
+        $subscription = $startSubscription->handle(Auth::user(), $this->tenant, $this->only('subscription_plan_id'));
 
-        $this->reset('plan_name', 'amount', 'interval');
+        $this->reset('subscription_plan_id');
         unset($this->subscription, $this->subscriptions, $this->recentActivity);
         Flux::modals()->close();
         Flux::toast(variant: 'success', text: __(':name is now on :plan.', [
@@ -150,7 +146,7 @@ new class extends Component {
         $this->paying_invoice_id = $invoice->id;
         $this->payment_amount = Money::ofMinor($invoice->outstandingMinor(), $invoice->currency)->toDecimal();
         $this->payment_method = PaymentMethod::BankTransfer->value;
-        $this->payment_paid_on = today()->toDateString();
+        $this->payment_paid_at = today()->toDateString();
         unset($this->payingInvoice);
 
         Flux::modal('record-payment')->show();
@@ -172,7 +168,7 @@ new class extends Component {
             $payment = $recordSubscriptionPayment->handle(Auth::user(), $invoice, [
                 'amount' => $this->payment_amount,
                 'method' => $this->payment_method,
-                'paid_on' => $this->payment_paid_on,
+                'paid_at' => $this->payment_paid_at,
             ]);
         } catch (ValidationException $exception) {
             // The action's fields share names with the plan form's, so its
@@ -182,7 +178,7 @@ new class extends Component {
                 ->all());
         }
 
-        $this->reset('paying_invoice_id', 'payment_amount', 'payment_method', 'payment_paid_on');
+        $this->reset('paying_invoice_id', 'payment_amount', 'payment_method', 'payment_paid_at');
         unset($this->subscription, $this->invoices, $this->payments, $this->balanceOwed, $this->recentActivity);
         Flux::modals()->close();
         Flux::toast(variant: 'success', text: __(':amount recorded against :reference.', [
@@ -364,6 +360,17 @@ new class extends Component {
     }
 
     /**
+     * Get the plans in the price list the agency can be put on.
+     *
+     * @return Collection<int, SubscriptionPlan>
+     */
+    #[Computed]
+    public function plans(): Collection
+    {
+        return SubscriptionPlan::query()->orderBy('name')->get();
+    }
+
+    /**
      * Get the agency's newest invoices.
      *
      * @return Collection<int, SubscriptionInvoice>
@@ -405,7 +412,7 @@ new class extends Component {
     {
         return $this->tenant->subscriptionPayments()
             ->with(['invoice', 'recorder'])
-            ->latest('paid_on')
+            ->latest('paid_at')
             ->latest('id')
             ->limit(self::RECENT_PAYMENTS_LIMIT)
             ->get();
@@ -429,7 +436,7 @@ new class extends Component {
     public function recentActivity(): Collection
     {
         return $this->tenant->platformAuditEvents()
-            ->latest('created_on')
+            ->latest('created_at')
             ->latest('id')
             ->limit(self::RECENT_ACTIVITY_LIMIT)
             ->get();
@@ -517,7 +524,7 @@ new class extends Component {
         <flux:text class="mt-2">
             {{ $tenant->domains->pluck('domain')->join(', ') ?: $tenant->id }}
             &middot;
-            {{ __('Onboarded :date', ['date' => $tenant->created_on?->toFormattedDateString()]) }}
+            {{ __('Onboarded :date', ['date' => $tenant->created_at?->toFormattedDateString()]) }}
         </flux:text>
 
         @if ($tenant->status_reason)
@@ -654,37 +661,34 @@ new class extends Component {
                             @if ($this->subscription?->status->isLive())
                                 {{ __('The new plan starts today. :plan ends today and stays in the history.', ['plan' => $this->subscription->plan_name]) }}
                             @else
-                                {{ __('The plan starts today. The name, price and billing interval are recorded as agreed.') }}
+                                {{ __('The plan starts today. Its name, price and billing interval are recorded as agreed.') }}
                             @endif
                         </flux:text>
                     </div>
 
-                    <flux:input wire:model="plan_name" :label="__('Plan name')" :placeholder="__('Agency Standard')" required />
-
-                    <flux:field>
-                        <flux:label>{{ __('Amount per billing period') }}</flux:label>
-
-                        <flux:input.group>
-                            <flux:input.group.prefix>{{ config('tenancy.billing_currency') }}</flux:input.group.prefix>
-
-                            <flux:input wire:model="amount" inputmode="decimal" placeholder="2500.00" required />
-                        </flux:input.group>
-
-                        <flux:error name="amount" />
-                    </flux:field>
-
-                    <flux:select wire:model="interval" :label="__('Billed')">
-                        @foreach (BillingInterval::cases() as $billingInterval)
-                            <flux:select.option :value="$billingInterval->value">{{ $billingInterval->label() }}</flux:select.option>
-                        @endforeach
-                    </flux:select>
+                    @if ($this->plans->isEmpty())
+                        <flux:callout icon="information-circle" :heading="__('The price list is empty')">
+                            <flux:callout.text>
+                                {{ __('Add a plan to the price list before putting an agency on one.') }}
+                                <flux:callout.link :href="route('admin.plans.index')" wire:navigate>{{ __('Open plans') }}</flux:callout.link>
+                            </flux:callout.text>
+                        </flux:callout>
+                    @else
+                        <flux:select wire:model="subscription_plan_id" :label="__('Plan')" :placeholder="__('Choose a plan…')" required>
+                            @foreach ($this->plans as $plan)
+                                <flux:select.option :value="$plan->id" wire:key="plan-{{ $plan->id }}">
+                                    {{ $plan->name }} · {{ Money::ofMinor($plan->amount_minor, $plan->currency)->format() }} · {{ $plan->interval->label() }}
+                                </flux:select.option>
+                            @endforeach
+                        </flux:select>
+                    @endif
 
                     <div class="flex justify-end gap-2">
                         <flux:modal.close>
                             <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
                         </flux:modal.close>
 
-                        <flux:button type="submit" variant="primary">
+                        <flux:button type="submit" variant="primary" :disabled="$this->plans->isEmpty()">
                             {{ $this->subscription?->status->isLive() ? __('Change plan') : __('Start subscription') }}
                         </flux:button>
                     </div>
@@ -830,7 +834,7 @@ new class extends Component {
 
                         <flux:input
                             type="date"
-                            wire:model="payment_paid_on"
+                            wire:model="payment_paid_at"
                             :label="__('Paid on')"
                             :min="$this->payingInvoice->issued_on->toDateString()"
                             :max="today()->toDateString()"
@@ -876,7 +880,7 @@ new class extends Component {
                             <flux:table.cell class="max-md:hidden">{{ $payment->invoice->reference }}</flux:table.cell>
                             <flux:table.cell class="max-sm:hidden">{{ $payment->method->label() }}</flux:table.cell>
                             <flux:table.cell align="end">{{ Money::ofMinor($payment->amount_minor, $payment->currency)->format() }}</flux:table.cell>
-                            <flux:table.cell class="max-sm:hidden">{{ $payment->paid_on?->toFormattedDateString() ?? '—' }}</flux:table.cell>
+                            <flux:table.cell class="max-sm:hidden">{{ $payment->paid_at?->toFormattedDateString() ?? '—' }}</flux:table.cell>
                             <flux:table.cell class="max-lg:hidden">{{ $payment->method->isGatewaySettled() ? __('Gateway') : ($payment->recorder?->full_name ?? '—') }}</flux:table.cell>
                             <flux:table.cell align="end">
                                 @can('delete', $payment)
@@ -917,8 +921,8 @@ new class extends Component {
                             <flux:table.cell variant="strong">{{ $event->action->label() }}</flux:table.cell>
                             <flux:table.cell class="max-sm:hidden">{{ $event->actor_label ?? __('System') }}</flux:table.cell>
                             <flux:table.cell align="end">
-                                <time datetime="{{ $event->created_on?->toIso8601String() }}" title="{{ $event->created_on?->toDayDateTimeString() }}">
-                                    {{ $event->created_on?->diffForHumans() }}
+                                <time datetime="{{ $event->created_at?->toIso8601String() }}" title="{{ $event->created_at?->toDayDateTimeString() }}">
+                                    {{ $event->created_at?->diffForHumans() }}
                                 </time>
                             </flux:table.cell>
                         </flux:table.row>

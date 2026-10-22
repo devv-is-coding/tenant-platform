@@ -13,10 +13,4 @@ use Stancl\Tenancy\Database\Models\Domain as BaseDomain;
 class Domain extends BaseDomain
 {
     use SoftDeletes;
-
-    const CREATED_AT = 'created_on';
-
-    const UPDATED_AT = 'updated_on';
-
-    const DELETED_AT = 'deleted_on';
 }

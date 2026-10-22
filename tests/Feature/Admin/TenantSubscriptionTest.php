@@ -7,6 +7,7 @@ use App\Enums\Role;
 use App\Enums\SubscriptionStatus;
 use App\Models\PlatformAuditEvent;
 use App\Models\Subscription;
+use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Support\Facades\Event;
@@ -29,22 +30,22 @@ function subscriptionPage(Tenant $tenant, User $superAdmin): Testable
     return Livewire::actingAs($superAdmin)->test('pages::admin.tenants.show', ['tenant' => $tenant]);
 }
 
-test('starting an agency\'s first subscription snapshots the plan and records it', function () {
+test('starting an agency\'s first subscription snapshots the chosen plan and records it', function () {
     travelTo('2026-10-10 09:30:00');
     $superAdmin = User::factory()->superAdmin()->create();
     $tenant = Tenant::factory()->create();
+    $plan = SubscriptionPlan::factory()->create(['name' => 'Agency Standard', 'amount_minor' => 250000, 'interval' => BillingInterval::Monthly]);
 
     subscriptionPage($tenant, $superAdmin)
-        ->set('plan_name', ' Agency Standard ')
-        ->set('amount', '2500.00')
-        ->set('interval', BillingInterval::Monthly->value)
+        ->set('subscription_plan_id', $plan->id)
         ->call('startSubscription')
         ->assertHasNoErrors()
-        ->assertSet('plan_name', '');
+        ->assertSet('subscription_plan_id', null);
 
     $subscription = Subscription::sole();
     expect($subscription->tenant_id)->toBe($tenant->id)
         ->and($subscription->active_for_tenant_id)->toBe($tenant->id)
+        ->and($subscription->subscription_plan_id)->toBe($plan->id)
         ->and($subscription->plan_name)->toBe('Agency Standard')
         ->and($subscription->amount_minor)->toBe(250000)
         ->and($subscription->currency)->toBe('PHP')
@@ -71,16 +72,14 @@ test('changing plan ends the live subscription and starts the new one in its pla
     $tenant = Tenant::factory()->create();
     $previous = Subscription::factory()->for($tenant)->create(['plan_name' => 'Agency Standard', 'amount_minor' => 250000]);
 
-    $subscription = app(StartSubscriptionAction::class)->handle($superAdmin, $tenant, [
-        'plan_name' => 'Agency Plus',
-        'amount' => '9000',
-        'interval' => BillingInterval::Quarterly->value,
-    ]);
+    $plan = SubscriptionPlan::factory()->create(['name' => 'Agency Plus', 'amount_minor' => 900000, 'interval' => BillingInterval::Quarterly]);
+
+    $subscription = app(StartSubscriptionAction::class)->handle($superAdmin, $tenant, ['subscription_plan_id' => $plan->id]);
 
     $previous->refresh();
     expect($previous->status)->toBe(SubscriptionStatus::Cancelled)
         ->and($previous->active_for_tenant_id)->toBeNull()
-        ->and($previous->cancelled_on?->toDateTimeString())->toBe('2026-12-01 09:30:00')
+        ->and($previous->cancelled_at?->toDateTimeString())->toBe('2026-12-01 09:30:00')
         ->and($previous->cancel_reason)->toBe('Replaced by Agency Plus.')
         ->and($previous->ends_on?->toDateString())->toBe('2026-12-01')
         ->and($previous->next_billing_on)->toBeNull();
@@ -103,9 +102,7 @@ test('the billing period runs one interval from today, clamped to the end of a s
     travelTo($today);
 
     $subscription = app(StartSubscriptionAction::class)->handle(User::factory()->superAdmin()->create(), Tenant::factory()->create(), [
-        'plan_name' => 'Agency Standard',
-        'amount' => '2500',
-        'interval' => $interval->value,
+        'subscription_plan_id' => SubscriptionPlan::factory()->create(['interval' => $interval])->id,
     ]);
 
     expect($subscription->current_period_end_on->toDateString())->toBe($periodEnd)
@@ -116,25 +113,41 @@ test('the billing period runs one interval from today, clamped to the end of a s
     'monthly from the 31st' => ['2027-01-31', BillingInterval::Monthly, '2027-02-27', '2027-02-28'],
 ]);
 
-test('an invalid plan is rejected and changes nothing', function (array $input, string $field, string $message) {
+test('a plan that is not in the price list is rejected and changes nothing', function (Closure $planId, string $message) {
     $tenant = Tenant::factory()->create();
     $live = Subscription::factory()->for($tenant)->create();
 
     subscriptionPage($tenant, User::factory()->superAdmin()->create())
-        ->set([...['plan_name' => 'Agency Plus', 'amount' => '9000', 'interval' => BillingInterval::Monthly->value], ...$input])
+        ->set('subscription_plan_id', $planId())
         ->call('startSubscription')
-        ->assertHasErrors([$field => $message]);
+        ->assertHasErrors(['subscription_plan_id' => $message]);
 
     expect(Subscription::sole()->is($live))->toBeTrue()
         ->and($live->fresh()?->active_for_tenant_id)->toBe($tenant->id)
         ->and(PlatformAuditEvent::count())->toBe(0);
 })->with([
-    'no plan name' => [['plan_name' => ''], 'plan_name', 'The plan name field is required.'],
-    'zero' => [['amount' => '0.00'], 'amount', 'The amount must be more than zero.'],
-    'three decimal places' => [['amount' => '1.234'], 'amount', 'Enter the amount as a number with at most two decimal places, without commas.'],
-    'thousands separator' => [['amount' => '2,500'], 'amount', 'Enter the amount as a number with at most two decimal places, without commas.'],
-    'unknown interval' => [['interval' => 9], 'interval', 'The selected interval is invalid.'],
+    'none chosen' => [fn () => null, 'Choose a plan.'],
+    'withdrawn' => [fn () => tap(SubscriptionPlan::factory()->create())->delete()->id, 'That plan is no longer offered. Choose another.'],
+    'never existed' => [fn () => 999999, 'That plan is no longer offered. Choose another.'],
 ]);
+
+test('the plan picker offers the price list by name, and points to it while it is empty', function () {
+    $tenant = Tenant::factory()->create();
+    SubscriptionPlan::factory()->create(['name' => 'Agency Plus', 'amount_minor' => 900000, 'interval' => BillingInterval::Quarterly]);
+    SubscriptionPlan::factory()->create(['name' => 'Agency Basic', 'amount_minor' => 180000]);
+    tap(SubscriptionPlan::factory()->create(['name' => 'Withdrawn Plan']))->delete();
+
+    subscriptionPage($tenant, User::factory()->superAdmin()->create())
+        ->assertSeeInOrder(['Agency Basic · ₱1,800.00 · Monthly', 'Agency Plus · ₱9,000.00 · Quarterly'])
+        ->assertDontSee('Withdrawn Plan')
+        ->assertDontSee('The price list is empty');
+
+    SubscriptionPlan::query()->delete();
+
+    subscriptionPage($tenant, User::factory()->superAdmin()->create())
+        ->assertSee('The price list is empty')
+        ->assertSeeHtml('href="'.route('admin.plans.index').'"');
+});
 
 test('a plan written by someone else at the same moment is refused cleanly and nothing is half-written', function () {
     $tenant = Tenant::factory()->create();
@@ -150,9 +163,7 @@ test('a plan written by someone else at the same moment is refused cleanly and n
     });
 
     expect(fn () => app(StartSubscriptionAction::class)->handle(User::factory()->superAdmin()->create(), $tenant, [
-        'plan_name' => 'Agency Plus',
-        'amount' => '9000',
-        'interval' => BillingInterval::Monthly->value,
+        'subscription_plan_id' => SubscriptionPlan::factory()->create()->id,
     ]))->toThrow(ValidationException::class, 'This agency was put on another plan at the same moment. Reload the page to see it.');
 
     expect(Subscription::sole()->is($live))->toBeTrue()
@@ -189,7 +200,7 @@ test('starting a subscription is refused once the user is no longer a super admi
     $page = subscriptionPage($tenant, User::factory()->superAdmin()->create());
     actingAs(User::factory()->role(Role::Admin)->for($tenant)->create());
 
-    $page->set(['plan_name' => 'Agency Standard', 'amount' => '2500', 'interval' => BillingInterval::Monthly->value])
+    $page->set('subscription_plan_id', SubscriptionPlan::factory()->create()->id)
         ->call('startSubscription')
         ->assertForbidden();
 

@@ -46,14 +46,13 @@ return new class extends Migration
             $table->unsignedBigInteger('subject_id')->nullable();
 
             $table->boolean('is_read')->default(false);
-            $table->timestamp('read_on')->nullable();
+            $table->timestamp('read_at')->nullable();
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             // The bell: this user's unread notifications, newest first.
-            $table->index(['user_id', 'is_read', 'created_on']);
+            $table->index(['user_id', 'is_read', 'created_at']);
 
             // Tenant staff see only their own agency's notifications.
             $table->index(['tenant_id', 'notification_type']);

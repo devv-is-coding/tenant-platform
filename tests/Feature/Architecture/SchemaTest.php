@@ -113,9 +113,9 @@ test('every money column is an integer with a _minor suffix', function () {
     expect($offenders)->toBe([]);
 });
 
-test('every application table can be soft-deleted, as a deleted_on column', function () {
-    // CLAUDE.md: soft deletes are required like created_on and updated_on, even
-    // on a table nothing deletes from yet. Exempt are package plumbing, whose
+test('every application table can be soft-deleted, as a deleted_at column', function () {
+    // CLAUDE.md: soft deletes are required on every table, even one nothing
+    // deletes from yet. Exempt are package plumbing, whose
     // columns we do not own, and inventory_allocations, which release must
     // hard-delete: a soft-deleted allocation keeps its unique slot and blocks
     // resale.
@@ -124,7 +124,7 @@ test('every application table can be soft-deleted, as a deleted_on column', func
     $missing = collect(everyApplicationColumn())
         ->reject(fn (array $column): bool => in_array($column['table'], $exempt, true))
         ->groupBy(fn (array $column): string => "{$column['connection']}.{$column['table']}")
-        ->reject(fn ($columns): bool => $columns->contains('column', 'deleted_on'))
+        ->reject(fn ($columns): bool => $columns->contains('column', 'deleted_at'))
         ->keys()
         ->all();
 

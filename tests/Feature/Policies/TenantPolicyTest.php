@@ -5,6 +5,7 @@ use App\Models\PlatformAuditEvent;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPayment;
+use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use App\Models\User;
 
@@ -84,6 +85,17 @@ test('only super admins may delete an agency user, and never another super admin
     'agency admin deleting their own staff' => [Role::Admin, Role::Staff, false],
     'manager deleting staff' => [Role::Manager, Role::Staff, false],
 ]);
+
+test('only super admins may see or change the price list', function (string $ability, Closure $subject, Role $role, bool $allowed) {
+    $user = User::factory()->role($role)->make(['tenant_id' => $role->isTenantRole() ? 'dumaguete' : null]);
+
+    expect($user->can($ability, $subject()))->toBe($allowed);
+})->with([
+    'browse' => ['viewAny', fn () => SubscriptionPlan::class],
+    'add' => ['create', fn () => SubscriptionPlan::class],
+    'reprice' => ['update', fn () => SubscriptionPlan::factory()->make()],
+    'withdraw' => ['delete', fn () => SubscriptionPlan::factory()->make()],
+])->with($superAdminsOnly);
 
 test('only super admins may record a payment against an invoice, even the billed agency\'s own admin may not', function (Role $role, bool $allowed) {
     $invoice = SubscriptionInvoice::factory()->make(['subscription_id' => 1, 'tenant_id' => 'dumaguete']);

@@ -21,6 +21,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property int $id
  * @property string $tenant_id
  * @property string|null $active_for_tenant_id
+ * @property int|null $subscription_plan_id
  * @property string $plan_name
  * @property int $amount_minor
  * @property string $currency
@@ -31,17 +32,18 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property Carbon $current_period_end_on
  * @property Carbon|null $next_billing_on
  * @property Carbon|null $trial_ends_on
- * @property Carbon|null $cancelled_on
+ * @property Carbon|null $cancelled_at
  * @property string|null $cancel_reason
  * @property Carbon|null $ends_on
  * @property int|null $created_by
- * @property Carbon|null $created_on
- * @property Carbon|null $updated_on
- * @property Carbon|null $deleted_on
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property Carbon|null $deleted_at
  */
 #[Fillable([
     'tenant_id',
     'active_for_tenant_id',
+    'subscription_plan_id',
     'plan_name',
     'amount_minor',
     'currency',
@@ -52,7 +54,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
     'current_period_end_on',
     'next_billing_on',
     'trial_ends_on',
-    'cancelled_on',
+    'cancelled_at',
     'cancel_reason',
     'ends_on',
     'created_by',
@@ -66,12 +68,6 @@ class Subscription extends Model
      * @use HasFactory<SubscriptionFactory>
      */
     use CentralConnection, HasFactory, SoftDeletes;
-
-    const CREATED_AT = 'created_on';
-
-    const UPDATED_AT = 'updated_on';
-
-    const DELETED_AT = 'deleted_on';
 
     /**
      * Get the attributes that should be cast.
@@ -89,7 +85,7 @@ class Subscription extends Model
             'current_period_end_on' => 'date',
             'next_billing_on' => 'date',
             'trial_ends_on' => 'date',
-            'cancelled_on' => 'datetime',
+            'cancelled_at' => 'datetime',
             'ends_on' => 'date',
         ];
     }

@@ -52,8 +52,8 @@ return new class extends Migration
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
 
-            $table->timestamp('created_on')->nullable()->index();
-            $table->softDeletes('deleted_on');
+            $table->timestamp('created_at')->nullable()->index();
+            $table->softDeletes();
 
             $table->index(['subject_type', 'subject_id']);
 

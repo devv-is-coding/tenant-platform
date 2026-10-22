@@ -18,9 +18,8 @@ class CreateDomainsTable extends Migration
             $table->string('domain', 255)->unique();
             $table->string('tenant_id');
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
             $table->foreign('tenant_id')->references('id')->on('tenants')->onUpdate('cascade')->onDelete('cascade');
         });
     }

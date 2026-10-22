@@ -55,7 +55,7 @@ test('email is not verified with invalid hash', function () {
 
 test('already verified user visiting verification link is redirected without firing event again', function () {
     $user = User::factory()->create([
-        'email_verified_on' => now(),
+        'email_verified_at' => now(),
     ]);
 
     Event::fake();

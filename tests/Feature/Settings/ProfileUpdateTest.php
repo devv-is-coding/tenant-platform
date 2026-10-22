@@ -38,7 +38,7 @@ test('profile information can be updated', function () {
     expect($user->username)->toEqual('test-user');
     expect($user->email)->toEqual('test@example.com');
     expect($user->contact_number)->toEqual('09123456789');
-    expect($user->email_verified_on)->toBeNull();
+    expect($user->email_verified_at)->toBeNull();
 });
 
 test('profile form is prefilled with the current user details', function () {
@@ -85,7 +85,7 @@ test('email verification status is unchanged when email address is unchanged', f
 
     $response->assertHasNoErrors();
 
-    expect($user->refresh()->email_verified_on)->not->toBeNull();
+    expect($user->refresh()->email_verified_at)->not->toBeNull();
 });
 
 test('user can delete their account', function () {

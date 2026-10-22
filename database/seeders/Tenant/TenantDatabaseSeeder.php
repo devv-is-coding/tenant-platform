@@ -20,8 +20,8 @@ class TenantDatabaseSeeder extends Seeder
     {
         DB::table('settings')->insertOrIgnore([
             'singleton' => 1,
-            'created_on' => now(),
-            'updated_on' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
     }
 }

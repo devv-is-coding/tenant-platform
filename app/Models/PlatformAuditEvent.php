@@ -29,8 +29,8 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property array<string, mixed>|null $context
  * @property string|null $ip_address
  * @property string|null $user_agent
- * @property Carbon|null $created_on
- * @property Carbon|null $deleted_on
+ * @property Carbon|null $created_at
+ * @property Carbon|null $deleted_at
  */
 #[Fillable([
     'tenant_id',
@@ -55,11 +55,7 @@ class PlatformAuditEvent extends Model
      */
     use CentralConnection, SoftDeletes;
 
-    const CREATED_AT = 'created_on';
-
     const UPDATED_AT = null;
-
-    const DELETED_AT = 'deleted_on';
 
     /**
      * Get the attributes that should be cast.

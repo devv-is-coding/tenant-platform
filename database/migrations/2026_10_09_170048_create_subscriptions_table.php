@@ -23,10 +23,9 @@ return new class extends Migration
      * Collapsing the two would mean a missed bank transfer takes a storefront
      * down the morning it falls due.
      *
-     * The plan is held as snapshots rather than a foreign key. There is no
-     * `subscription_plans` table yet, and because these columns record what the
-     * agency actually agreed to, one can be added later without migrating a
-     * single existing row.
+     * The plan is held as snapshots, not read through `subscription_plan_id`.
+     * These columns record what the agency actually agreed to, so a later
+     * change to the plan in the price list never reprices a live subscription.
      */
     public function up(): void
     {
@@ -40,6 +39,11 @@ return new class extends Migration
             // index on either driver, so this permits a full history of past
             // subscriptions per tenant but only one live one.
             $table->string('active_for_tenant_id')->nullable()->unique();
+
+            // The price-list plan this was started from. Bare column with no
+            // foreign key: subscription_plans is created after this table, and
+            // the snapshot columns below, not the plan, are the agreed terms.
+            $table->foreignId('subscription_plan_id')->nullable()->index();
 
             $table->string('plan_name');
             $table->unsignedBigInteger('amount_minor');
@@ -61,7 +65,7 @@ return new class extends Migration
 
             $table->date('trial_ends_on')->nullable();
 
-            $table->timestamp('cancelled_on')->nullable();
+            $table->timestamp('cancelled_at')->nullable();
             $table->string('cancel_reason')->nullable();
 
             // When access actually lapses, which may be after cancellation - a
@@ -74,9 +78,8 @@ return new class extends Migration
             // commercial record must outlive the operator who created it.
             $table->foreignId('created_by')->nullable()->index();
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['status', 'next_billing_on']);
 

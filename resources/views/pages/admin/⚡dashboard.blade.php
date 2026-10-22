@@ -284,8 +284,8 @@ new #[Title('Dashboard')] class extends Component {
 
         $receivedMinor = SubscriptionPayment::query()
             ->countingAsPaid()
-            ->where('paid_on', '>=', now()->startOfMonth())
-            ->where('paid_on', '<=', now())
+            ->where('paid_at', '>=', now()->startOfMonth())
+            ->where('paid_at', '<=', now())
             ->sum('amount_minor');
 
         return Money::ofMinor((int) $receivedMinor, config('tenancy.billing_currency'));
@@ -304,7 +304,7 @@ new #[Title('Dashboard')] class extends Component {
         return SubscriptionPayment::query()
             ->with(['tenant', 'invoice'])
             ->countingAsPaid()
-            ->latest('paid_on')
+            ->latest('paid_at')
             ->latest('id')
             ->limit(self::LIST_LIMIT)
             ->get();
@@ -318,7 +318,7 @@ new #[Title('Dashboard')] class extends Component {
     {
         $this->authorize('viewAny', PlatformAuditEvent::class);
 
-        return PlatformAuditEvent::query()->latest('created_on')->latest('id')->limit(self::ACTIVITY_LIMIT)->get();
+        return PlatformAuditEvent::query()->latest('created_at')->latest('id')->limit(self::ACTIVITY_LIMIT)->get();
     }
 
     /**
@@ -332,8 +332,8 @@ new #[Title('Dashboard')] class extends Component {
 
         return Tenant::query()
             ->where('status', $status)
-            ->latest('status_changed_on')
-            ->latest('created_on')
+            ->latest('status_changed_at')
+            ->latest('created_at')
             ->limit(self::LIST_LIMIT)
             ->get();
     }
@@ -560,7 +560,7 @@ new #[Title('Dashboard')] class extends Component {
                             </div>
                             <div class="text-end">
                                 <span class="font-medium">{{ Money::ofMinor($payment->amount_minor, $payment->currency)->format() }}</span>
-                                <flux:text size="sm">{{ $payment->paid_on?->toFormattedDateString() }}</flux:text>
+                                <flux:text size="sm">{{ $payment->paid_at?->toFormattedDateString() }}</flux:text>
                             </div>
                         </div>
                     @empty
@@ -600,7 +600,7 @@ new #[Title('Dashboard')] class extends Component {
                             <flux:table.cell class="align-top max-md:hidden">{{ $event->tenant_label ?? __('Platform') }}</flux:table.cell>
                             <flux:table.cell class="align-top max-sm:hidden">{{ $event->actor_label ?? __('System') }}</flux:table.cell>
                             <flux:table.cell align="end" class="align-top whitespace-nowrap">
-                                <time datetime="{{ $event->created_on?->toIso8601String() }}" title="{{ $event->created_on?->toDayDateTimeString() }}">{{ $event->created_on?->diffForHumans() }}</time>
+                                <time datetime="{{ $event->created_at?->toIso8601String() }}" title="{{ $event->created_at?->toDayDateTimeString() }}">{{ $event->created_at?->diffForHumans() }}</time>
                             </flux:table.cell>
                         </flux:table.row>
                     @empty

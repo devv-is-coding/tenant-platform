@@ -39,7 +39,7 @@ class DeleteSubscriptionAction
                 $locked->update([
                     'active_for_tenant_id' => null,
                     'status' => SubscriptionStatus::Cancelled,
-                    'cancelled_on' => now(),
+                    'cancelled_at' => now(),
                     'cancel_reason' => $reason,
                     'next_billing_on' => null,
                     'ends_on' => today(),

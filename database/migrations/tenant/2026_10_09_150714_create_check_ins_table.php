@@ -49,17 +49,16 @@ return new class extends Migration
             // A central user, so not a real foreign key.
             $table->foreignId('customer_id')->index();
 
-            $table->timestamp('checked_in_on');
+            $table->timestamp('checked_in_at');
 
             // The staff member who scanned, for the hotel direction.
             $table->foreignId('recorded_by')->nullable()->index();
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             $table->unique(['customer_id', 'itinerary_stop_id']);
-            $table->index(['booking_id', 'checked_in_on']);
+            $table->index(['booking_id', 'checked_in_at']);
         });
     }
 

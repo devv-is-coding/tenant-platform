@@ -13,9 +13,6 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             $table->renameColumn('name', 'username');
-            $table->renameColumn('email_verified_at', 'email_verified_on');
-            $table->renameColumn('created_at', 'created_on');
-            $table->renameColumn('updated_at', 'updated_on');
         });
 
         Schema::table('users', function (Blueprint $table) {
@@ -30,7 +27,7 @@ return new class extends Migration
             // Admins, managers and staff belong to one tenant; super admins and customers do not.
             $table->string('tenant_id')->nullable()->after('role');
             $table->boolean('is_active')->default(true)->after('tenant_id');
-            $table->softDeletes('deleted_on')->after('updated_on');
+            $table->softDeletes()->after('updated_at');
 
             $table->foreign('tenant_id')->references('id')->on('tenants')->cascadeOnUpdate()->cascadeOnDelete();
         });
@@ -53,7 +50,7 @@ return new class extends Migration
                 'role',
                 'tenant_id',
                 'is_active',
-                'deleted_on',
+                'deleted_at',
             ]);
 
             $table->dropUnique(['username']);
@@ -61,9 +58,6 @@ return new class extends Migration
 
         Schema::table('users', function (Blueprint $table) {
             $table->renameColumn('username', 'name');
-            $table->renameColumn('email_verified_on', 'email_verified_at');
-            $table->renameColumn('created_on', 'created_at');
-            $table->renameColumn('updated_on', 'updated_at');
         });
     }
 };

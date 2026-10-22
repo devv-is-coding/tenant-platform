@@ -47,7 +47,7 @@ test('the directory lists each agency with its status, domain and user count', f
 test('the directory pages through agencies newest first', function () {
     Tenant::factory()
         ->count(16)
-        ->sequence(fn (Sequence $sequence) => ['id' => "agency-{$sequence->index}", 'created_on' => now()->subDays($sequence->index)])
+        ->sequence(fn (Sequence $sequence) => ['id' => "agency-{$sequence->index}", 'created_at' => now()->subDays($sequence->index)])
         ->create();
 
     $directory = directory();

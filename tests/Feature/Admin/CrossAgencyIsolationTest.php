@@ -8,6 +8,7 @@ use App\Models\PlatformAuditEvent;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPayment;
+use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use App\Models\User;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
@@ -48,10 +49,10 @@ test('what a super admin does to one agency never reaches another', function () 
     agencyPageFor($acted)
         ->set('status_reason', 'Unpaid fees.')
         ->call('changeStatus', TenantStatus::Suspended->value)
-        ->set(['plan_name' => 'Agency Plus', 'amount' => '9000'])
+        ->set('subscription_plan_id', SubscriptionPlan::factory()->create()->id)
         ->call('startSubscription')
         ->call('openPaymentForm', $actedInvoice->id)
-        ->set(['payment_amount' => '1000', 'payment_method' => PaymentMethod::Cash->value, 'payment_paid_on' => today()->toDateString()])
+        ->set(['payment_amount' => '1000', 'payment_method' => PaymentMethod::Cash->value, 'payment_paid_at' => today()->toDateString()])
         ->call('recordPayment')
         ->assertHasNoErrors();
 
@@ -87,7 +88,7 @@ test('a payment cannot be recorded without opening an invoice of this agency fir
     SubscriptionInvoice::factory()->create();
 
     agencyPageFor($tenant)
-        ->set(['payment_amount' => '1', 'payment_paid_on' => today()->toDateString()])
+        ->set(['payment_amount' => '1', 'payment_paid_at' => today()->toDateString()])
         ->call('recordPayment')
         ->assertNotFound();
 

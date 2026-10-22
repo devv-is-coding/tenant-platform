@@ -48,9 +48,8 @@ return new class extends Migration
             $table->boolean('is_approved')->default(true);
             $table->boolean('is_featured')->default(false);
 
-            $table->timestamp('created_on')->nullable();
-            $table->timestamp('updated_on')->nullable();
-            $table->softDeletes('deleted_on');
+            $table->timestamps();
+            $table->softDeletes();
 
             $table->unique(['customer_id', 'booking_id']);
             $table->index(['item_id', 'is_approved', 'rating']);
