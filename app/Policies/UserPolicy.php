@@ -14,4 +14,12 @@ class UserPolicy
     {
         return $user->isSuperAdmin() && ! $model->isSuperAdmin();
     }
+
+    /**
+     * Determine whether the user can bring back a deleted agency user account.
+     */
+    public function restore(User $user, User $model): bool
+    {
+        return $user->isSuperAdmin() && ! $model->isSuperAdmin();
+    }
 }

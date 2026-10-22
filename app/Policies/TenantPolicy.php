@@ -37,7 +37,7 @@ class TenantPolicy
      */
     public function changeStatus(User $user, Tenant $tenant): bool
     {
-        return $user->isSuperAdmin();
+        return $user->isSuperAdmin() && ! $tenant->trashed();
     }
 
     /**
@@ -46,7 +46,7 @@ class TenantPolicy
      */
     public function manageSubscription(User $user, Tenant $tenant): bool
     {
-        return $user->isSuperAdmin();
+        return $user->isSuperAdmin() && ! $tenant->trashed();
     }
 
     /**
@@ -55,6 +55,15 @@ class TenantPolicy
      */
     public function delete(User $user, Tenant $tenant): bool
     {
-        return $user->isSuperAdmin();
+        return $user->isSuperAdmin() && ! $tenant->trashed();
+    }
+
+    /**
+     * Determine whether the user can bring back a deleted agency, with what
+     * was deleted along with it.
+     */
+    public function restore(User $user, Tenant $tenant): bool
+    {
+        return $user->isSuperAdmin() && $tenant->trashed();
     }
 }

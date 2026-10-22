@@ -100,6 +100,13 @@ class NavigationMenu
                         'building-office',
                         'admin.tenants.create',
                     ),
+                    $this->link(
+                        __('Restore requests'),
+                        __('Deleted records agency admins want back.'),
+                        route('admin.restore-requests.index'),
+                        'arrow-uturn-left',
+                        'admin.restore-requests.index',
+                    ),
                 ]),
                 $this->group(__('Billing'), [
                     $this->link(

@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\Passkey;
 use App\Models\PersonalAccessToken;
+use App\Models\RestoreRequest;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPayment;
@@ -48,6 +49,7 @@ class AppServiceProvider extends ServiceProvider
     protected function configureMorphMap(): void
     {
         Relation::morphMap([
+            'restore_request' => RestoreRequest::class,
             'subscription' => Subscription::class,
             'subscription_invoice' => SubscriptionInvoice::class,
             'subscription_payment' => SubscriptionPayment::class,

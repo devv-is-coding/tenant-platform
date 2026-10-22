@@ -56,7 +56,10 @@ Route::domain((string) parse_url((string) config('app.url'), PHP_URL_HOST))->gro
             // Registered before tenants/{tenant} so "create" is not read as a tenant id.
             Route::livewire('tenants/create', 'pages::admin.tenants.create')->name('tenants.create');
 
-            Route::livewire('tenants/{tenant}', 'pages::admin.tenants.show')->name('tenants.show');
+            // A deleted agency's page still opens, so it can be restored from there.
+            Route::livewire('tenants/{tenant}', 'pages::admin.tenants.show')->withTrashed()->name('tenants.show');
+
+            Route::livewire('restore-requests', 'pages::admin.restore-requests.index')->name('restore-requests.index');
 
             Route::livewire('plans', 'pages::admin.plans.index')->name('plans.index');
 

@@ -2,6 +2,7 @@
 
 use App\Enums\Role;
 use App\Models\PlatformAuditEvent;
+use App\Models\RestoreRequest;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPayment;
@@ -85,6 +86,54 @@ test('only super admins may delete an agency user, and never another super admin
     'agency admin deleting their own staff' => [Role::Admin, Role::Staff, false],
     'manager deleting staff' => [Role::Manager, Role::Staff, false],
 ]);
+
+test('only super admins may restore a deleted agency or its records, even the agency\'s own admin may not', function (Closure $makeRecord, Role $role, bool $allowed) {
+    $user = User::factory()->role($role)->make(['tenant_id' => $role->isTenantRole() ? 'dumaguete' : null]);
+
+    expect($user->can('restore', $makeRecord()))->toBe($allowed);
+})->with([
+    'agency' => [fn () => Tenant::factory()->make(['id' => 'dumaguete', 'deleted_at' => now()])],
+    'user' => [fn () => User::factory()->role(Role::Staff)->make(['tenant_id' => 'dumaguete'])],
+    'subscription' => [fn () => Subscription::factory()->make(['tenant_id' => 'dumaguete'])],
+    'invoice' => [fn () => SubscriptionInvoice::factory()->make(['subscription_id' => 1, 'tenant_id' => 'dumaguete'])],
+    'payment' => [fn () => SubscriptionPayment::factory()->make(['subscription_invoice_id' => 1, 'tenant_id' => 'dumaguete'])],
+])->with($superAdminsOnly);
+
+test('a deleted agency can be restored but no longer changed, and a live one cannot be restored', function () {
+    $superAdmin = User::factory()->superAdmin()->make();
+    $deleted = Tenant::factory()->make(['deleted_at' => now()]);
+    $live = Tenant::factory()->make();
+
+    expect($superAdmin->can('restore', $deleted))->toBeTrue()
+        ->and($superAdmin->can('restore', $live))->toBeFalse()
+        ->and($superAdmin->can('changeStatus', $deleted))->toBeFalse()
+        ->and($superAdmin->can('manageSubscription', $deleted))->toBeFalse()
+        ->and($superAdmin->can('delete', $deleted))->toBeFalse();
+});
+
+test('a super admin account is never restored from an agency page', function () {
+    expect(User::factory()->superAdmin()->make()->can('restore', User::factory()->superAdmin()->make()))->toBeFalse();
+});
+
+test('only the agency\'s own admin may ask for a restore', function (Role $role, ?string $tenantId, bool $allowed) {
+    $user = User::factory()->role($role)->make(['tenant_id' => $tenantId]);
+
+    expect($user->can('create', [RestoreRequest::class, Tenant::factory()->make(['id' => 'dumaguete'])]))->toBe($allowed);
+})->with([
+    'the agency\'s admin' => [Role::Admin, 'dumaguete', true],
+    'another agency\'s admin' => [Role::Admin, 'tanjay', false],
+    'the agency\'s manager' => [Role::Manager, 'dumaguete', false],
+    'the agency\'s staff' => [Role::Staff, 'dumaguete', false],
+    'a super admin' => [Role::SuperAdmin, null, false],
+    'a customer' => [Role::Customer, null, false],
+]);
+
+test('only super admins may see and decide restore requests', function (Role $role, bool $allowed) {
+    $user = User::factory()->role($role)->make(['tenant_id' => $role->isTenantRole() ? 'dumaguete' : null]);
+
+    expect($user->can('viewAny', RestoreRequest::class))->toBe($allowed)
+        ->and($user->can('decide', RestoreRequest::factory()->make(['tenant_id' => 'dumaguete', 'restorable_id' => 1, 'requested_by' => 1])))->toBe($allowed);
+})->with($superAdminsOnly);
 
 test('only super admins may see or change the price list', function (string $ability, Closure $subject, Role $role, bool $allowed) {
     $user = User::factory()->role($role)->make(['tenant_id' => $role->isTenantRole() ? 'dumaguete' : null]);

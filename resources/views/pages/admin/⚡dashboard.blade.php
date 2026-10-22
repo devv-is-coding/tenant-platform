@@ -1,10 +1,12 @@
 <?php
 
+use App\Enums\RestoreRequestStatus;
 use App\Enums\Role;
 use App\Enums\SubscriptionInvoiceStatus;
 use App\Enums\SubscriptionStatus;
 use App\Enums\TenantStatus;
 use App\Models\PlatformAuditEvent;
+use App\Models\RestoreRequest;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPayment;
@@ -99,6 +101,17 @@ new #[Title('Dashboard')] class extends Component {
     public function suspendedAgencies(): Collection
     {
         return $this->newestAgenciesIn(TenantStatus::Suspended);
+    }
+
+    /**
+     * Count the agency admins' restore requests waiting for a decision.
+     */
+    #[Computed]
+    public function pendingRestoreRequests(): int
+    {
+        $this->authorize('viewAny', RestoreRequest::class);
+
+        return RestoreRequest::query()->where('status', RestoreRequestStatus::Pending)->count();
     }
 
     /**
@@ -482,8 +495,17 @@ new #[Title('Dashboard')] class extends Component {
                 @php($pending = $this->pendingAgencies)
                 @php($suspended = $this->suspendedAgencies)
 
-                @if ($pending->isEmpty() && $suspended->isEmpty() && $this->pastDueSubscriptions->isEmpty() && $this->agenciesWithoutAdmin->isEmpty())
+                @if ($pending->isEmpty() && $suspended->isEmpty() && $this->pastDueSubscriptions->isEmpty() && $this->agenciesWithoutAdmin->isEmpty() && $this->pendingRestoreRequests === 0)
                     <flux:text>{{ __('Nothing needs a decision right now.') }}</flux:text>
+                @endif
+
+                @if ($this->pendingRestoreRequests > 0)
+                    <div>
+                        <flux:text size="sm" class="mb-1">{{ __('Restore requests') }}</flux:text>
+                        <flux:link :href="route('admin.restore-requests.index')" class="block py-1" wire:navigate>
+                            {{ trans_choice(':count request waiting|:count requests waiting', $this->pendingRestoreRequests) }}
+                        </flux:link>
+                    </div>
                 @endif
 
                 @if ($pending->isNotEmpty())

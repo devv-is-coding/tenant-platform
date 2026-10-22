@@ -1,5 +1,7 @@
 <?php
 
+use App\Actions\Restore\RestoreRecordAction;
+use App\Actions\Restore\RestoreTenantAction;
 use App\Actions\Subscriptions\DeleteSubscriptionAction;
 use App\Actions\Subscriptions\DeleteSubscriptionInvoiceAction;
 use App\Actions\Subscriptions\DeleteSubscriptionPaymentAction;
@@ -8,6 +10,7 @@ use App\Actions\Subscriptions\StartSubscriptionAction;
 use App\Actions\Tenants\ChangeTenantStatusAction;
 use App\Actions\Tenants\DeleteAgencyUserAction;
 use App\Actions\Tenants\DeleteTenantAction;
+use App\Enums\AuditAction;
 use App\Enums\PaymentMethod;
 use App\Enums\SubscriptionInvoiceStatus;
 use App\Enums\TenantStatus;
@@ -19,6 +22,7 @@ use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use App\Models\User;
 use App\ValueObjects\Money;
+use Carbon\CarbonInterface;
 use Flux\Flux;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -80,6 +84,17 @@ new class extends Component {
     public ?int $deleting_id = null;
 
     public string $delete_reason = '';
+
+    /**
+     * What the restore confirmation is open for: one of this agency's deleted
+     * users, subscriptions, invoices or payments. Set only by confirmRestore(),
+     * never by the browser.
+     */
+    #[Locked]
+    public ?string $restoring_type = null;
+
+    #[Locked]
+    public ?int $restoring_id = null;
 
     /**
      * Mount the component.
@@ -252,6 +267,150 @@ new class extends Component {
     }
 
     /**
+     * Bring the deleted agency back, with what was deleted along with it.
+     *
+     * Authorized here because Livewire's update requests do not re-run the
+     * console's route middleware.
+     */
+    public function restoreAgency(RestoreTenantAction $restoreTenant): void
+    {
+        $this->authorize('restore', $this->tenant);
+
+        $restoreTenant->handle(Auth::user(), $this->tenant);
+
+        unset($this->users, $this->subscription, $this->subscriptions, $this->invoices, $this->payments, $this->balanceOwed, $this->recentActivity, $this->deletedRecords, $this->agencyDeletion, $this->statusActions);
+        Flux::modals()->close();
+        Flux::toast(variant: 'success', text: __(':name was restored.', ['name' => $this->tenant->name ?? $this->tenant->id]));
+    }
+
+    /**
+     * Open the restore confirmation for one of this agency's deleted records.
+     */
+    public function confirmRestore(string $type, int $id): void
+    {
+        $record = $this->recordToRestore($type, $id);
+        $this->authorize('restore', $record);
+
+        $this->resetErrorBag();
+        $this->restoring_type = $type;
+        $this->restoring_id = $id;
+        unset($this->restoration);
+
+        Flux::modal('restore-record')->show();
+    }
+
+    /**
+     * Restore the record the confirmation is open for, with what its delete
+     * took along with it.
+     *
+     * The record is looked up through this agency, so a tampered request
+     * cannot reach another agency's rows.
+     */
+    public function restoreRecord(RestoreRecordAction $restoreRecord): void
+    {
+        $record = $this->recordToRestore((string) $this->restoring_type, (int) $this->restoring_id);
+        $this->authorize('restore', $record);
+
+        $restoreRecord->handle(Auth::user(), $this->tenant, $record);
+
+        $this->reset('restoring_type', 'restoring_id');
+        unset($this->users, $this->subscription, $this->subscriptions, $this->invoices, $this->payments, $this->balanceOwed, $this->recentActivity, $this->deletedRecords, $this->restoration);
+        Flux::modals()->close();
+        Flux::toast(variant: 'success', text: __(':name was restored.', ['name' => $restoreRecord->labelFor($record)]));
+    }
+
+    /**
+     * Describe the open restore confirmation: what comes back, and what comes
+     * back with it.
+     *
+     * @return array{name: string, cascade: string}|null
+     */
+    #[Computed]
+    public function restoration(): ?array
+    {
+        if ($this->restoring_type === null || $this->restoring_id === null) {
+            return null;
+        }
+
+        $record = $this->recordToRestore($this->restoring_type, $this->restoring_id);
+
+        return [
+            'name' => app(RestoreRecordAction::class)->labelFor($record),
+            'cascade' => match (true) {
+                $record instanceof User => __('They can sign in again.'),
+                $record instanceof Subscription => __('Invoices and payments deleted with it come back too. It stays cancelled: putting the agency on a plan is a separate step.'),
+                $record instanceof SubscriptionInvoice => __('Payments deleted with it come back too, and its paid amount is recalculated.'),
+                $record instanceof SubscriptionPayment => __('Its invoice\'s paid amount is recalculated with it.'),
+            },
+        ];
+    }
+
+    /**
+     * Get the agency's deleted users, subscriptions, invoices and payments,
+     * most recently deleted first. Empty while the agency itself is deleted:
+     * restoring the agency brings back what was deleted with it.
+     *
+     * @return list<array{type: string, id: int, kind: string, name: string, deleted_at: CarbonInterface|null}>
+     */
+    #[Computed]
+    public function deletedRecords(): array
+    {
+        if ($this->tenant->trashed()) {
+            return [];
+        }
+
+        $restoreRecord = app(RestoreRecordAction::class);
+        $describe = fn (string $type, string $kind) => fn (User|Subscription|SubscriptionInvoice|SubscriptionPayment $record): array => [
+            'type' => $type,
+            'id' => $record->id,
+            'kind' => $kind,
+            'name' => $restoreRecord->labelFor($record),
+            'deleted_at' => $record->deleted_at,
+        ];
+
+        return collect()
+            ->concat($this->tenant->users()->onlyTrashed()->get()->map($describe('user', __('User'))))
+            ->concat($this->tenant->subscriptions()->onlyTrashed()->get()->map($describe('subscription', __('Subscription'))))
+            ->concat($this->tenant->subscriptionInvoices()->onlyTrashed()->get()->map($describe('invoice', __('Invoice'))))
+            ->concat($this->tenant->subscriptionPayments()->onlyTrashed()->get()->map($describe('payment', __('Payment'))))
+            ->sortByDesc(fn (array $record): int => $record['deleted_at']?->getTimestamp() ?? 0)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Get when and why the agency was deleted, while it is.
+     *
+     * @return array{deleted_at: CarbonInterface|null, reason: string|null}|null
+     */
+    #[Computed]
+    public function agencyDeletion(): ?array
+    {
+        if (! $this->tenant->trashed()) {
+            return null;
+        }
+
+        return [
+            'deleted_at' => $this->tenant->deleted_at,
+            'reason' => $this->tenant->platformAuditEvents()->where('action', AuditAction::TenantDeleted)->latest('id')->value('description'),
+        ];
+    }
+
+    /**
+     * Find one of this agency's deleted records by type, or fail with a 404.
+     */
+    private function recordToRestore(string $type, int $id): User|Subscription|SubscriptionInvoice|SubscriptionPayment
+    {
+        return match ($type) {
+            'user' => $this->tenant->users()->onlyTrashed()->findOrFail($id),
+            'subscription' => $this->tenant->subscriptions()->onlyTrashed()->findOrFail($id),
+            'invoice' => $this->tenant->subscriptionInvoices()->onlyTrashed()->findOrFail($id),
+            'payment' => $this->tenant->subscriptionPayments()->onlyTrashed()->findOrFail($id),
+            default => abort(404),
+        };
+    }
+
+    /**
      * Describe what the open delete confirmation will remove, including what
      * cascades with it.
      *
@@ -297,6 +456,10 @@ new class extends Component {
     #[Computed]
     public function statusActions(): array
     {
+        if ($this->tenant->trashed()) {
+            return [];
+        }
+
         $name = $this->tenant->name ?? $this->tenant->id;
 
         return collect(TenantStatus::cases())
@@ -476,26 +639,28 @@ new class extends Component {
             </div>
         </div>
 
-        <flux:modal name="delete-agency" class="md:w-[28rem]">
-            <form wire:submit="deleteAgency" class="space-y-6">
-                <div>
-                    <flux:heading size="lg">{{ __('Delete :name?', ['name' => $tenant->name ?? $tenant->id]) }}</flux:heading>
-                    <flux:text class="mt-2">
-                        {{ __('Its users, domains, subscriptions, invoices and payments are deleted with it, and its address stops working. Nothing is destroyed: every row is kept with a deletion date, and so is the agency\'s own database and audit trail.') }}
-                    </flux:text>
-                </div>
-
-                <flux:textarea wire:model="delete_reason" :label="__('Reason')" rows="3" required />
-
-                <div class="flex justify-end gap-2">
-                    <flux:modal.close>
-                        <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
-                    </flux:modal.close>
-
-                    <flux:button type="submit" variant="danger">{{ __('Delete agency') }}</flux:button>
-                </div>
-            </form>
-        </flux:modal>
+        @can('delete', $tenant)
+            <flux:modal name="delete-agency" class="md:w-[28rem]">
+                <form wire:submit="deleteAgency" class="space-y-6">
+                    <div>
+                        <flux:heading size="lg">{{ __('Delete :name?', ['name' => $tenant->name ?? $tenant->id]) }}</flux:heading>
+                        <flux:text class="mt-2">
+                            {{ __('Its users, domains, subscriptions, invoices and payments are deleted with it, and its address stops working. Nothing is destroyed: every row is kept with a deletion date, and so is the agency\'s own database and audit trail.') }}
+                        </flux:text>
+                    </div>
+    
+                    <flux:textarea wire:model="delete_reason" :label="__('Reason')" rows="3" required />
+    
+                    <div class="flex justify-end gap-2">
+                        <flux:modal.close>
+                            <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                        </flux:modal.close>
+    
+                        <flux:button type="submit" variant="danger">{{ __('Delete agency') }}</flux:button>
+                    </div>
+                </form>
+            </flux:modal>
+        @endcan
 
         <flux:modal name="delete-record" class="md:w-[28rem]">
             @if ($this->deletion)
@@ -527,7 +692,42 @@ new class extends Component {
             {{ __('Onboarded :date', ['date' => $tenant->created_at?->toFormattedDateString()]) }}
         </flux:text>
 
-        @if ($tenant->status_reason)
+        @if ($this->agencyDeletion)
+            <flux:callout variant="danger" icon="trash" class="mt-4" :heading="__('Deleted :date', ['date' => $this->agencyDeletion['deleted_at']?->toFormattedDateString()])">
+                @if ($this->agencyDeletion['reason'])
+                    <flux:callout.text>{{ $this->agencyDeletion['reason'] }}</flux:callout.text>
+                @endif
+
+                @can('restore', $tenant)
+                    <x-slot name="actions">
+                        <flux:modal.trigger name="restore-agency">
+                            <flux:button size="sm">{{ __('Restore agency') }}</flux:button>
+                        </flux:modal.trigger>
+                    </x-slot>
+                @endcan
+            </flux:callout>
+
+            <flux:modal name="restore-agency" class="md:w-[28rem]">
+                <form wire:submit="restoreAgency" class="space-y-6">
+                    <div>
+                        <flux:heading size="lg">{{ __('Restore :name?', ['name' => $tenant->name ?? $tenant->id]) }}</flux:heading>
+                        <flux:text class="mt-2">
+                            {{ __('Its domains, users, subscriptions, invoices and payments deleted with it come back, and its address works again. Anything deleted before the agency stays deleted. Its subscriptions stay cancelled.') }}
+                        </flux:text>
+                    </div>
+
+                    <flux:error name="restore" />
+
+                    <div class="flex justify-end gap-2">
+                        <flux:modal.close>
+                            <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                        </flux:modal.close>
+
+                        <flux:button type="submit" variant="primary">{{ __('Restore agency') }}</flux:button>
+                    </div>
+                </form>
+            </flux:modal>
+        @elseif ($tenant->status_reason)
             <flux:callout icon="information-circle" class="mt-4" :heading="__(':status: :reason', ['status' => $tenant->status->label(), 'reason' => $tenant->status_reason])" />
         @endif
 
@@ -896,6 +1096,66 @@ new class extends Component {
                 </flux:table.rows>
             </flux:table>
         </section>
+
+        @if ($this->deletedRecords !== [])
+            <section class="flex flex-col gap-4 lg:col-span-3">
+                <div>
+                    <flux:heading size="lg" level="2">{{ __('Deleted records') }}</flux:heading>
+                    <flux:text class="mt-1">{{ __('Restoring a record brings back what was deleted with it. A record whose parent is still deleted needs the parent restored first.') }}</flux:text>
+                </div>
+
+                <flux:table>
+                    <flux:table.columns>
+                        <flux:table.column>{{ __('Record') }}</flux:table.column>
+                        <flux:table.column class="max-sm:hidden">{{ __('Type') }}</flux:table.column>
+                        <flux:table.column>{{ __('Deleted') }}</flux:table.column>
+                        <flux:table.column></flux:table.column>
+                    </flux:table.columns>
+
+                    <flux:table.rows>
+                        @foreach ($this->deletedRecords as $deleted)
+                            <flux:table.row :key="$deleted['type'].'-'.$deleted['id']">
+                                <flux:table.cell variant="strong">
+                                    {{ $deleted['name'] }}
+                                    <flux:text size="sm" class="sm:hidden">{{ $deleted['kind'] }}</flux:text>
+                                </flux:table.cell>
+
+                                <flux:table.cell class="max-sm:hidden">{{ $deleted['kind'] }}</flux:table.cell>
+
+                                <flux:table.cell>{{ $deleted['deleted_at']?->toFormattedDateString() }}</flux:table.cell>
+
+                                <flux:table.cell align="end">
+                                    <flux:button size="xs" variant="ghost" icon="arrow-uturn-left" inset="top bottom" wire:click="confirmRestore('{{ $deleted['type'] }}', {{ $deleted['id'] }})">
+                                        {{ __('Restore') }}
+                                    </flux:button>
+                                </flux:table.cell>
+                            </flux:table.row>
+                        @endforeach
+                    </flux:table.rows>
+                </flux:table>
+            </section>
+        @endif
+
+        <flux:modal name="restore-record" class="md:w-[28rem]">
+            @if ($this->restoration)
+                <form wire:submit="restoreRecord" class="space-y-6">
+                    <div>
+                        <flux:heading size="lg">{{ __('Restore :name?', ['name' => $this->restoration['name']]) }}</flux:heading>
+                        <flux:text class="mt-2">{{ $this->restoration['cascade'] }}</flux:text>
+                    </div>
+
+                    <flux:error name="restore" />
+
+                    <div class="flex justify-end gap-2">
+                        <flux:modal.close>
+                            <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                        </flux:modal.close>
+
+                        <flux:button type="submit" variant="primary">{{ __('Restore') }}</flux:button>
+                    </div>
+                </form>
+            @endif
+        </flux:modal>
 
         <section class="flex flex-col gap-4 lg:col-span-3">
             <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">

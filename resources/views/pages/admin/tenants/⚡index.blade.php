@@ -17,8 +17,14 @@ new #[Title('Agencies')] class extends Component {
     public string $search = '';
 
     /**
-     * A TenantStatus value, or empty for every status. Kept as a string because
-     * that is what the select and the query string hand back.
+     * The status filter's value for deleted agencies, which every other filter
+     * leaves out.
+     */
+    private const DELETED = 'deleted';
+
+    /**
+     * A TenantStatus value, "deleted", or empty for every live agency. Kept as
+     * a string because that is what the select and the query string hand back.
      */
     #[Url(except: '')]
     public string $status = '';
@@ -64,9 +70,13 @@ new #[Title('Agencies')] class extends Component {
 
         $search = trim($this->search);
 
+        $deleted = $this->status === self::DELETED;
+
         return Tenant::query()
-            ->with('domains')
+            // A deleted agency's domains were deleted with it; show them anyway.
+            ->with(['domains' => fn ($query) => $query->when($deleted, fn ($query) => $query->withTrashed())])
             ->withCount('users')
+            ->when($deleted, fn (Builder $query) => $query->onlyTrashed())
             ->when($search !== '', fn (Builder $query) => $query->search($search))
             ->when(TenantStatus::tryFrom((int) $this->status), fn (Builder $query, TenantStatus $status) => $query->where('status', $status))
             ->latest('created_at')
@@ -103,6 +113,8 @@ new #[Title('Agencies')] class extends Component {
             @foreach (TenantStatus::cases() as $case)
                 <flux:select.option :value="$case->value">{{ $case->label() }}</flux:select.option>
             @endforeach
+
+            <flux:select.option value="deleted">{{ __('Deleted') }}</flux:select.option>
         </flux:select>
     </div>
 
@@ -129,7 +141,11 @@ new #[Title('Agencies')] class extends Component {
                     <flux:table.cell class="max-md:hidden">{{ $tenant->domains->pluck('domain')->join(', ') }}</flux:table.cell>
 
                     <flux:table.cell>
-                        <flux:badge :color="$tenant->status->color()" size="sm" inset="top bottom">{{ $tenant->status->label() }}</flux:badge>
+                        @if ($tenant->trashed())
+                            <flux:badge color="red" size="sm" inset="top bottom">{{ __('Deleted') }}</flux:badge>
+                        @else
+                            <flux:badge :color="$tenant->status->color()" size="sm" inset="top bottom">{{ $tenant->status->label() }}</flux:badge>
+                        @endif
                     </flux:table.cell>
 
                     <flux:table.cell class="max-sm:hidden" align="end">{{ $tenant->users_count }}</flux:table.cell>

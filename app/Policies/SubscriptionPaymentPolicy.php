@@ -15,4 +15,12 @@ class SubscriptionPaymentPolicy
     {
         return $user->isSuperAdmin();
     }
+
+    /**
+     * Determine whether the user can bring back a deleted payment.
+     */
+    public function restore(User $user, SubscriptionPayment $subscriptionPayment): bool
+    {
+        return $user->isSuperAdmin();
+    }
 }
