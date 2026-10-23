@@ -12,46 +12,47 @@ namespace App\Enums;
  *
  * The list is code, not data, because a feature exists only where code checks
  * for it: the super admin decides which tier each one starts at, but cannot
- * invent one. Each case names the TODO item that wires its gate. Until then the
- * case is only a row in the console's tier matrix, so the tiers can be arranged
- * before launch.
+ * invent one. Each case names the TODO items whose screens and endpoints enforce
+ * it (TODO.md → *Plan gates*); services never check the tier. Until those are
+ * built the case is only a row in the console's tier matrix, so the tiers can be
+ * arranged before launch.
  */
 enum PlanFeature: string
 {
-    /** Tours, stays and visas in the catalog. Wired in TA-11 and TS-1. */
+    /** Tours, stays and visas in the catalog. Enforced in TS-1, TM-1 and CU-4. */
     case Catalog = 'catalog';
 
-    /** Inventory and date-ranged availability. Wired in TS-2. */
+    /** Inventory and date-ranged availability. Enforced in TS-2 and CU-4's availability. */
     case Inventory = 'inventory';
 
-    /** The bookings desk, approvals, and cash and partial payments. Wired in TS-4, TM-2 and TA-18. */
+    /** The bookings desk, approvals, and cash and partial payments. Enforced in TS-4, TM-2, TM-3, CU-5 and CU-7. */
     case Bookings = 'bookings';
 
-    /** The agency's branded app, with its logo and colours. Wired in TA-10 and CU-2. */
+    /** The agency's branded app, with its logo and colours. Enforced in TA-10 and CU-2's branding fields. */
     case BrandedApp = 'branded_app';
 
-    /** The in-app notification feed. Wired in TA-22. */
+    /** The booking-event notification feed. Enforced in TS-6 and CU-9; platform notices are never gated. */
     case Notifications = 'notifications';
 
-    /** Admin, Manager and Staff accounts. Wired in TA-9. */
+    /** Creating and editing Manager and Staff accounts. Enforced in TA-9; deactivating is never gated. */
     case Team = 'team';
 
-    /** The agency's own audit log. Wired in TA-5. */
+    /** Extras on the agency's own audit log. Enforced in TA-28; reading the log is never gated. */
     case AuditLog = 'audit_log';
 
-    /** Card payments through Stripe. Wired in TA-19 and CU-6. */
-    case StripePayments = 'stripe_payments';
-
-    /** Refunds through Stripe. Wired in TA-20. */
-    case StripeRefunds = 'stripe_refunds';
-
-    /** QR check-in and the guide's code. Wired in TA-23 and TS-5. */
+    /** QR check-in and the guide's code. Enforced in TS-5 and CU-10. */
     case QrCheckIn = 'qr_check_in';
 
-    /** The itinerary map. Wired in TS-3. */
+    /** Card payments through Stripe. Enforced in CU-6's payment link. */
+    case StripePayments = 'stripe_payments';
+
+    /** Refunds through Stripe. Enforced in TM-3's Stripe step; cash refunds are never gated. */
+    case StripeRefunds = 'stripe_refunds';
+
+    /** The itinerary map. Enforced in TS-3 and CU-4's itinerary coordinates. */
     case ItineraryMap = 'itinerary_map';
 
-    /** Reviews and wishlists, with moderation. Wired in TA-21, TM-4 and CU-8. */
+    /** Reviews and wishlists, with moderation. Enforced in TM-4 and CU-8. */
     case Reviews = 'reviews';
 
     /** CSV export of bookings and payments. Not on the roadmap yet: wired by its own TODO item. */
@@ -91,9 +92,9 @@ enum PlanFeature: string
             self::Notifications => __('Notification feed'),
             self::Team => __('Team accounts'),
             self::AuditLog => __('Audit log'),
+            self::QrCheckIn => __('QR check-in'),
             self::StripePayments => __('Card payments'),
             self::StripeRefunds => __('Card refunds'),
-            self::QrCheckIn => __('QR check-in'),
             self::ItineraryMap => __('Itinerary map'),
             self::Reviews => __('Reviews & wishlist'),
             self::CsvExport => __('CSV export'),
@@ -120,9 +121,9 @@ enum PlanFeature: string
             self::Notifications => __('The in-app notification feed.'),
             self::Team => __('Admin, Manager and Staff accounts.'),
             self::AuditLog => __('A record of who changed what at the agency.'),
+            self::QrCheckIn => __('Check-in by QR code, and the guide\'s code.'),
             self::StripePayments => __('Customers pay by card in the app.'),
             self::StripeRefunds => __('Card payments refunded through Stripe.'),
-            self::QrCheckIn => __('Check-in by QR code, and the guide\'s code.'),
             self::ItineraryMap => __('Each tour\'s stops on a map.'),
             self::Reviews => __('Customer reviews and wishlists, with moderation.'),
             self::CsvExport => __('Bookings and payments as a spreadsheet.'),
@@ -143,13 +144,13 @@ enum PlanFeature: string
     {
         return match ($this) {
             self::Catalog, self::Inventory, self::Bookings, self::BrandedApp,
-            self::Notifications, self::Team, self::AuditLog => PlanTier::Basic,
+            self::Notifications, self::Team, self::AuditLog, self::QrCheckIn => PlanTier::Basic,
 
-            self::StripePayments, self::StripeRefunds, self::QrCheckIn,
-            self::ItineraryMap, self::Reviews, self::CsvExport => PlanTier::Advanced,
+            self::StripePayments, self::StripeRefunds, self::ItineraryMap,
+            self::Reviews, self::CsvExport, self::WhiteLabel => PlanTier::Advanced,
 
-            self::WhiteLabel, self::Analytics, self::WeeklyReport, self::Promotions,
-            self::Broadcasts, self::MultilingualListings, self::PriorityRestore => PlanTier::Pro,
+            self::Analytics, self::WeeklyReport, self::Promotions, self::Broadcasts,
+            self::MultilingualListings, self::PriorityRestore => PlanTier::Pro,
         };
     }
 }

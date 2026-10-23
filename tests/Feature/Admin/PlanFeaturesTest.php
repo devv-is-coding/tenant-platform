@@ -176,7 +176,7 @@ test('an agency\'s tier is its live subscription\'s: trialing and past due keep 
     'past due' => [fn (Tenant $tenant) => Subscription::factory()->for($tenant)->pastDue()->create(['tier' => PlanTier::Advanced]), PlanTier::Advanced],
     'cancelled' => [fn (Tenant $tenant) => Subscription::factory()->for($tenant)->cancelled()->create(['tier' => PlanTier::Advanced]), null],
     'expired' => [fn (Tenant $tenant) => Subscription::factory()->for($tenant)->expired()->create(['tier' => PlanTier::Advanced]), null],
-    'never subscribed' => [fn (Tenant $tenant) => null, null],
+    'never subscribed' => [fn () => null, null],
 ]);
 
 test('an agency has exactly the features its tier includes, in order', function () {
@@ -189,5 +189,12 @@ test('an agency has exactly the features its tier includes, in order', function 
         PlanFeature::BrandedApp,
         PlanFeature::Notifications,
         PlanFeature::Team,
+        PlanFeature::QrCheckIn,
     ]);
+});
+
+test('QR check-in starts at Basic and full white-label at Advanced', function () {
+    expect(agencyOn(PlanTier::Basic)->hasFeature(PlanFeature::QrCheckIn))->toBeTrue()
+        ->and(agencyOn(PlanTier::Basic)->hasFeature(PlanFeature::WhiteLabel))->toBeFalse()
+        ->and(agencyOn(PlanTier::Advanced)->hasFeature(PlanFeature::WhiteLabel))->toBeTrue();
 });

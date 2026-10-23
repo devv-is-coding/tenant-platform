@@ -289,57 +289,62 @@ new #[Title('Plans')] class extends Component {
         @else
             @php($plansByTier = $this->plans->groupBy(fn (SubscriptionPlan $plan): int => $plan->tier->value))
 
-            @foreach (PlanTier::cases() as $planTier)
-                <div class="flex flex-col gap-2" wire:key="tier-{{ $planTier->value }}">
-                    <div class="flex items-center gap-2">
-                        <flux:badge :color="$planTier->color()" size="sm">{{ $planTier->label() }}</flux:badge>
-                        <flux:text size="sm">{{ $planTier->pitch() }}</flux:text>
-                    </div>
+            {{-- One table with a header row per tier, so every tier's columns line up. --}}
+            <flux:table>
+                <flux:table.columns>
+                    <flux:table.column>{{ __('Plan') }}</flux:table.column>
+                    <flux:table.column align="end">{{ __('Price') }}</flux:table.column>
+                    <flux:table.column class="max-sm:hidden">{{ __('Billed') }}</flux:table.column>
+                    <flux:table.column align="end" class="max-md:hidden">{{ __('Agencies on it') }}</flux:table.column>
+                    <flux:table.column align="end"><span class="sr-only">{{ __('Actions') }}</span></flux:table.column>
+                </flux:table.columns>
 
-                    <flux:table>
-                        <flux:table.columns>
-                            <flux:table.column>{{ __('Plan') }}</flux:table.column>
-                            <flux:table.column align="end">{{ __('Price') }}</flux:table.column>
-                            <flux:table.column class="max-sm:hidden">{{ __('Billed') }}</flux:table.column>
-                            <flux:table.column align="end" class="max-md:hidden">{{ __('Agencies on it') }}</flux:table.column>
-                            <flux:table.column align="end"><span class="sr-only">{{ __('Actions') }}</span></flux:table.column>
-                        </flux:table.columns>
+                <flux:table.rows>
+                    @foreach (PlanTier::cases() as $planTier)
+                        <flux:table.row :key="'tier-'.$planTier->value" class="bg-zinc-50 dark:bg-white/5">
+                            <flux:table.cell colspan="5">
+                                <div class="flex items-center gap-2">
+                                    <flux:badge :color="$planTier->color()" size="sm" inset="top bottom">{{ $planTier->label() }}</flux:badge>
+                                    <flux:text size="sm">{{ $planTier->pitch() }}</flux:text>
+                                </div>
+                            </flux:table.cell>
+                        </flux:table.row>
 
-                        <flux:table.rows>
-                            @forelse ($plansByTier->get($planTier->value, []) as $plan)
-                                <flux:table.row :key="$plan->id">
-                                    <flux:table.cell variant="strong">
-                                        {{ $plan->name }}
-                                        <flux:text size="sm" class="sm:hidden">{{ $plan->interval->label() }}</flux:text>
-                                    </flux:table.cell>
+                        @forelse ($plansByTier->get($planTier->value, []) as $plan)
+                            <flux:table.row :key="$plan->id">
+                                <flux:table.cell variant="strong">
+                                    {{ $plan->name }}
+                                    <flux:text size="sm" class="sm:hidden">{{ $plan->interval->label() }}</flux:text>
+                                </flux:table.cell>
 
-                                    <flux:table.cell align="end">{{ Money::ofMinor($plan->amount_minor, $plan->currency)->format() }}</flux:table.cell>
+                                <flux:table.cell align="end" class="tabular-nums">{{ Money::ofMinor($plan->amount_minor, $plan->currency)->format() }}</flux:table.cell>
 
-                                    <flux:table.cell class="max-sm:hidden">{{ $plan->interval->label() }}</flux:table.cell>
+                                <flux:table.cell class="max-sm:hidden">{{ $plan->interval->label() }}</flux:table.cell>
 
-                                    <flux:table.cell align="end" class="max-md:hidden tabular-nums">{{ $plan->live_subscriptions_count }}</flux:table.cell>
+                                <flux:table.cell align="end" class="max-md:hidden tabular-nums">{{ $plan->live_subscriptions_count }}</flux:table.cell>
 
-                                    <flux:table.cell align="end">
-                                        <div class="flex justify-end gap-1">
-                                            @can('update', $plan)
-                                                <flux:button size="xs" variant="ghost" icon="pencil-square" inset="top bottom" wire:click="editPlan({{ $plan->id }})" :aria-label="__('Edit :name', ['name' => $plan->name])" />
-                                            @endcan
+                                <flux:table.cell align="end">
+                                    <div class="flex justify-end gap-1">
+                                        @can('update', $plan)
+                                            <flux:button size="xs" variant="ghost" icon="pencil-square" inset="top bottom" wire:click="editPlan({{ $plan->id }})" :aria-label="__('Edit :name', ['name' => $plan->name])" />
+                                        @endcan
 
-                                            @can('delete', $plan)
-                                                <flux:button size="xs" variant="ghost" icon="trash" inset="top bottom" wire:click="confirmDelete({{ $plan->id }})" :aria-label="__('Delete :name', ['name' => $plan->name])" />
-                                            @endcan
-                                        </div>
-                                    </flux:table.cell>
-                                </flux:table.row>
-                            @empty
-                                <flux:table.row>
-                                    <flux:table.cell colspan="5" class="py-6 text-center">{{ __('No :tier plan yet.', ['tier' => $planTier->label()]) }}</flux:table.cell>
-                                </flux:table.row>
-                            @endforelse
-                        </flux:table.rows>
-                    </flux:table>
-                </div>
-            @endforeach
+                                        @can('delete', $plan)
+                                            <flux:button size="xs" variant="ghost" icon="trash" inset="top bottom" wire:click="confirmDelete({{ $plan->id }})" :aria-label="__('Delete :name', ['name' => $plan->name])" />
+                                        @endcan
+                                    </div>
+                                </flux:table.cell>
+                            </flux:table.row>
+                        @empty
+                            <flux:table.row :key="'tier-'.$planTier->value.'-empty'">
+                                <flux:table.cell colspan="5" class="py-4 text-center">
+                                    <flux:text size="sm">{{ __('No :tier plan yet.', ['tier' => $planTier->label()]) }}</flux:text>
+                                </flux:table.cell>
+                            </flux:table.row>
+                        @endforelse
+                    @endforeach
+                </flux:table.rows>
+            </flux:table>
         @endif
     </section>
 

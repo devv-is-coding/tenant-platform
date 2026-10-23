@@ -204,8 +204,8 @@ class SubscriptionSeeder extends Seeder
     private function tierFor(string $tenantId): PlanTier
     {
         return match ($tenantId) {
-            'dumaguete', 'bayawan' => PlanTier::Pro,
-            'tanjay' => PlanTier::Advanced,
+            'dumaguete', 'zamboanguita' => PlanTier::Pro,
+            'bayawan' => PlanTier::Advanced,
             default => PlanTier::Basic,
         };
     }

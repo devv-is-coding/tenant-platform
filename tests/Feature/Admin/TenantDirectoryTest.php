@@ -1,7 +1,10 @@
 <?php
 
+use App\Enums\BillingInterval;
+use App\Enums\PlanTier;
 use App\Enums\Role;
 use App\Enums\TenantStatus;
+use App\Models\Subscription;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Sequence;
@@ -42,6 +45,26 @@ test('the directory lists each agency with its status, domain and user count', f
         ->assertOk()
         ->assertSeeInOrder(['Dumaguete City Travel & Tours', 'dumaguete.localhost', 'Suspended', '2'])
         ->assertSee(route('admin.tenants.show', $tenant));
+});
+
+test('the directory shows each agency\'s tier, plan, price and billing status', function () {
+    Subscription::factory()->for(Tenant::factory()->create(['name' => 'Alpha Tours', 'created_at' => now()->subDays(1)]))->create([
+        'plan_name' => 'Pro Monthly', 'tier' => PlanTier::Pro, 'amount_minor' => 350000, 'interval' => BillingInterval::Monthly,
+    ]);
+    Subscription::factory()->for(Tenant::factory()->create(['name' => 'Beta Tours', 'created_at' => now()->subDays(2)]))->pastDue()->create([
+        'plan_name' => 'Basic Annual', 'tier' => PlanTier::Basic, 'amount_minor' => 1800000, 'interval' => BillingInterval::Annual,
+    ]);
+    Subscription::factory()->for(Tenant::factory()->create(['name' => 'Gamma Tours', 'created_at' => now()->subDays(3)]))->expired()->create([
+        'plan_name' => 'Old Plan', 'tier' => PlanTier::Pro,
+    ]);
+
+    directory()
+        ->assertSeeInOrder([
+            'Alpha Tours', 'Pro', 'Pro Monthly', '₱3,500.00', 'Monthly', 'Active',
+            'Beta Tours', 'Basic', 'Basic Annual', '₱18,000.00', 'Annual', 'Past due',
+            'Gamma Tours', 'No plan',
+        ])
+        ->assertDontSee('Old Plan');
 });
 
 test('the directory pages through agencies newest first', function () {
