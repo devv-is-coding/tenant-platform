@@ -2,6 +2,7 @@
 
 use App\Enums\TenantStatus;
 use App\Models\Tenant;
+use App\ValueObjects\Money;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Computed;
@@ -75,6 +76,7 @@ new #[Title('Agencies')] class extends Component {
         return Tenant::query()
             // A deleted agency's domains were deleted with it; show them anyway.
             ->with(['domains' => fn ($query) => $query->when($deleted, fn ($query) => $query->withTrashed())])
+            ->with('liveSubscription')
             ->withCount('users')
             ->when($deleted, fn (Builder $query) => $query->onlyTrashed())
             ->when($search !== '', fn (Builder $query) => $query->search($search))
@@ -123,6 +125,9 @@ new #[Title('Agencies')] class extends Component {
             <flux:table.column>{{ __('Agency') }}</flux:table.column>
             <flux:table.column class="max-md:hidden">{{ __('Domain') }}</flux:table.column>
             <flux:table.column>{{ __('Status') }}</flux:table.column>
+            <flux:table.column>{{ __('Tier') }}</flux:table.column>
+            <flux:table.column class="max-sm:hidden">{{ __('Plan') }}</flux:table.column>
+            <flux:table.column class="max-md:hidden">{{ __('Billing') }}</flux:table.column>
             <flux:table.column class="max-sm:hidden" align="end">{{ __('Users') }}</flux:table.column>
             <flux:table.column class="max-lg:hidden">{{ __('Onboarded') }}</flux:table.column>
         </flux:table.columns>
@@ -148,13 +153,46 @@ new #[Title('Agencies')] class extends Component {
                         @endif
                     </flux:table.cell>
 
+                    @php($subscription = $tenant->liveSubscription)
+
+                    <flux:table.cell>
+                        @if ($subscription)
+                            <flux:badge :color="$subscription->tier->color()" size="sm" inset="top bottom">{{ $subscription->tier->label() }}</flux:badge>
+                        @else
+                            <flux:text size="sm">{{ __('No plan') }}</flux:text>
+                        @endif
+                    </flux:table.cell>
+
+                    <flux:table.cell class="max-sm:hidden">
+                        @if ($subscription)
+                            <div class="flex flex-col gap-1 py-1">
+                                <span class="font-medium text-zinc-800 dark:text-white">{{ $subscription->plan_name }}</span>
+                                <flux:text size="sm" class="tabular-nums">
+                                    {{ Money::ofMinor($subscription->amount_minor, $subscription->currency)->format() }}
+                                    <span aria-hidden="true" class="mx-1">·</span>
+                                    {{ $subscription->interval->label() }}
+                                </flux:text>
+                            </div>
+                        @else
+                            <span aria-hidden="true" class="text-zinc-400">—</span>
+                        @endif
+                    </flux:table.cell>
+
+                    <flux:table.cell class="max-md:hidden">
+                        @if ($subscription)
+                            <flux:badge :color="$subscription->status->color()" size="sm" inset="top bottom">{{ $subscription->status->label() }}</flux:badge>
+                        @else
+                            <span aria-hidden="true" class="text-zinc-400">—</span>
+                        @endif
+                    </flux:table.cell>
+
                     <flux:table.cell class="max-sm:hidden" align="end">{{ $tenant->users_count }}</flux:table.cell>
 
                     <flux:table.cell class="max-lg:hidden">{{ $tenant->created_at?->toFormattedDateString() }}</flux:table.cell>
                 </flux:table.row>
             @empty
                 <flux:table.row>
-                    <flux:table.cell colspan="5" class="py-12 text-center">
+                    <flux:table.cell colspan="8" class="py-12 text-center">
                         {{ $search === '' && $status === '' ? __('No agencies have been onboarded yet.') : __('No agencies match your search.') }}
                     </flux:table.cell>
                 </flux:table.row>

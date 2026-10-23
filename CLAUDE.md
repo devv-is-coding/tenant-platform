@@ -254,6 +254,7 @@ When the work tracks a GitHub Issue, include its number:
 7. Do not commit directly to `main` unless the user or the established project workflow explicitly permits it.
 8. Do not rename or delete existing branches just to enforce this convention.
 9. Never discard user changes or run destructive Git operations without explicit authorization.
+10. Keep one merged sub-branch as a rollback point before deleting it: when creating a new sub-branch, check for local branches already fully merged into `main` (`git branch --merged main`), but only delete one that is not the single most-recently-merged sub-branch — i.e. a merged branch is deleted once a later sub-branch exists after it, never the newest one. Do this without asking first; it is routine cleanup, not a destructive operation on unmerged work. Never delete a branch that is not merged into `main`, or the branch currently checked out.
 
 ### Branch Names vs. Commit Messages
 
