@@ -300,6 +300,12 @@ Branch naming and commit messages are separate conventions; commits still follow
 - Exempt: framework and package plumbing (`sessions`, `cache`, `jobs`, `password_reset_tokens`, `passkeys`, `personal_access_tokens`), and `inventory_allocations`, which must be hard-deleted on release — a soft-deleted allocation still holds its unique slot and would block resale (see that migration).
 - A soft-deleted row still occupies its unique keys, so an existence check or a "count + 1" reference number guarding a unique column must use `withTrashed()`.
 
+## UI Consistency
+
+- Every new screen reuses the designs that already exist, so the whole app looks and behaves alike. Before building a page, find the closest existing one (the super admin console in `resources/views/pages/admin/` is the reference) and copy its layout, spacing, typography, colours, icons and patterns for lists, tables, filters, detail pages, modals, empty states, badges and flash messages.
+- Reuse the shared layouts (`resources/views/layouts/`), components (`resources/views/components/`, `resources/views/flux/`) and partials rather than writing new markup for something that already exists. When two screens need the same piece, extract it into a component instead of copying it.
+- Do not introduce a new visual style, colour, or interaction pattern for one screen. If none of the existing designs fit, ask first.
+
 ## Onboarding Forms
 
 - Build onboarding flows as a step-by-step wizard modeled on `resources/views/pages/admin/tenants/⚡create.blade.php`; copy its structure rather than starting from a plain form.
