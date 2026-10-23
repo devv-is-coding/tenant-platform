@@ -14,6 +14,7 @@ use App\Actions\Tenants\DeleteTenantAction;
 use App\Actions\Tenants\RevokeAgencyAdminAction;
 use App\Enums\AuditAction;
 use App\Enums\PaymentMethod;
+use App\Enums\PlanFeature;
 use App\Enums\Role;
 use App\Enums\SubscriptionInvoiceStatus;
 use App\Enums\TenantStatus;
@@ -681,14 +682,28 @@ new class extends Component {
     }
 
     /**
-     * Get the plans in the price list the agency can be put on.
+     * Get every feature the agency's tier includes now.
+     *
+     * The live subscription is reloaded rather than read from the model, since
+     * an action earlier in this request may have just changed it.
+     *
+     * @return list<PlanFeature>
+     */
+    #[Computed]
+    public function features(): array
+    {
+        return $this->tenant->load('liveSubscription')->features();
+    }
+
+    /**
+     * Get the plans in the price list the agency can be put on, by tier.
      *
      * @return Collection<int, SubscriptionPlan>
      */
     #[Computed]
     public function plans(): Collection
     {
-        return SubscriptionPlan::query()->orderBy('name')->get();
+        return SubscriptionPlan::query()->orderBy('tier')->orderBy('name')->get();
     }
 
     /**
@@ -1073,7 +1088,10 @@ new class extends Component {
             <flux:card class="flex flex-col gap-4">
                 @if ($this->subscription)
                     <div class="flex items-center justify-between gap-3">
-                        <flux:heading>{{ $this->subscription->plan_name }}</flux:heading>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <flux:heading>{{ $this->subscription->plan_name }}</flux:heading>
+                            <flux:badge :color="$this->subscription->tier->color()" size="sm">{{ $this->subscription->tier->label() }}</flux:badge>
+                        </div>
                         <flux:badge :color="$this->subscription->status->color()" size="sm">{{ $this->subscription->status->label() }}</flux:badge>
                     </div>
 
@@ -1097,6 +1115,20 @@ new class extends Component {
                             <dd>{{ $this->subscription->ends_on->toFormattedDateString() }}</dd>
                         @endif
                     </dl>
+
+                    <div>
+                        <flux:text size="sm" class="mb-2">{{ __('Features the agency has now') }}</flux:text>
+
+                        @if ($this->features === [])
+                            <flux:text>{{ __('None: the agency has no live plan.') }}</flux:text>
+                        @else
+                            <ul class="flex flex-wrap gap-1.5">
+                                @foreach ($this->features as $feature)
+                                    <li wire:key="feature-{{ $feature->value }}"><flux:badge size="sm" color="zinc">{{ $feature->label() }}</flux:badge></li>
+                                @endforeach
+                            </ul>
+                        @endif
+                    </div>
                 @else
                     <flux:text>{{ __('This agency has never had a subscription.') }}</flux:text>
                 @endif
@@ -1112,7 +1144,7 @@ new class extends Component {
                             @if ($this->subscription?->status->isLive())
                                 {{ __('The new plan starts today. :plan ends today and stays in the history.', ['plan' => $this->subscription->plan_name]) }}
                             @else
-                                {{ __('The plan starts today. Its name, price and billing interval are recorded as agreed.') }}
+                                {{ __('The plan starts today. Its name, tier, price and billing interval are recorded as agreed.') }}
                             @endif
                         </flux:text>
                     </div>
@@ -1128,7 +1160,7 @@ new class extends Component {
                         <flux:select wire:model="subscription_plan_id" :label="__('Plan')" :placeholder="__('Choose a plan…')" required>
                             @foreach ($this->plans as $plan)
                                 <flux:select.option :value="$plan->id" wire:key="plan-{{ $plan->id }}">
-                                    {{ $plan->name }} · {{ Money::ofMinor($plan->amount_minor, $plan->currency)->format() }} · {{ $plan->interval->label() }}
+                                    {{ $plan->tier->label() }} · {{ $plan->name }} · {{ Money::ofMinor($plan->amount_minor, $plan->currency)->format() }} · {{ $plan->interval->label() }}
                                 </flux:select.option>
                             @endforeach
                         </flux:select>
@@ -1163,7 +1195,10 @@ new class extends Component {
                 <flux:table.rows>
                     @forelse ($this->subscriptions as $pastSubscription)
                         <flux:table.row :key="$pastSubscription->id">
-                            <flux:table.cell variant="strong">{{ $pastSubscription->plan_name }}</flux:table.cell>
+                            <flux:table.cell variant="strong">
+                                {{ $pastSubscription->plan_name }}
+                                <flux:badge :color="$pastSubscription->tier->color()" size="sm" inset="top bottom" class="ms-1">{{ $pastSubscription->tier->label() }}</flux:badge>
+                            </flux:table.cell>
                             <flux:table.cell>
                                 {{ Money::ofMinor($pastSubscription->amount_minor, $pastSubscription->currency)->format() }}
                                 <flux:text size="sm">{{ $pastSubscription->interval->label() }}</flux:text>
@@ -1412,7 +1447,7 @@ new class extends Component {
             <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <flux:heading size="lg" level="2">{{ __('Recent activity') }}</flux:heading>
 
-                @can('viewAny', PlatformAuditEvent::class)
+                @can('viewAny', \App\Models\PlatformAuditEvent::class)
                     <flux:link :href="route('admin.audit.index', ['tenant' => $tenant->id])" variant="subtle" class="text-sm" wire:navigate>
                         {{ __('View the full audit log') }}
                     </flux:link>

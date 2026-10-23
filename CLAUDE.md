@@ -312,6 +312,7 @@ Branch naming and commit messages are separate conventions; commits still follow
 - In Pest tests Intelephense reports `$this->assertModelExists()`, `$this->get()` and similar as "Undefined method", because it does not know Pest binds `$this` to the TestCase. Fix it the project's way: Pest's function helpers (`use function Pest\Laravel\assertModelExists;`, `get`, `actingAs`, `withoutExceptionHandling`) and `expect()` instead of `$this->assert*()`.
 - Check every language the change touched, not only PHP/Intelephense: Blade, CSS, JS, JSON and config files all report separately.
 - Also re-check files you did not edit whose diagnostics the change could affect.
+- Make this the last step: run it after your final edit, as a whole-workspace sweep (`getDiagnostics` with no `uri`), and run it again after any later edit. Do not end the task or report it done while a single error or warning remains, and never report one as "left over" or "stale". If you believe a tool's index is stale, refresh it (re-run or re-save what it indexes) and check again; if the warning stays, it is real and must be resolved.
 - When a warning is a false positive from tooling that does not understand valid syntax (for example VS Code's CSS service not knowing Tailwind v4's `@theme`, `@source` or `@apply`), silence it at its source — e.g. `.vscode/css-custom-data.json` — rather than leaving it or rewriting correct code to satisfy it.
 
 ## CLAUDE.md Modification Policy

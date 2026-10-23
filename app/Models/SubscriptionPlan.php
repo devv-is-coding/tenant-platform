@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\BillingInterval;
+use App\Enums\PlanTier;
 use Database\Factories\SubscriptionPlanFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,6 +19,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  *
  * @property int $id
  * @property string $name
+ * @property PlanTier $tier
  * @property int $amount_minor
  * @property string $currency
  * @property BillingInterval $interval
@@ -28,6 +30,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  */
 #[Fillable([
     'name',
+    'tier',
     'amount_minor',
     'currency',
     'interval',
@@ -52,6 +55,7 @@ class SubscriptionPlan extends Model
     {
         return [
             'interval' => BillingInterval::class,
+            'tier' => PlanTier::class,
             'amount_minor' => 'integer',
         ];
     }

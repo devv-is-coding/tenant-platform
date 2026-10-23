@@ -22,9 +22,9 @@ class StartSubscriptionAction
      * Put an agency on a plan from the price list, starting today, and end the
      * plan it was on.
      *
-     * The plan's name, price and interval are snapshotted onto the row, which
-     * records what the agency agreed to: repricing or withdrawing the plan
-     * later never changes it.
+     * The plan's name, tier, price and interval are snapshotted onto the row,
+     * which records what the agency agreed to: repricing, re-tiering or
+     * withdrawing the plan later never changes it.
      *
      * An agency has at most one live subscription, which the unique
      * `active_for_tenant_id` slot enforces. The live one is ended first, with
@@ -61,6 +61,7 @@ class StartSubscriptionAction
                     'active_for_tenant_id' => $locked->id,
                     'subscription_plan_id' => $plan->id,
                     'plan_name' => $plan->name,
+                    'tier' => $plan->tier,
                     'amount_minor' => $plan->amount_minor,
                     'currency' => $plan->currency,
                     'interval' => $plan->interval,
@@ -118,12 +119,13 @@ class StartSubscriptionAction
     /**
      * Describe how the new plan differs from the one it replaced.
      *
-     * @return array{plan_name: array{old: string, new: string}, amount_minor: array{old: int, new: int}, interval: array{old: int, new: int}}
+     * @return array{plan_name: array{old: string, new: string}, tier: array{old: int, new: int}, amount_minor: array{old: int, new: int}, interval: array{old: int, new: int}}
      */
     private function changesBetween(Subscription $previous, Subscription $subscription): array
     {
         return [
             'plan_name' => ['old' => $previous->plan_name, 'new' => $subscription->plan_name],
+            'tier' => ['old' => $previous->tier->value, 'new' => $subscription->tier->value],
             'amount_minor' => ['old' => $previous->amount_minor, 'new' => $subscription->amount_minor],
             'interval' => ['old' => $previous->interval->value, 'new' => $subscription->interval->value],
         ];

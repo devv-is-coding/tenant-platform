@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\PlanTier;
 use App\Enums\RestoreRequestStatus;
 use App\Enums\Role;
 use App\Enums\SubscriptionInvoiceStatus;
@@ -146,6 +147,27 @@ new #[Title('Dashboard')] class extends Component {
         return collect(SubscriptionStatus::cases())
             ->filter(fn (SubscriptionStatus $status): bool => $status->isLive())
             ->mapWithKeys(fn (SubscriptionStatus $status): array => [$status->value => (int) ($counts[$status->value] ?? 0)])
+            ->all();
+    }
+
+    /**
+     * Count live agencies on each tier, every tier listed even at zero.
+     *
+     * @return array<int, int> keyed by PlanTier value
+     */
+    #[Computed]
+    public function liveTiers(): array
+    {
+        $this->authorize('viewAny', Tenant::class);
+
+        $counts = Subscription::query()->toBase()
+            ->whereNotNull('active_for_tenant_id')
+            ->selectRaw('tier, COUNT(*) as aggregate')
+            ->groupBy('tier')
+            ->pluck('aggregate', 'tier');
+
+        return collect(PlanTier::cases())
+            ->mapWithKeys(fn (PlanTier $tier): array => [$tier->value => (int) ($counts[$tier->value] ?? 0)])
             ->all();
     }
 
@@ -453,6 +475,17 @@ new #[Title('Dashboard')] class extends Component {
                         <span class="font-medium tabular-nums">{{ $this->agenciesWithoutSubscription }}</span>
                     </li>
                 </ul>
+
+                <div>
+                    <flux:text size="sm" class="mb-1">{{ __('Live agencies by tier') }}</flux:text>
+
+                    <div class="flex flex-wrap gap-2">
+                        @foreach ($this->liveTiers as $tierValue => $count)
+                            @php($planTier = PlanTier::from($tierValue))
+                            <flux:badge size="sm" :color="$planTier->color()">{{ $planTier->label() }} · {{ $count }}</flux:badge>
+                        @endforeach
+                    </div>
+                </div>
 
                 @if ($this->livePlans)
                     <div>

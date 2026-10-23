@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureTenantHasFeature;
 use App\Http\Middleware\InitializeTenancyUnlessCentral;
 use App\Http\Middleware\PreventWritesWhileTenantIsRestricted;
 use Illuminate\Foundation\Application;
@@ -45,6 +46,11 @@ return Application::configure(basePath: dirname(__DIR__))
             InitializeTenancyByDomain::class,
             PreventAccessFromCentralDomains::class,
             PreventWritesWhileTenantIsRestricted::class,
+        ]);
+
+        // Gates a route on the agency's plan tier; see EnsureTenantHasFeature::using().
+        $middleware->alias([
+            'feature' => EnsureTenantHasFeature::class,
         ]);
 
         // Guests opening an admin page are sent to the admin homepage, one step

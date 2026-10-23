@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\BillingInterval;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentRecordStatus;
+use App\Enums\PlanTier;
 use App\Enums\Role;
 use App\Enums\SubscriptionInvoiceStatus;
 use App\Enums\SubscriptionStatus;
@@ -43,14 +44,16 @@ class SubscriptionSeeder extends Seeder
     {
         $now = now();
         $startsOn = $now->copy()->subMonths(2)->startOfMonth();
-        $amountMinor = $this->monthlyPriceFor($tenant->id);
+        $tier = $this->tierFor($tenant->id);
+        $amountMinor = $this->monthlyPriceFor($tier);
         $currency = 'PHP';
         $interval = BillingInterval::Monthly;
 
         $subscriptionId = DB::table('subscriptions')->insertGetId([
             'tenant_id' => $tenant->id,
             'active_for_tenant_id' => $tenant->id,
-            'plan_name' => 'Agency Standard',
+            'plan_name' => $tier->label().' Monthly',
+            'tier' => $tier->value,
             'amount_minor' => $amountMinor,
             'currency' => $currency,
             'interval' => $interval->value,
@@ -195,18 +198,29 @@ class SubscriptionSeeder extends Seeder
     }
 
     /**
-     * Get the agency's monthly price in minor units. It varies by locality:
-     * the provincial capital's market is the largest, a municipality's the
-     * smallest.
+     * Get the tier the agency is on, so the demo shows every tier in use.
+     * An agency pays for features, never for where it is.
      */
-    private function monthlyPriceFor(string $tenantId): int
+    private function tierFor(string $tenantId): PlanTier
     {
         return match ($tenantId) {
-            'dumaguete' => 350000,
-            'bayawan' => 280000,
-            'tanjay' => 250000,
-            'dauin' => 220000,
-            default => 180000,
+            'dumaguete', 'bayawan' => PlanTier::Pro,
+            'tanjay' => PlanTier::Advanced,
+            default => PlanTier::Basic,
+        };
+    }
+
+    /**
+     * Get the monthly amount, in minor units, snapshotted onto the demo
+     * subscription. It is the agreed amount, not a price list: these
+     * subscriptions are linked to no plan, and the catalog starts empty.
+     */
+    private function monthlyPriceFor(PlanTier $tier): int
+    {
+        return match ($tier) {
+            PlanTier::Basic => 180000,
+            PlanTier::Advanced => 250000,
+            PlanTier::Pro => 350000,
         };
     }
 

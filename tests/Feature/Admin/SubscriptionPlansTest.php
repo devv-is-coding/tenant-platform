@@ -2,6 +2,7 @@
 
 use App\Enums\AuditAction;
 use App\Enums\BillingInterval;
+use App\Enums\PlanTier;
 use App\Enums\Role;
 use App\Models\PlatformAuditEvent;
 use App\Models\Subscription;
@@ -31,7 +32,7 @@ test('a super admin adds a plan priced in the billing currency, and it is record
 
     plansPage($superAdmin)
         ->call('createPlan')
-        ->set(['name' => ' Agency Plus ', 'amount' => '9000.50', 'interval' => BillingInterval::Quarterly->value])
+        ->set(['name' => ' Agency Plus ', 'tier' => PlanTier::Advanced->value, 'amount' => '9000.50', 'interval' => BillingInterval::Quarterly->value])
         ->call('savePlan')
         ->assertHasNoErrors()
         ->assertSet('name', '')
@@ -39,6 +40,7 @@ test('a super admin adds a plan priced in the billing currency, and it is record
 
     $plan = SubscriptionPlan::sole();
     expect($plan->name)->toBe('Agency Plus')
+        ->and($plan->tier)->toBe(PlanTier::Advanced)
         ->and($plan->amount_minor)->toBe(900050)
         ->and($plan->currency)->toBe('PHP')
         ->and($plan->interval)->toBe(BillingInterval::Quarterly)
@@ -52,23 +54,26 @@ test('a super admin adds a plan priced in the billing currency, and it is record
         ->and($event->subject_id)->toBe($plan->id);
 });
 
-test('repricing a plan changes the price list but not what agencies already on it pay', function () {
-    $plan = SubscriptionPlan::factory()->create(['name' => 'Agency Standard', 'amount_minor' => 250000, 'interval' => BillingInterval::Monthly]);
-    $agreed = Subscription::factory()->create(['subscription_plan_id' => $plan->id, 'plan_name' => 'Agency Standard', 'amount_minor' => 250000]);
+test('repricing or re-tiering a plan changes the price list but not what agencies already on it pay or get', function () {
+    $plan = SubscriptionPlan::factory()->create(['name' => 'Agency Standard', 'tier' => PlanTier::Advanced, 'amount_minor' => 250000, 'interval' => BillingInterval::Monthly]);
+    $agreed = Subscription::factory()->create(['subscription_plan_id' => $plan->id, 'plan_name' => 'Agency Standard', 'tier' => PlanTier::Advanced, 'amount_minor' => 250000]);
 
     plansPage()
         ->call('editPlan', $plan->id)
         ->assertSet('name', 'Agency Standard')
+        ->assertSet('tier', PlanTier::Advanced->value)
         ->assertSet('amount', '2500.00')
         ->assertSet('interval', BillingInterval::Monthly->value)
-        ->set(['name' => 'Agency Standard 2027', 'amount' => '2750'])
+        ->set(['name' => 'Agency Standard 2027', 'tier' => PlanTier::Pro->value, 'amount' => '2750'])
         ->call('savePlan')
         ->assertHasNoErrors();
 
     expect($plan->fresh()?->name)->toBe('Agency Standard 2027')
+        ->and($plan->fresh()?->tier)->toBe(PlanTier::Pro)
         ->and($plan->fresh()?->amount_minor)->toBe(275000)
         ->and(SubscriptionPlan::count())->toBe(1)
         ->and($agreed->fresh()?->plan_name)->toBe('Agency Standard')
+        ->and($agreed->fresh()?->tier)->toBe(PlanTier::Advanced)
         ->and($agreed->fresh()?->amount_minor)->toBe(250000);
 
     $event = PlatformAuditEvent::sole();
@@ -76,6 +81,7 @@ test('repricing a plan changes the price list but not what agencies already on i
         ->and($event->subject_id)->toBe($plan->id)
         ->and($event->changes)->toBe([
             'name' => ['old' => 'Agency Standard', 'new' => 'Agency Standard 2027'],
+            'tier' => ['old' => PlanTier::Advanced->value, 'new' => PlanTier::Pro->value],
             'amount_minor' => ['old' => 250000, 'new' => 275000],
         ]);
 });
@@ -106,6 +112,7 @@ test('an invalid plan is rejected and nothing is saved', function (array $input,
     'three decimal places' => [['amount' => '1.234'], 'amount', 'Enter the amount as a number with at most two decimal places, without commas.'],
     'thousands separator' => [['amount' => '2,500'], 'amount', 'Enter the amount as a number with at most two decimal places, without commas.'],
     'unknown interval' => [['interval' => 9], 'interval', 'The selected interval is invalid.'],
+    'unknown tier' => [['tier' => 9], 'tier', 'The selected tier is invalid.'],
 ]);
 
 test('a deleted plan\'s name can be offered again', function () {
@@ -154,16 +161,21 @@ test('a plan is not deleted without a reason', function () {
         ->and(PlatformAuditEvent::count())->toBe(0);
 });
 
-test('the price list shows each plan by name with its price, interval and live agencies', function () {
-    $standard = SubscriptionPlan::factory()->create(['name' => 'Agency Standard', 'amount_minor' => 250000, 'interval' => BillingInterval::Monthly]);
-    SubscriptionPlan::factory()->create(['name' => 'Agency Annual', 'amount_minor' => 2500000, 'interval' => BillingInterval::Annual]);
+test('the price list shows each plan under its tier, by name, with its price, interval and live agencies', function () {
+    $standard = SubscriptionPlan::factory()->create(['name' => 'Agency Standard', 'tier' => PlanTier::Basic, 'amount_minor' => 250000, 'interval' => BillingInterval::Monthly]);
+    SubscriptionPlan::factory()->create(['name' => 'Agency Annual', 'tier' => PlanTier::Pro, 'amount_minor' => 2500000, 'interval' => BillingInterval::Annual]);
+    SubscriptionPlan::factory()->create(['name' => 'Agency Basic', 'tier' => PlanTier::Basic, 'amount_minor' => 180000, 'interval' => BillingInterval::Monthly]);
     Subscription::factory()->count(2)->create(['subscription_plan_id' => $standard->id]);
     Subscription::factory()->expired()->create(['subscription_plan_id' => $standard->id]);
 
     $page = plansPage();
 
     expect($page->instance()->plans->firstWhere('id', $standard->id)?->live_subscriptions_count)->toBe(2);
-    $page->assertSeeInOrder(['Agency Annual', '₱25,000.00', 'Annual', 'Agency Standard', '₱2,500.00', 'Monthly']);
+    $page->assertSeeInOrder([
+        'Run the agency', 'Agency Basic', '₱1,800.00', 'Agency Standard', '₱2,500.00', 'Monthly',
+        'Sell online, run tours smoothly', 'No Advanced plan yet.',
+        'The luxury layer', 'Agency Annual', '₱25,000.00', 'Annual',
+    ]);
 });
 
 test('the price list starts empty, with nothing invented', function () {
