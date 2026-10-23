@@ -15,15 +15,6 @@ use Livewire\Livewire;
 use function Pest\Laravel\actingAs;
 use function Pest\Laravel\mock;
 
-afterEach(function () {
-    // End tenancy first so the tenant connection is purged; Windows cannot delete
-    // an SQLite database file that is still open.
-    tenancy()->end();
-
-    // Drops the tenant databases created during the test.
-    Tenant::withTrashed()->get()->each->forceDelete();
-});
-
 /**
  * Open the onboarding page as the given user, filled with a valid agency.
  *
@@ -34,9 +25,9 @@ function onboardingForm(User $user, array $overrides = []): Testable
     $component = Livewire::actingAs($user)->test('pages::admin.tenants.create');
 
     $input = [
-        'name' => 'Dumaguete City Travel & Tours',
-        'subdomain' => 'dumaguete',
-        'locality' => 'Dumaguete City',
+        'name' => 'Valencia City Travel & Tours',
+        'subdomain' => 'valencia',
+        'locality' => 'Valencia City',
         'currency' => 'PHP',
         'first_name' => 'Ignacio',
         'last_name' => 'Ramos',
@@ -66,41 +57,41 @@ test('onboarding provisions a pending agency with its domain, settings, first ad
         ->call('onboard')
         ->assertHasNoErrors();
 
-    $tenant = Tenant::findOrFail('dumaguete');
+    $tenant = Tenant::findOrFail('valencia');
     expect($tenant->status)->toBe(TenantStatus::Pending)
-        ->and($tenant->name)->toBe('Dumaguete City Travel & Tours')
-        ->and($tenant->getAttribute('locality'))->toBe('Dumaguete City')
+        ->and($tenant->name)->toBe('Valencia City Travel & Tours')
+        ->and($tenant->getAttribute('locality'))->toBe('Valencia City')
         ->and($tenant->getAttribute('currency'))->toBe('PHP')
-        ->and($tenant->domains()->pluck('domain')->all())->toBe(['dumaguete.localhost'])
+        ->and($tenant->domains()->pluck('domain')->all())->toBe(['valencia.localhost'])
         ->and(tenantDatabaseExists($tenant))->toBeTrue()
         ->and($tenant->run(fn () => DB::table('settings')->count()))->toBe(1);
     $admin = User::where('username', 'ignacio')->sole();
     expect($admin->role)->toBe(Role::Admin)
-        ->and($admin->tenant_id)->toBe('dumaguete')
+        ->and($admin->tenant_id)->toBe('valencia')
         ->and($admin->is_active)->toBeTrue()
         ->and(Hash::check('correct-horse-battery', $admin->password))->toBeTrue();
     $event = PlatformAuditEvent::sole();
     expect($event->action)->toBe(AuditAction::TenantCreated)
-        ->and($event->tenant_id)->toBe('dumaguete')
-        ->and($event->tenant_label)->toBe('Dumaguete City Travel & Tours')
+        ->and($event->tenant_id)->toBe('valencia')
+        ->and($event->tenant_label)->toBe('Valencia City Travel & Tours')
         ->and($event->actor_id)->toBe($superAdmin->id)
         ->and($event->actor_role)->toBe(Role::SuperAdmin)
         ->and($event->actor_label)->toBe('Marisol Vega (Super admin)');
 });
 
 test('a subdomain whose domain another tenant already owns is rejected', function () {
-    $other = Tenant::factory()->create(['id' => 'other']);
-    $other->domains()->create(['domain' => 'dumaguete.localhost']);
+    $other = Tenant::factory()->create();
+    $other->domains()->create(['domain' => 'valencia.localhost']);
 
     onboardingForm(User::factory()->superAdmin()->create())
         ->call('onboard')
-        ->assertHasErrors(['subdomain' => 'The dumaguete.localhost domain is already taken.']);
+        ->assertHasErrors(['subdomain' => 'The valencia.localhost domain is already taken.']);
 
-    expect(Tenant::pluck('id')->all())->toBe(['other']);
+    expect(Tenant::pluck('id')->all())->toBe([$other->id]);
 });
 
 test('a subdomain already used as a tenant id is rejected', function () {
-    Tenant::factory()->create(['id' => 'dumaguete']);
+    Tenant::factory()->create(['id' => 'valencia']);
 
     onboardingForm(User::factory()->superAdmin()->create())
         ->call('onboard')
@@ -116,11 +107,11 @@ test('a subdomain that cannot name a tenant database is rejected', function (str
 
     expect(Tenant::count())->toBe(0);
 })->with([
-    'uppercase' => 'Dumaguete',
-    'space' => 'dumaguete city',
-    'underscore' => 'dumaguete_city',
-    'leading dash' => '-dumaguete',
-    'double dash' => 'dumaguete--city',
+    'uppercase' => 'Valencia',
+    'space' => 'valencia city',
+    'underscore' => 'valencia_city',
+    'leading dash' => '-valencia',
+    'double dash' => 'valencia--city',
 ]);
 
 test('a subdomain that would collide with a console route is rejected', function () {
@@ -167,13 +158,13 @@ test('walking through every step onboards the agency', function () {
         ->assertHasNoErrors()
         ->assertSet('step', 1);
 
-    expect(Tenant::pluck('id')->all())->toBe(['dumaguete']);
+    expect(Tenant::pluck('id')->all())->toBe(['valencia']);
 });
 
 test('a step with invalid fields cannot be continued past', function () {
     Livewire::actingAs(User::factory()->superAdmin()->create())
         ->test('pages::admin.tenants.create')
-        ->set('name', 'Dumaguete City Travel & Tours')
+        ->set('name', 'Valencia City Travel & Tours')
         ->call('nextStep')
         ->assertHasErrors(['subdomain' => 'required'])
         ->assertHasNoErrors(['first_name'])
@@ -181,13 +172,13 @@ test('a step with invalid fields cannot be continued past', function () {
 });
 
 test('an earlier step that fails on the final submit is shown again', function () {
-    $other = Tenant::factory()->create(['id' => 'other']);
-    $other->domains()->create(['domain' => 'dumaguete.localhost']);
+    $other = Tenant::factory()->create();
+    $other->domains()->create(['domain' => 'valencia.localhost']);
 
     onboardingForm(User::factory()->superAdmin()->create())
         ->set('step', 3)
         ->call('nextStep')
-        ->assertHasErrors(['subdomain' => 'The dumaguete.localhost domain is already taken.'])
+        ->assertHasErrors(['subdomain' => 'The valencia.localhost domain is already taken.'])
         ->assertSet('step', 1);
 });
 
@@ -196,14 +187,14 @@ test('going back returns to the previous step without losing its answers', funct
         ->call('nextStep')
         ->call('previousStep')
         ->assertSet('step', 1)
-        ->assertSet('subdomain', 'dumaguete');
+        ->assertSet('subdomain', 'valencia');
 });
 
 test('a failure after the tenant is created removes the tenant and its database', function () {
     mock(AuditRecorder::class)
         ->shouldReceive('recordPlatformEvent')
         ->andThrow(new RuntimeException('Audit write failed.'));
-    $tenant = new Tenant(['id' => 'dumaguete']);
+    $tenant = new Tenant(['id' => 'valencia']);
 
     expect(fn () => onboardingForm(User::factory()->superAdmin()->create())->call('onboard'))
         ->toThrow(RuntimeException::class, 'Audit write failed.');

@@ -23,20 +23,6 @@ use function Pest\Laravel\get;
  * did, so these tests provision real tenant databases.
  */
 
-afterEach(function () {
-    // End tenancy first so the tenant connection is purged; Windows cannot delete
-    // an SQLite database file that is still open.
-    tenancy()->end();
-
-    // A tenant with billing history cannot be force-deleted, so clear that first.
-    SubscriptionPayment::withTrashed()->forceDelete();
-    SubscriptionInvoice::withTrashed()->forceDelete();
-    Subscription::withTrashed()->forceDelete();
-
-    // Drops the tenant databases created during the test.
-    Tenant::withTrashed()->get()->each->forceDelete();
-});
-
 function deletedAgencyPage(Tenant $tenant, ?User $superAdmin = null): Testable
 {
     return Livewire::actingAs($superAdmin ?? User::factory()->superAdmin()->create())
@@ -54,8 +40,8 @@ function deleteAgencyForRestore(Tenant $tenant): Tenant
 }
 
 test('restoring an agency brings back exactly what its delete took, and its address works again', function () {
-    $tenant = Tenant::factory()->create(['id' => 'dumaguete', 'name' => 'Dumaguete Travel']);
-    $domain = $tenant->domains()->create(['domain' => 'dumaguete.localhost']);
+    $tenant = Tenant::factory()->create(['name' => 'Dumaguete Travel']);
+    $domain = $tenant->domains()->create(['domain' => "{$tenant->id}.localhost"]);
     $admin = User::factory()->role(Role::Admin)->for($tenant)->create();
     $deletedEarlier = tap(User::factory()->role(Role::Staff)->for($tenant)->create())->delete();
     $live = Subscription::factory()->for($tenant)->create();
@@ -69,7 +55,7 @@ test('restoring an agency brings back exactly what its delete took, and its addr
         ->assertHasNoErrors()
         ->assertDontSee('Restore agency');
 
-    expect(Tenant::find('dumaguete'))->not->toBeNull()
+    expect(Tenant::find($tenant->id))->not->toBeNull()
         ->and(Domain::find($domain->id))->not->toBeNull()
         ->and(User::find($admin->id))->not->toBeNull()
         ->and(User::find($deletedEarlier->id))->toBeNull()
@@ -81,10 +67,10 @@ test('restoring an agency brings back exactly what its delete took, and its addr
 
     // Signed out, so the login page renders rather than redirecting home.
     Auth::logout();
-    get('http://dumaguete.localhost/login')->assertOk();
+    get("http://{$tenant->id}.localhost/login")->assertOk();
 
     $central = PlatformAuditEvent::query()->where('action', AuditAction::TenantRestored)->sole();
-    expect($central->tenant_id)->toBe('dumaguete')
+    expect($central->tenant_id)->toBe($tenant->id)
         ->and($central->actor_id)->toBe($superAdmin->id)
         ->and($central->context)->toBe(['restored' => [
             'domain' => [$domain->id],

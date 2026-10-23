@@ -3,7 +3,6 @@
 use App\Enums\Role;
 use App\Enums\TenantStatus;
 use App\Models\Passkey;
-use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -14,23 +13,6 @@ use function Pest\Laravel\assertAuthenticatedAs;
 use function Pest\Laravel\assertGuest;
 use function Pest\Laravel\get;
 use function Pest\Laravel\post;
-
-afterEach(function () {
-    // End tenancy first so the tenant connection is purged; Windows cannot delete
-    // an SQLite database file that is still open.
-    tenancy()->end();
-
-    // Drops the tenant databases created during the test.
-    Tenant::withTrashed()->get()->each->forceDelete();
-});
-
-function tenantOnDomain(string $id, TenantStatus $status = TenantStatus::Active): Tenant
-{
-    $tenant = Tenant::create(['id' => $id, 'name' => ucfirst($id).' Branch', 'status' => $status]);
-    $tenant->domains()->create(['domain' => "{$id}.localhost"]);
-
-    return $tenant;
-}
 
 test('the super admin login screen can be rendered', function () {
     get(route('admin.login'))
@@ -109,19 +91,20 @@ test('inactive users cannot log in', function () {
 });
 
 test('the tenant login screen shows the tenant', function () {
-    tenantOnDomain('acme');
+    $tenant = tenantOnDomain();
 
-    get('http://acme.localhost/login')
+    get("http://{$tenant->id}.localhost/login")
         ->assertOk()
-        ->assertSee('Acme Branch');
+        ->assertSee($tenant->name);
 });
 
 test('tenant users can log in on their own tenant domain', function (Role $role) {
-    $user = User::factory()->role($role)->for(tenantOnDomain('acme'))->create();
+    $tenant = tenantOnDomain();
+    $user = User::factory()->role($role)->for($tenant)->create();
 
-    post('http://acme.localhost/login', ['email' => $user->email, 'password' => 'password'])
+    post("http://{$tenant->id}.localhost/login", ['email' => $user->email, 'password' => 'password'])
         ->assertSessionHasNoErrors()
-        ->assertRedirect('http://acme.localhost/dashboard');
+        ->assertRedirect("http://{$tenant->id}.localhost/dashboard");
 
     assertAuthenticatedAs($user);
 })->with([
@@ -131,20 +114,20 @@ test('tenant users can log in on their own tenant domain', function (Role $role)
 ]);
 
 test('the tenant login refuses users of another tenant', function () {
-    tenantOnDomain('acme');
-    $otherTenantAdmin = User::factory()->role(Role::Admin)->for(tenantOnDomain('globex'))->create();
+    $tenant = tenantOnDomain();
+    $otherTenantAdmin = User::factory()->role(Role::Admin)->for(tenantOnDomain())->create();
 
-    post('http://acme.localhost/login', ['email' => $otherTenantAdmin->email, 'password' => 'password'])
+    post("http://{$tenant->id}.localhost/login", ['email' => $otherTenantAdmin->email, 'password' => 'password'])
         ->assertSessionHasErrors(['email' => __('auth.failed')]);
 
     assertGuest();
 });
 
 test('the tenant login refuses platform-wide roles', function (Role $role) {
-    tenantOnDomain('acme');
+    $tenant = tenantOnDomain();
     $user = User::factory()->role($role)->create();
 
-    post('http://acme.localhost/login', ['email' => $user->email, 'password' => 'password'])
+    post("http://{$tenant->id}.localhost/login", ['email' => $user->email, 'password' => 'password'])
         ->assertSessionHasErrors(['email' => __('auth.failed')]);
 
     assertGuest();
@@ -154,35 +137,37 @@ test('the tenant login refuses platform-wide roles', function (Role $role) {
 ]);
 
 test('nobody from a pending agency can sign in or keep using a session, since it is not live yet', function () {
-    $admin = User::factory()->role(Role::Admin)->for(tenantOnDomain('acme', TenantStatus::Pending))->create();
+    $tenant = tenantOnDomain(TenantStatus::Pending);
+    $admin = User::factory()->role(Role::Admin)->for($tenant)->create();
 
-    post('http://acme.localhost/login', ['email' => $admin->email, 'password' => 'password'])
+    post("http://{$tenant->id}.localhost/login", ['email' => $admin->email, 'password' => 'password'])
         ->assertSessionHasErrors(['email' => __('auth.failed')]);
     assertGuest();
 
-    actingAs($admin)->get('http://acme.localhost/dashboard')->assertForbidden();
+    actingAs($admin)->get("http://{$tenant->id}.localhost/dashboard")->assertForbidden();
 });
 
 test('a closed agency\'s staff still sign in, read-only, and are told what is hidden until it resubscribes', function () {
-    $staff = User::factory()->role(Role::Staff)->for(tenantOnDomain('acme', TenantStatus::Closed))->create();
+    $tenant = tenantOnDomain(TenantStatus::Closed);
+    $staff = User::factory()->role(Role::Staff)->for($tenant)->create();
 
-    post('http://acme.localhost/login', ['email' => $staff->email, 'password' => 'password'])
+    post("http://{$tenant->id}.localhost/login", ['email' => $staff->email, 'password' => 'password'])
         ->assertSessionHasNoErrors();
     assertAuthenticatedAs($staff);
 
-    get('http://acme.localhost/dashboard')
+    get("http://{$tenant->id}.localhost/dashboard")
         ->assertOk()
         ->assertSee('This agency is closed. You can view its records but not change them.')
         ->assertSee('details and money figures are hidden until the agency is on a plan again', escape: false);
 });
 
 test('tenant users can open their tenant dashboard', function () {
-    $staff = User::factory()->role(Role::Staff)->for(tenantOnDomain('acme'))->create();
+    $tenant = tenantOnDomain();
+    actingAsTenantUser($tenant);
 
-    actingAs($staff)
-        ->get('http://acme.localhost/dashboard')
+    get("http://{$tenant->id}.localhost/dashboard")
         ->assertOk()
-        ->assertSee('Acme Branch');
+        ->assertSee($tenant->name);
 });
 
 /*
@@ -191,10 +176,10 @@ test('tenant users can open their tenant dashboard', function () {
  * a link leaking across the boundary.
  */
 test('the tenant dashboard navigation links nowhere central', function () {
-    $staff = User::factory()->role(Role::Staff)->for(tenantOnDomain('acme'))->create();
+    $tenant = tenantOnDomain();
+    actingAsTenantUser($tenant);
 
-    actingAs($staff)
-        ->get('http://acme.localhost/dashboard')
+    get("http://{$tenant->id}.localhost/dashboard")
         ->assertOk()
         ->assertDontSee(route('profile.edit'))
         ->assertDontSee(route('security.edit'))
@@ -203,17 +188,16 @@ test('the tenant dashboard navigation links nowhere central', function () {
 });
 
 test('the tenant dashboard is forbidden to users of another tenant', function () {
-    tenantOnDomain('acme');
-    $otherTenantAdmin = User::factory()->role(Role::Admin)->for(tenantOnDomain('globex'))->create();
+    $tenant = tenantOnDomain();
+    actingAsTenantUser(tenantOnDomain(), Role::Admin);
 
-    actingAs($otherTenantAdmin)
-        ->get('http://acme.localhost/dashboard')
+    get("http://{$tenant->id}.localhost/dashboard")
         ->assertForbidden();
 });
 
 test('the tenant dashboard redirects guests to the tenant login', function () {
-    tenantOnDomain('acme');
+    $tenant = tenantOnDomain();
 
-    get('http://acme.localhost/dashboard')
-        ->assertRedirect('http://acme.localhost/login');
+    get("http://{$tenant->id}.localhost/dashboard")
+        ->assertRedirect("http://{$tenant->id}.localhost/login");
 });

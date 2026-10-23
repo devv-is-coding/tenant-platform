@@ -14,7 +14,7 @@ use Illuminate\Testing\TestResponse;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 
-use function Pest\Laravel\actingAs;
+use function Pest\Laravel\get;
 use function Pest\Laravel\getJson;
 
 beforeEach(function () {
@@ -27,33 +27,6 @@ beforeEach(function () {
         ->get('/api/v1/reviews-probe', fn () => ['data' => 'reviews']);
 });
 
-afterEach(function () {
-    // End tenancy first so the tenant connection is purged; Windows cannot delete
-    // an SQLite database file that is still open.
-    tenancy()->end();
-
-    // A tenant with billing history cannot be deleted, so clear that first.
-    Subscription::withTrashed()->forceDelete();
-
-    // Drops the tenant databases created during the test.
-    Tenant::withTrashed()->get()->each->forceDelete();
-});
-
-/**
- * An agency on its own domain, with a live subscription on the tier given.
- */
-function agencyOnTier(string $id, ?PlanTier $tier): Tenant
-{
-    $tenant = Tenant::factory()->create(['id' => $id]);
-    $tenant->domains()->create(['domain' => "{$id}.localhost"]);
-
-    if ($tier !== null) {
-        Subscription::factory()->for($tenant)->create(['tier' => $tier]);
-    }
-
-    return $tenant;
-}
-
 /**
  * Open the web probe as one of the agency's staff.
  *
@@ -63,8 +36,9 @@ function agencyOnTier(string $id, ?PlanTier $tier): Tenant
 function openReviewsAs(Tenant $tenant): TestResponse
 {
     tenancy()->end();
+    actingAsTenantUser($tenant);
 
-    return actingAs(User::factory()->role(Role::Staff)->for($tenant)->create())->get("http://{$tenant->id}.localhost/reviews-probe");
+    return get("http://{$tenant->id}.localhost/reviews-probe");
 }
 
 function callReviewsApiOn(Tenant $tenant): TestResponse
@@ -75,7 +49,7 @@ function callReviewsApiOn(Tenant $tenant): TestResponse
 }
 
 test('an agency whose tier includes the feature gets through, on the web and the API', function (PlanTier $tier) {
-    $tenant = agencyOnTier('acme', $tier);
+    $tenant = tenantOnDomain(tier: $tier);
 
     openReviewsAs($tenant)->assertOk()->assertSee('reviews');
     callReviewsApiOn($tenant)->assertOk()->assertExactJson(['data' => 'reviews']);
@@ -85,13 +59,13 @@ test('an agency whose tier includes the feature gets through, on the web and the
 ]);
 
 test('a lower tier is refused on the API with a stable error the app can match', function () {
-    callReviewsApiOn(agencyOnTier('acme', PlanTier::Basic))
+    callReviewsApiOn(tenantOnDomain(tier: PlanTier::Basic))
         ->assertForbidden()
         ->assertExactJson(['error' => 'feature_not_in_plan', 'feature' => 'reviews']);
 });
 
 test('a lower tier is shown on the web which tier has the feature, not a missing page', function () {
-    openReviewsAs(agencyOnTier('acme', PlanTier::Basic))
+    openReviewsAs(tenantOnDomain(tier: PlanTier::Basic))
         ->assertForbidden()
         ->assertSee('Available on Advanced')
         ->assertSee('Reviews &amp; wishlist', escape: false)
@@ -99,7 +73,7 @@ test('a lower tier is shown on the web which tier has the feature, not a missing
 });
 
 test('an agency with no live plan is refused every gated feature', function () {
-    $tenant = agencyOnTier('acme', null);
+    $tenant = tenantOnDomain();
     Subscription::factory()->for($tenant)->expired()->create(['tier' => PlanTier::Pro]);
 
     openReviewsAs($tenant)->assertForbidden()->assertSee('Your agency has no live plan.');
@@ -107,7 +81,7 @@ test('an agency with no live plan is refused every gated feature', function () {
 });
 
 test('the @feature directive and the use-feature ability answer as the route does', function (?PlanTier $tier, bool $allowed) {
-    tenancy()->initialize(agencyOnTier('acme', $tier));
+    tenancy()->initialize(tenantOnDomain(tier: $tier));
     $staff = User::factory()->role(Role::Staff)->for(tenant())->create();
     $guestGate = Gate::forUser(null);
 
@@ -127,10 +101,11 @@ test('outside an agency there is no tier, so the directive and ability say no', 
 
 test('a gate on a feature that does not exist fails loudly rather than letting the route through', function () {
     Route::middleware(['tenant', 'feature:no_such_feature'])->get('/typo-probe', fn () => 'through');
-    $tenant = agencyOnTier('acme', PlanTier::Pro);
+    $tenant = tenantOnDomain(tier: PlanTier::Pro);
 
     tenancy()->end();
-    actingAs(User::factory()->role(Role::Staff)->for($tenant)->create())
-        ->get('http://acme.localhost/typo-probe')
+    actingAsTenantUser($tenant);
+
+    get("http://{$tenant->id}.localhost/typo-probe")
         ->assertServerError();
 });
