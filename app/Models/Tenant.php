@@ -29,6 +29,8 @@ use Stancl\Tenancy\Events;
  *
  * @property string $id
  * @property string|null $name
+ * @property string|null $locality the home locality, a place name such as "Dumaguete City"
+ * @property string|null $currency
  * @property TenantStatus $status
  * @property string|null $status_reason
  * @property Carbon|null $status_changed_at

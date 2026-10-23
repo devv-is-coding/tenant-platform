@@ -9,8 +9,11 @@ use Illuminate\Database\Seeder;
 class TenantSeeder extends Seeder
 {
     /**
-     * Seed one tenant per Negros Oriental locality. Existing tenants are skipped so
-     * the seeder can be re-run without tripping over already-created databases.
+     * Seed one agency per Negros Oriental locality. Existing tenants are skipped
+     * so the seeder can be re-run without tripping over already-created databases.
+     *
+     * Stores the same keys onboarding does: the agency's `name`, and its home
+     * `locality` as a place name.
      */
     public function run(): void
     {
@@ -24,12 +27,12 @@ class TenantSeeder extends Seeder
                 // Fixture agencies are already past onboarding; a real one starts Pending.
                 'status' => TenantStatus::Active,
                 'name' => $attributes['name'],
-                'locality_type' => $attributes['locality_type'],
+                'locality' => $attributes['locality'],
                 'province' => 'Negros Oriental',
                 'region' => 'Negros Island Region',
                 'country' => 'Philippines',
-                // The central marketplace renders prices on the central domain,
-                // where tenancy is never initialised, so currency lives only here.
+                // The platform console shows prices where tenancy is never
+                // initialised, so currency lives only here.
                 'currency' => 'PHP',
             ]);
 
@@ -38,34 +41,34 @@ class TenantSeeder extends Seeder
     }
 
     /**
-     * @return array<string, array{name: string, locality_type: string, domain: string}>
+     * @return array<string, array{name: string, locality: string, domain: string}>
      */
     private function tenants(): array
     {
         return [
             'zamboanguita' => [
-                'name' => 'Zamboanguita',
-                'locality_type' => 'Municipality',
+                'name' => 'Zamboanguita Travel & Tours',
+                'locality' => 'Zamboanguita',
                 'domain' => 'zamboanguita.localhost',
             ],
             'dumaguete' => [
-                'name' => 'Dumaguete City',
-                'locality_type' => 'Component City',
+                'name' => 'Dumaguete City Travel & Tours',
+                'locality' => 'Dumaguete City',
                 'domain' => 'dumaguete.localhost',
             ],
             'tanjay' => [
-                'name' => 'Tanjay City',
-                'locality_type' => 'Component City',
+                'name' => 'Tanjay City Travel & Tours',
+                'locality' => 'Tanjay City',
                 'domain' => 'tanjay.localhost',
             ],
             'dauin' => [
-                'name' => 'Dauin',
-                'locality_type' => 'Municipality',
+                'name' => 'Dauin Travel & Tours',
+                'locality' => 'Dauin',
                 'domain' => 'dauin.localhost',
             ],
             'bayawan' => [
-                'name' => 'Bayawan City',
-                'locality_type' => 'Component City',
+                'name' => 'Bayawan City Travel & Tours',
+                'locality' => 'Bayawan City',
                 'domain' => 'bayawan.localhost',
             ],
         ];

@@ -1,5 +1,6 @@
 <?php
 
+use App\Concerns\RunsInTenant;
 use App\Enums\PlanTier;
 use App\Enums\Role;
 use App\Enums\TenantStatus;
@@ -118,6 +119,7 @@ function tenantOnDomain(TenantStatus $status = TenantStatus::Active, ?PlanTier $
 /**
  * Run the callback inside the tenant's context, then restore whichever
  * context was active before, including none, even when the callback throws.
+ * The same switch the app's seeders and commands use (RunsInTenant).
  *
  * Tenant models must be created in here: outside tenancy their factories
  * write to the central database and fail on a missing table.
@@ -129,19 +131,14 @@ function tenantOnDomain(TenantStatus $status = TenantStatus::Active, ?PlanTier $
  */
 function withinTenant(Tenant $tenant, Closure $callback): mixed
 {
-    $previousTenant = tenant();
-
-    tenancy()->initialize($tenant);
-
-    try {
-        return $callback($tenant);
-    } finally {
-        if ($previousTenant instanceof Tenant) {
-            tenancy()->initialize($previousTenant);
-        } else {
-            tenancy()->end();
+    $runner = new class
+    {
+        use RunsInTenant {
+            runInTenant as public;
         }
-    }
+    };
+
+    return $runner->runInTenant($tenant, $callback);
 }
 
 /**

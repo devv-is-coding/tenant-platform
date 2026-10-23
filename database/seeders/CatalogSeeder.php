@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Concerns\RunsInTenant;
 use App\Enums\AvailabilityMode;
 use App\Enums\InventoryBatchReason;
 use App\Enums\ItemStatus;
@@ -17,6 +18,8 @@ use Illuminate\Support\Str;
 
 class CatalogSeeder extends Seeder
 {
+    use RunsInTenant;
+
     /**
      * Seed each tenant's catalog: items, their typed profiles, itinerary stops,
      * media and options, plus the opening inventory batch for every option that
@@ -29,20 +32,18 @@ class CatalogSeeder extends Seeder
      */
     public function run(): void
     {
-        Tenant::query()->each(function (Tenant $tenant): void {
-            $tenant->run(function () use ($tenant): void {
-                if (DB::table('items')->exists()) {
-                    return;
-                }
+        $this->runInEachTenant(function (Tenant $tenant): void {
+            if (DB::table('items')->exists()) {
+                return;
+            }
 
-                $staffId = User::query()->where('tenant_id', $tenant->id)->where('role', Role::Staff)->value('id');
-                $managerId = User::query()->where('tenant_id', $tenant->id)->where('role', Role::Manager)->value('id');
-                $currency = tenant('currency') ?? 'PHP';
+            $staffId = User::query()->where('tenant_id', $tenant->id)->where('role', Role::Staff)->value('id');
+            $managerId = User::query()->where('tenant_id', $tenant->id)->where('role', Role::Manager)->value('id');
+            $currency = tenant('currency') ?? 'PHP';
 
-                foreach ($this->catalog($tenant->id) as $item) {
-                    $this->seedItem($tenant, $item, $staffId, $managerId, $currency);
-                }
-            });
+            foreach ($this->catalog($tenant->id) as $item) {
+                $this->seedItem($tenant, $item, $staffId, $managerId, $currency);
+            }
         });
     }
 
@@ -291,7 +292,7 @@ class CatalogSeeder extends Seeder
             'slug' => $item['slug'],
             'description' => $item['description'],
             'tenant_name' => $tenant->name,
-            'locality' => $tenant->name,
+            'locality' => $tenant->locality,
             'country_code' => $item['country_code'],
             'currency' => $currency,
             'price_min_minor' => $prices['min'],
