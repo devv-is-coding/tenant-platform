@@ -10,19 +10,10 @@ use function Pest\Laravel\get;
 
 uses(RefreshDatabase::class);
 
-afterEach(function () {
-    // End tenancy first so the tenant connection is purged; Windows cannot delete
-    // an SQLite database file that is still open.
-    tenancy()->end();
-
-    // Drops the tenant databases created during the test.
-    Tenant::withTrashed()->get()->each->forceDelete();
-});
-
 test('creating a tenant provisions and migrates a separate database', function () {
-    $tenant = Tenant::create(['id' => 'acme']);
+    $tenant = Tenant::factory()->create();
 
-    expect($tenant->database()->getName())->toBe('tenantacme');
+    expect($tenant->database()->getName())->toBe("tenant{$tenant->id}");
 
     tenancy()->initialize($tenant);
 
@@ -32,7 +23,7 @@ test('creating a tenant provisions and migrates a separate database', function (
 test('tenant context swaps the default connection but leaves the central one intact', function () {
     $central = config('tenancy.database.central_connection');
 
-    $tenant = Tenant::create(['id' => 'acme']);
+    $tenant = Tenant::factory()->create();
 
     expect(config('database.default'))->toBe($central);
 
@@ -55,7 +46,7 @@ test('users stay in the central database while a tenant is active', function () 
         'last_name' => 'Tral',
     ]);
 
-    $tenant = Tenant::create(['id' => 'acme']);
+    $tenant = Tenant::factory()->create();
     tenancy()->initialize($tenant);
 
     // The model is pinned via the CentralConnection trait, so it must not follow
@@ -66,22 +57,22 @@ test('users stay in the central database while a tenant is active', function () 
 });
 
 test('two tenants get separate databases', function () {
-    $acme = Tenant::create(['id' => 'acme']);
-    $globex = Tenant::create(['id' => 'globex']);
+    $firstTenant = Tenant::factory()->create();
+    $secondTenant = Tenant::factory()->create();
 
-    expect($acme->database()->getName())->not->toBe($globex->database()->getName());
+    expect($firstTenant->database()->getName())->not->toBe($secondTenant->database()->getName());
 
-    tenancy()->initialize($acme);
-    $acmeDatabase = DB::connection('tenant')->getDatabaseName();
+    tenancy()->initialize($firstTenant);
+    $firstDatabase = DB::connection('tenant')->getDatabaseName();
 
-    tenancy()->initialize($globex);
-    $globexDatabase = DB::connection('tenant')->getDatabaseName();
+    tenancy()->initialize($secondTenant);
+    $secondDatabase = DB::connection('tenant')->getDatabaseName();
 
-    expect($acmeDatabase)->not->toBe($globexDatabase);
+    expect($firstDatabase)->not->toBe($secondDatabase);
 });
 
 test('tenant routes are unreachable from a central domain', function () {
-    Tenant::create(['id' => 'acme'])->domains()->create(['domain' => 'acme.localhost']);
+    tenantOnDomain();
 
     $central = config('tenancy.central_domains')[0];
 
@@ -89,9 +80,9 @@ test('tenant routes are unreachable from a central domain', function () {
 });
 
 test('tenant routes resolve the tenant from its domain', function () {
-    Tenant::create(['id' => 'acme'])->domains()->create(['domain' => 'acme.localhost']);
+    $tenant = tenantOnDomain();
 
-    get('http://acme.localhost/')
+    get("http://{$tenant->id}.localhost/")
         ->assertOk()
-        ->assertSee('acme');
+        ->assertSee($tenant->id);
 });

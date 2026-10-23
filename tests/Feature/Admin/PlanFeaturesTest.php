@@ -28,17 +28,6 @@ function featuresPage(?User $user = null): Testable
     return Livewire::actingAs($user ?? User::factory()->superAdmin()->create())->test('pages::admin.plans.index');
 }
 
-/**
- * An agency with a live subscription on the given tier.
- */
-function agencyOn(PlanTier $tier): Tenant
-{
-    $tenant = Tenant::factory()->create();
-    Subscription::factory()->for($tenant)->create(['tier' => $tier]);
-
-    return $tenant;
-}
-
 test('every feature starts at its default tier until the super admin moves it', function () {
     PlanFeatureSetting::factory()->create(['feature' => PlanFeature::Reviews, 'minimum_tier' => PlanTier::Pro]);
 
@@ -53,9 +42,9 @@ test('every feature starts at its default tier until the super admin moves it', 
 
 test('moving a feature up says how many live agencies lose it, needs a reason, and is recorded', function () {
     $superAdmin = User::factory()->superAdmin()->create();
-    $advanced = agencyOn(PlanTier::Advanced);
-    $pro = agencyOn(PlanTier::Pro);
-    agencyOn(PlanTier::Basic);
+    $advanced = tenantOnDomain(tier: PlanTier::Advanced);
+    $pro = tenantOnDomain(tier: PlanTier::Pro);
+    tenantOnDomain(tier: PlanTier::Basic);
     Subscription::factory()->pastDue()->create(['tier' => PlanTier::Advanced]);
     Subscription::factory()->expired()->create(['tier' => PlanTier::Advanced]);
 
@@ -91,7 +80,7 @@ test('moving a feature up says how many live agencies lose it, needs a reason, a
 });
 
 test('moving a feature down takes it from nobody, needs no reason, and is recorded', function () {
-    $basic = agencyOn(PlanTier::Basic);
+    $basic = tenantOnDomain(tier: PlanTier::Basic);
 
     featuresPage()
         ->call('moveFeature', PlanFeature::CsvExport->value)
@@ -182,7 +171,7 @@ test('an agency\'s tier is its live subscription\'s: trialing and past due keep 
 test('an agency has exactly the features its tier includes, in order', function () {
     PlanFeatureSetting::factory()->create(['feature' => PlanFeature::AuditLog, 'minimum_tier' => PlanTier::Advanced]);
 
-    expect(agencyOn(PlanTier::Basic)->features())->toBe([
+    expect(tenantOnDomain(tier: PlanTier::Basic)->features())->toBe([
         PlanFeature::Catalog,
         PlanFeature::Inventory,
         PlanFeature::Bookings,
@@ -194,7 +183,7 @@ test('an agency has exactly the features its tier includes, in order', function 
 });
 
 test('QR check-in starts at Basic and full white-label at Advanced', function () {
-    expect(agencyOn(PlanTier::Basic)->hasFeature(PlanFeature::QrCheckIn))->toBeTrue()
-        ->and(agencyOn(PlanTier::Basic)->hasFeature(PlanFeature::WhiteLabel))->toBeFalse()
-        ->and(agencyOn(PlanTier::Advanced)->hasFeature(PlanFeature::WhiteLabel))->toBeTrue();
+    expect(tenantOnDomain(tier: PlanTier::Basic)->hasFeature(PlanFeature::QrCheckIn))->toBeTrue()
+        ->and(tenantOnDomain(tier: PlanTier::Basic)->hasFeature(PlanFeature::WhiteLabel))->toBeFalse()
+        ->and(tenantOnDomain(tier: PlanTier::Advanced)->hasFeature(PlanFeature::WhiteLabel))->toBeTrue();
 });

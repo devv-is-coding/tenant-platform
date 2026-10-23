@@ -7,6 +7,7 @@ use App\Models\Passkey;
 use App\Models\PersonalAccessToken;
 use App\Models\PlanFeatureSetting;
 use App\Models\RestoreRequest;
+use App\Models\Settings;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPayment;
@@ -79,18 +80,20 @@ class AppServiceProvider extends ServiceProvider
      * Store polymorphic types, such as an audit event's subject, under short
      * aliases rather than class names, so renaming a class never strands rows.
      *
-     * Not enforced yet: models without an alias still fall back to their class
-     * name until the full map is in place.
+     * Enforced: storing a model without an alias throws, so a new audit
+     * subject must be added here before it can be recorded.
      */
     protected function configureMorphMap(): void
     {
-        Relation::morphMap([
+        Relation::enforceMorphMap([
             'plan_feature' => PlanFeatureSetting::class,
             'restore_request' => RestoreRequest::class,
+            'settings' => Settings::class,
             'subscription' => Subscription::class,
             'subscription_invoice' => SubscriptionInvoice::class,
             'subscription_payment' => SubscriptionPayment::class,
             'subscription_plan' => SubscriptionPlan::class,
+            'tenant' => Tenant::class,
             'user' => User::class,
         ]);
     }

@@ -22,28 +22,14 @@ use function Pest\Laravel\withoutExceptionHandling;
  * tenant databases rather than faking tenant creation.
  */
 
-afterEach(function () {
-    // End tenancy first so the tenant connection is purged; Windows cannot delete
-    // an SQLite database file that is still open.
-    tenancy()->end();
-
-    // A tenant with billing history cannot be force-deleted, so clear that first.
-    SubscriptionPayment::withTrashed()->forceDelete();
-    SubscriptionInvoice::withTrashed()->forceDelete();
-    Subscription::withTrashed()->forceDelete();
-
-    // Drops the tenant databases created during the test.
-    Tenant::withTrashed()->get()->each->forceDelete();
-});
-
 function agencyDatabaseKept(Tenant $tenant): bool
 {
     return $tenant->database()->manager()->databaseExists($tenant->database()->getName());
 }
 
 test('deleting an agency soft-deletes it with its users, domains and billing, and keeps its database', function () {
-    $tenant = Tenant::factory()->create(['id' => 'dumaguete', 'name' => 'Dumaguete Travel']);
-    $domain = $tenant->domains()->create(['domain' => 'dumaguete.localhost']);
+    $tenant = Tenant::factory()->create(['name' => 'Dumaguete Travel']);
+    $domain = $tenant->domains()->create(['domain' => "{$tenant->id}.localhost"]);
     $admin = User::factory()->role(Role::Admin)->for($tenant)->create();
     $live = Subscription::factory()->for($tenant)->create();
     $invoice = SubscriptionInvoice::factory()->for($live)->create();
@@ -57,11 +43,11 @@ test('deleting an agency soft-deletes it with its users, domains and billing, an
         ->assertHasNoErrors()
         ->assertRedirect(route('admin.tenants.index'));
 
-    expect(Tenant::find('dumaguete'))->toBeNull()
-        ->and(Tenant::withTrashed()->find('dumaguete')?->deleted_at)->not->toBeNull()
+    expect(Tenant::find($tenant->id))->toBeNull()
+        ->and(Tenant::withTrashed()->find($tenant->id)?->deleted_at)->not->toBeNull()
         ->and(User::find($admin->id))->toBeNull()
-        ->and(Domain::query()->where('tenant_id', 'dumaguete')->count())->toBe(0)
-        ->and(Subscription::query()->where('tenant_id', 'dumaguete')->count())->toBe(0)
+        ->and(Domain::query()->where('tenant_id', $tenant->id)->count())->toBe(0)
+        ->and(Subscription::query()->where('tenant_id', $tenant->id)->count())->toBe(0)
         ->and(SubscriptionInvoice::count())->toBe(0)
         ->and(SubscriptionPayment::count())->toBe(0)
         ->and(Subscription::withTrashed()->find($live->id)?->active_for_tenant_id)->toBeNull()
@@ -69,7 +55,7 @@ test('deleting an agency soft-deletes it with its users, domains and billing, an
         ->and(agencyDatabaseKept($tenant))->toBeTrue();
 
     $central = PlatformAuditEvent::query()->where('action', AuditAction::TenantDeleted)->sole();
-    expect($central->tenant_id)->toBe('dumaguete')
+    expect($central->tenant_id)->toBe($tenant->id)
         ->and($central->description)->toBe('Agency closed its business.')
         ->and($central->context)->toBe(['cascaded' => [
             'subscription' => [$live->id],
@@ -85,9 +71,9 @@ test('deleting an agency soft-deletes it with its users, domains and billing, an
 });
 
 test('a deleted agency\'s address no longer identifies it', function () {
-    $tenant = Tenant::factory()->create(['id' => 'dumaguete']);
-    $tenant->domains()->create(['domain' => 'dumaguete.localhost']);
-    get('http://dumaguete.localhost/login')->assertOk();
+    $tenant = Tenant::factory()->create();
+    $tenant->domains()->create(['domain' => "{$tenant->id}.localhost"]);
+    get("http://{$tenant->id}.localhost/login")->assertOk();
 
     Livewire::actingAs(User::factory()->superAdmin()->create())
         ->test('pages::admin.tenants.show', ['tenant' => $tenant])
@@ -95,7 +81,7 @@ test('a deleted agency\'s address no longer identifies it', function () {
         ->call('deleteAgency');
 
     withoutExceptionHandling();
-    expect(fn () => get('http://dumaguete.localhost/login'))->toThrow(TenantCouldNotBeIdentifiedOnDomainException::class);
+    expect(fn () => get("http://{$tenant->id}.localhost/login"))->toThrow(TenantCouldNotBeIdentifiedOnDomainException::class);
 });
 
 test('deleting an agency needs a reason, and nothing is deleted without one', function () {
@@ -122,7 +108,7 @@ test('only a force delete drops an agency\'s database', function () {
 });
 
 test('the audit log names a deleted agency without linking to its page', function () {
-    $tenant = Tenant::factory()->create(['id' => 'dumaguete', 'name' => 'Dumaguete Travel']);
+    $tenant = Tenant::factory()->create(['name' => 'Dumaguete Travel']);
     $superAdmin = User::factory()->superAdmin()->create();
 
     Livewire::actingAs($superAdmin)
@@ -133,5 +119,5 @@ test('the audit log names a deleted agency without linking to its page', functio
     Livewire::actingAs($superAdmin)
         ->test('pages::admin.audit.index')
         ->assertSeeInOrder(['Tenant Deleted', 'Dumaguete Travel', 'Agency deleted'])
-        ->assertDontSeeHtml('href="'.route('admin.tenants.show', 'dumaguete').'"');
+        ->assertDontSeeHtml('href="'.route('admin.tenants.show', $tenant->id).'"');
 });

@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Concerns\RunsInTenant;
 use App\Enums\AvailabilityMode;
 use App\Enums\BookingApprovalStatus;
 use App\Enums\BookingPaymentStatus;
@@ -20,6 +21,8 @@ use Illuminate\Support\Facades\DB;
 
 class BookingSeeder extends Seeder
 {
+    use RunsInTenant;
+
     /**
      * Per-option unit_index counters, reset for every tenant. Safe because, in
      * this mock dataset, no two seeded bookings share an option - a real
@@ -41,22 +44,20 @@ class BookingSeeder extends Seeder
      */
     public function run(): void
     {
-        Tenant::query()->each(function (Tenant $tenant): void {
-            $tenant->run(function () use ($tenant): void {
-                if (DB::table('bookings')->exists()) {
-                    return;
-                }
+        $this->runInEachTenant(function (Tenant $tenant): void {
+            if (DB::table('bookings')->exists()) {
+                return;
+            }
 
-                $this->nextUnitIndex = [];
+            $this->nextUnitIndex = [];
 
-                $staffId = User::query()->where('tenant_id', $tenant->id)->where('role', Role::Staff)->value('id');
-                $managerId = User::query()->where('tenant_id', $tenant->id)->where('role', Role::Manager)->value('id');
-                $currency = tenant('currency') ?? 'PHP';
+            $staffId = User::query()->where('tenant_id', $tenant->id)->where('role', Role::Staff)->value('id');
+            $managerId = User::query()->where('tenant_id', $tenant->id)->where('role', Role::Manager)->value('id');
+            $currency = tenant('currency') ?? 'PHP';
 
-                foreach ($this->plan($tenant->id) as $index => $plan) {
-                    $this->seedBooking($tenant, $plan, $index + 1, $staffId, $managerId, $currency);
-                }
-            });
+            foreach ($this->plan($tenant->id) as $index => $plan) {
+                $this->seedBooking($tenant, $plan, $index + 1, $staffId, $managerId, $currency);
+            }
         });
     }
 

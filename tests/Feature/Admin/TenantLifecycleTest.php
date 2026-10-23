@@ -20,18 +20,6 @@ use Stancl\Tenancy\Events\TenantCreated;
 
 use function Pest\Laravel\freezeSecond;
 
-afterEach(function () {
-    // End tenancy first so the tenant connection is purged; Windows cannot delete
-    // an SQLite database file that is still open.
-    tenancy()->end();
-
-    // A tenant with billing history cannot be force-deleted, so clear that first.
-    Subscription::withTrashed()->forceDelete();
-
-    // Drops the tenant databases created during the test.
-    Tenant::withTrashed()->get()->each->forceDelete();
-});
-
 function lifecyclePage(Tenant $tenant, User $superAdmin): Testable
 {
     return Livewire::actingAs($superAdmin)->test('pages::admin.tenants.show', ['tenant' => $tenant]);

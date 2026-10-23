@@ -6,19 +6,10 @@ use Illuminate\Support\Facades\DB;
 
 use function Pest\Laravel\freezeSecond;
 
-afterEach(function () {
-    // End tenancy first so the tenant connection is purged; Windows cannot delete
-    // an SQLite database file that is still open.
-    tenancy()->end();
-
-    // Drops the tenant databases created during the test.
-    Tenant::withTrashed()->get()->each->forceDelete();
-});
-
 test('a new tenant starts pending and stores its status in a real column', function () {
-    $tenant = Tenant::create(['id' => 'acme']);
+    $tenant = Tenant::create();
 
-    $row = DB::table('tenants')->where('id', 'acme')->first();
+    $row = DB::table('tenants')->where('id', $tenant->id)->first();
     expect($tenant->status)->toBe(TenantStatus::Pending)
         ->and($tenant->fresh()?->status)->toBe(TenantStatus::Pending);
     expect($row->status)->toEqual(1)
@@ -49,7 +40,7 @@ test('a status change is stored in its own columns and reads back typed', functi
 
 test('tenants can be filtered by status in a query', function () {
     $active = Tenant::factory()->create();
-    Tenant::create(['id' => 'pending-agency']);
+    Tenant::create();
 
     $activeIds = Tenant::where('status', TenantStatus::Active)->pluck('id');
     $activeIdsBySql = DB::table('tenants')->where('status', 2)->pluck('id');

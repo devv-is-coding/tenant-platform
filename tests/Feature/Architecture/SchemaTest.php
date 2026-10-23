@@ -6,15 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 uses(RefreshDatabase::class);
 
-afterEach(function () {
-    // End tenancy first so the tenant connection is purged; Windows cannot delete
-    // an SQLite database file that is still open.
-    tenancy()->end();
-
-    // Drops the tenant databases created during the test.
-    Tenant::withTrashed()->get()->each->forceDelete();
-});
-
 /**
  * Framework-owned plumbing, excluded because we do not control its column names
  * and it contains no money. `job_batches.total_jobs` would otherwise trip the
@@ -47,7 +38,7 @@ function everyApplicationColumn(): array
 {
     $central = config('tenancy.database.central_connection');
 
-    tenancy()->initialize(Tenant::create(['id' => 'schema-probe']));
+    tenancy()->initialize(Tenant::create());
 
     $columns = [];
 

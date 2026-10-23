@@ -27,20 +27,6 @@ use function Pest\Laravel\actingAs;
  * real tenant databases rather than faking tenant creation.
  */
 
-afterEach(function () {
-    // End tenancy first so the tenant connection is purged; Windows cannot delete
-    // an SQLite database file that is still open.
-    tenancy()->end();
-
-    // A tenant with billing history cannot be deleted, so clear that first.
-    SubscriptionPayment::withTrashed()->forceDelete();
-    SubscriptionInvoice::withTrashed()->forceDelete();
-    Subscription::withTrashed()->forceDelete();
-
-    // Drops the tenant databases created during the test.
-    Tenant::withTrashed()->get()->each->forceDelete();
-});
-
 function agencyPageFor(Tenant $tenant): Testable
 {
     return Livewire::actingAs(User::factory()->superAdmin()->create())->test('pages::admin.tenants.show', ['tenant' => $tenant]);
@@ -82,12 +68,12 @@ test('what a super admin does to one agency never reaches another', function () 
 test('one agency\'s tier never reaches another\'s requests, in either order', function () {
     // No gated routes exist yet, so a probe on the tenant stack stands in.
     Route::middleware(['tenant', EnsureTenantHasFeature::using(PlanFeature::Analytics)])->get('/analytics-probe', fn () => 'analytics');
-    $pro = Tenant::factory()->create(['id' => 'pro-agency']);
-    $basic = Tenant::factory()->create(['id' => 'basic-agency']);
+    $pro = Tenant::factory()->create();
+    $basic = Tenant::factory()->create();
     Subscription::factory()->for($pro)->create(['tier' => PlanTier::Pro]);
     Subscription::factory()->for($basic)->create(['tier' => PlanTier::Basic]);
-    $pro->domains()->create(['domain' => 'pro-agency.localhost']);
-    $basic->domains()->create(['domain' => 'basic-agency.localhost']);
+    $pro->domains()->create(['domain' => "{$pro->id}.localhost"]);
+    $basic->domains()->create(['domain' => "{$basic->id}.localhost"]);
 
     foreach ([$pro, $basic, $pro, $basic] as $tenant) {
         // Ended first, as at the start of a real request: the test application
