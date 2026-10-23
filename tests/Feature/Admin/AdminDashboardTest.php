@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\AuditAction;
+use App\Enums\PlanTier;
 use App\Enums\Role;
 use App\Enums\SubscriptionStatus;
 use App\Enums\TenantStatus;
@@ -44,9 +45,9 @@ function seedPlatform(): array
 
     // Live: Dumaguete Active, renewing in three days; Tanjay past due.
     // Sibulan's subscription has ended and must not count as live.
-    $renewing = Subscription::factory()->for($dumaguete)->create(['plan_name' => 'Agency Standard', 'next_billing_on' => '2026-10-24']);
-    $pastDue = Subscription::factory()->for($tanjay)->pastDue()->create(['plan_name' => 'Agency Plus']);
-    $ended = Subscription::factory()->for($sibulan)->expired()->create();
+    $renewing = Subscription::factory()->for($dumaguete)->create(['plan_name' => 'Agency Standard', 'tier' => PlanTier::Pro, 'next_billing_on' => '2026-10-24']);
+    $pastDue = Subscription::factory()->for($tanjay)->pastDue()->create(['plan_name' => 'Agency Plus', 'tier' => PlanTier::Basic]);
+    $ended = Subscription::factory()->for($sibulan)->expired()->create(['tier' => PlanTier::Pro]);
 
     // Owed: Tanjay's 2,500.00 is overdue; Dumaguete owes 1,500.00 not yet due.
     // A paid invoice and a void overdue one owe nothing.
@@ -95,6 +96,10 @@ test('the subscription figures count only live subscriptions', function () {
         SubscriptionStatus::Trialing->value => 0,
         SubscriptionStatus::Active->value => 1,
         SubscriptionStatus::PastDue->value => 1,
+    ])->and($dashboard->liveTiers)->toBe([
+        PlanTier::Basic->value => 1,
+        PlanTier::Advanced->value => 0,
+        PlanTier::Pro->value => 1,
     ])->and($dashboard->livePlans)->toBe(['Agency Plus' => 1, 'Agency Standard' => 1])
         ->and($dashboard->agenciesWithoutSubscription)->toBe(2)
         ->and($dashboard->upcomingRenewals->modelKeys())->toBe([$platform['renewing']->id]);

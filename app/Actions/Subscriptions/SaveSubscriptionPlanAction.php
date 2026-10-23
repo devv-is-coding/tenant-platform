@@ -4,6 +4,7 @@ namespace App\Actions\Subscriptions;
 
 use App\Enums\AuditAction;
 use App\Enums\BillingInterval;
+use App\Enums\PlanTier;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Services\Audit\AuditRecorder;
@@ -16,10 +17,10 @@ class SaveSubscriptionPlanAction
     public function __construct(private AuditRecorder $auditRecorder) {}
 
     /**
-     * Add a plan to the price list, or rename or reprice the given one.
+     * Add a plan to the price list, or rename, re-tier or reprice the given one.
      *
-     * Repricing a plan only changes what agencies put on it from now on: those
-     * already on it keep the terms copied onto their subscription.
+     * Repricing or re-tiering a plan only changes what agencies put on it from
+     * now on: those already on it keep the terms copied onto their subscription.
      *
      * @param  array<string, mixed>  $input
      */
@@ -30,6 +31,7 @@ class SaveSubscriptionPlanAction
         $amount = Money::parse($validated['amount'], $plan->currency ?? config('tenancy.billing_currency'));
         $attributes = [
             'name' => trim($validated['name']),
+            'tier' => PlanTier::from((int) $validated['tier']),
             'amount_minor' => $amount->minor,
             'interval' => BillingInterval::from((int) $validated['interval']),
         ];
@@ -65,6 +67,7 @@ class SaveSubscriptionPlanAction
             'name' => ['required', 'string', 'max:255', Rule::unique(SubscriptionPlan::class, 'name')->ignore($plan)->withoutTrashed()],
             'amount' => ['required', 'string', 'regex:/^\d{1,9}(\.\d{1,2})?$/', 'not_regex:/^0*(\.0*)?$/'],
             'interval' => ['required', Rule::enum(BillingInterval::class)],
+            'tier' => ['required', Rule::enum(PlanTier::class)],
         ];
     }
 

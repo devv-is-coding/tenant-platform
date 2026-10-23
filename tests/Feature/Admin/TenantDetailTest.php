@@ -1,8 +1,11 @@
 <?php
 
 use App\Enums\AuditAction;
+use App\Enums\PlanFeature;
+use App\Enums\PlanTier;
 use App\Enums\Role;
 use App\Enums\SubscriptionStatus;
+use App\Models\PlanFeatureSetting;
 use App\Models\Subscription;
 use App\Models\Tenant;
 use App\Models\User;
@@ -41,6 +44,25 @@ test('the detail page shows the agency\'s users, subscription status and audit t
         ->assertSeeInOrder(['Ignacio Ramos', 'Manager'])
         ->assertSeeInOrder(['Agency Standard', 'Past due'])
         ->assertSeeInOrder(['Tenant Created', 'Marisol Vega (Super admin)']);
+});
+
+test('the subscription card shows the tier and the features the agency has now', function () {
+    $tenant = Tenant::factory()->create();
+    Subscription::factory()->for($tenant)->create(['plan_name' => 'Pro Monthly', 'tier' => PlanTier::Pro]);
+    PlanFeatureSetting::factory()->create(['feature' => PlanFeature::Analytics, 'minimum_tier' => PlanTier::Advanced]);
+
+    $detail = tenantDetail($tenant)->assertSeeInOrder(['Pro Monthly', 'Pro', 'Features the agency has now', 'Catalog', 'Analytics', 'Priority restore requests']);
+
+    expect($detail->instance()->features)->toBe(PlanFeature::cases());
+});
+
+test('an agency whose subscription has ended has no plan features', function () {
+    $tenant = Tenant::factory()->create();
+    Subscription::factory()->for($tenant)->expired()->create(['tier' => PlanTier::Pro]);
+
+    $detail = tenantDetail($tenant)->assertSee('None: the agency has no live plan.');
+
+    expect($detail->instance()->features)->toBe([]);
 });
 
 test('the detail page reads only that agency\'s users, subscription and audit events', function () {

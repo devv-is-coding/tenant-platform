@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\BillingInterval;
+use App\Enums\PlanTier;
 use App\Enums\SubscriptionStatus;
 use Database\Factories\SubscriptionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -23,6 +24,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property string|null $active_for_tenant_id
  * @property int|null $subscription_plan_id
  * @property string $plan_name
+ * @property PlanTier $tier
  * @property int $amount_minor
  * @property string $currency
  * @property BillingInterval $interval
@@ -45,6 +47,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
     'active_for_tenant_id',
     'subscription_plan_id',
     'plan_name',
+    'tier',
     'amount_minor',
     'currency',
     'interval',
@@ -79,6 +82,7 @@ class Subscription extends Model
         return [
             'interval' => BillingInterval::class,
             'status' => SubscriptionStatus::class,
+            'tier' => PlanTier::class,
             'amount_minor' => 'integer',
             'starts_on' => 'date',
             'current_period_start_on' => 'date',

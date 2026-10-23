@@ -3,6 +3,7 @@
 use App\Actions\Subscriptions\StartSubscriptionAction;
 use App\Enums\AuditAction;
 use App\Enums\BillingInterval;
+use App\Enums\PlanTier;
 use App\Enums\Role;
 use App\Enums\SubscriptionStatus;
 use App\Models\PlatformAuditEvent;
@@ -34,7 +35,7 @@ test('starting an agency\'s first subscription snapshots the chosen plan and rec
     travelTo('2026-10-10 09:30:00');
     $superAdmin = User::factory()->superAdmin()->create();
     $tenant = Tenant::factory()->create();
-    $plan = SubscriptionPlan::factory()->create(['name' => 'Agency Standard', 'amount_minor' => 250000, 'interval' => BillingInterval::Monthly]);
+    $plan = SubscriptionPlan::factory()->create(['name' => 'Agency Standard', 'tier' => PlanTier::Pro, 'amount_minor' => 250000, 'interval' => BillingInterval::Monthly]);
 
     subscriptionPage($tenant, $superAdmin)
         ->set('subscription_plan_id', $plan->id)
@@ -47,6 +48,7 @@ test('starting an agency\'s first subscription snapshots the chosen plan and rec
         ->and($subscription->active_for_tenant_id)->toBe($tenant->id)
         ->and($subscription->subscription_plan_id)->toBe($plan->id)
         ->and($subscription->plan_name)->toBe('Agency Standard')
+        ->and($subscription->tier)->toBe(PlanTier::Pro)
         ->and($subscription->amount_minor)->toBe(250000)
         ->and($subscription->currency)->toBe('PHP')
         ->and($subscription->interval)->toBe(BillingInterval::Monthly)
@@ -72,7 +74,7 @@ test('changing plan ends the live subscription and starts the new one in its pla
     $tenant = Tenant::factory()->create();
     $previous = Subscription::factory()->for($tenant)->create(['plan_name' => 'Agency Standard', 'amount_minor' => 250000]);
 
-    $plan = SubscriptionPlan::factory()->create(['name' => 'Agency Plus', 'amount_minor' => 900000, 'interval' => BillingInterval::Quarterly]);
+    $plan = SubscriptionPlan::factory()->create(['name' => 'Agency Plus', 'tier' => PlanTier::Advanced, 'amount_minor' => 900000, 'interval' => BillingInterval::Quarterly]);
 
     $subscription = app(StartSubscriptionAction::class)->handle($superAdmin, $tenant, ['subscription_plan_id' => $plan->id]);
 
@@ -93,6 +95,7 @@ test('changing plan ends the live subscription and starts the new one in its pla
         ->and($event->subject_id)->toBe($subscription->id)
         ->and($event->changes)->toBe([
             'plan_name' => ['old' => 'Agency Standard', 'new' => 'Agency Plus'],
+            'tier' => ['old' => PlanTier::Basic->value, 'new' => PlanTier::Advanced->value],
             'amount_minor' => ['old' => 250000, 'new' => 900000],
             'interval' => ['old' => 1, 'new' => 2],
         ]);

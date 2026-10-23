@@ -62,6 +62,7 @@ enum AuditAction: string
     case PlanCreated = 'plan.created';
     case PlanUpdated = 'plan.updated';
     case PlanDeleted = 'plan.deleted';
+    case PlanFeatureMoved = 'plan_feature.moved';
 
     case RestoreRequested = 'restore.requested';
     case RestoreDeclined = 'restore.declined';

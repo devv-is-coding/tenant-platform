@@ -46,6 +46,12 @@ return new class extends Migration
             $table->foreignId('subscription_plan_id')->nullable()->index();
 
             $table->string('plan_name');
+
+            // The feature tier the agency agreed to (PlanTier). Which features
+            // that tier includes is read live from plan_features, not frozen
+            // here, so a feature added to a tier reaches every agency on it.
+            $table->unsignedTinyInteger('tier');
+
             $table->unsignedBigInteger('amount_minor');
 
             // The PLATFORM's billing currency, from config - not the agency's

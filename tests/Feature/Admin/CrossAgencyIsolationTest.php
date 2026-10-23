@@ -2,7 +2,11 @@
 
 use App\Enums\AuditAction;
 use App\Enums\PaymentMethod;
+use App\Enums\PlanFeature;
+use App\Enums\PlanTier;
+use App\Enums\Role;
 use App\Enums\TenantStatus;
+use App\Http\Middleware\EnsureTenantHasFeature;
 use App\Models\AuditEvent;
 use App\Models\PlatformAuditEvent;
 use App\Models\Subscription;
@@ -11,9 +15,12 @@ use App\Models\SubscriptionPayment;
 use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Support\Facades\Route;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
+
+use function Pest\Laravel\actingAs;
 
 /*
  * Suspending an agency writes into its own database, so these tests provision
@@ -70,6 +77,27 @@ test('what a super admin does to one agency never reaches another', function () 
             AuditAction::SubscriptionPlanChanged,
             AuditAction::SubscriptionPaymentRecorded,
         );
+});
+
+test('one agency\'s tier never reaches another\'s requests, in either order', function () {
+    // No gated routes exist yet, so a probe on the tenant stack stands in.
+    Route::middleware(['tenant', EnsureTenantHasFeature::using(PlanFeature::Analytics)])->get('/analytics-probe', fn () => 'analytics');
+    $pro = Tenant::factory()->create(['id' => 'pro-agency']);
+    $basic = Tenant::factory()->create(['id' => 'basic-agency']);
+    Subscription::factory()->for($pro)->create(['tier' => PlanTier::Pro]);
+    Subscription::factory()->for($basic)->create(['tier' => PlanTier::Basic]);
+    $pro->domains()->create(['domain' => 'pro-agency.localhost']);
+    $basic->domains()->create(['domain' => 'basic-agency.localhost']);
+
+    foreach ([$pro, $basic, $pro, $basic] as $tenant) {
+        // Ended first, as at the start of a real request: the test application
+        // keeps the previous request's tenant initialized.
+        tenancy()->end();
+
+        $response = actingAs(User::factory()->role(Role::Staff)->for($tenant)->create())->get("http://{$tenant->id}.localhost/analytics-probe");
+
+        $tenant->is($pro) ? $response->assertOk() : $response->assertForbidden();
+    }
 });
 
 test('the invoice a payment form is recording against cannot be swapped from the browser', function () {

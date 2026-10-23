@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Role;
+use App\Models\PlanFeatureSetting;
 use App\Models\PlatformAuditEvent;
 use App\Models\RestoreRequest;
 use App\Models\Subscription;
@@ -152,6 +153,15 @@ test('only super admins may see or change the price list', function (string $abi
     'add' => ['create', fn () => SubscriptionPlan::class],
     'reprice' => ['update', fn () => SubscriptionPlan::factory()->make()],
     'withdraw' => ['delete', fn () => SubscriptionPlan::factory()->make()],
+])->with($superAdminsOnly);
+
+test('only super admins may see or move which tier a feature starts at, even an agency\'s own admin may not', function (string $ability, Role $role, bool $allowed) {
+    $user = User::factory()->role($role)->make(['tenant_id' => $role->isTenantRole() ? 'dumaguete' : null]);
+
+    expect($user->can($ability, PlanFeatureSetting::class))->toBe($allowed);
+})->with([
+    'see the matrix' => ['viewAny'],
+    'move a feature' => ['update'],
 ])->with($superAdminsOnly);
 
 test('only super admins may record a payment against an invoice, even the billed agency\'s own admin may not', function (Role $role, bool $allowed) {

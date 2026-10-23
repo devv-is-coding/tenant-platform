@@ -2,7 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\PlanFeature;
+use App\Enums\PlanTier;
 use App\Enums\TenantStatus;
+use App\Services\Plans\PlanFeatureMatrix;
 use Database\Factories\TenantFactory;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
@@ -32,6 +35,7 @@ use Stancl\Tenancy\Events;
  * @property int|null $status_changed_by
  * @property Carbon|null $deleted_at
  * @property-read Subscription|null $latestSubscription
+ * @property-read Subscription|null $liveSubscription
  */
 class Tenant extends BaseTenant implements TenantWithDatabase
 {
@@ -132,6 +136,55 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     public function latestSubscription(): HasOne
     {
         return $this->hasOne(Subscription::class)->latestOfMany();
+    }
+
+    /**
+     * Get the subscription holding the agency's live slot, if any.
+     *
+     * Read through the unique `active_for_tenant_id` column, which only a live
+     * subscription occupies. Once loaded it is kept on the instance, so the
+     * tier gates read it once per request.
+     *
+     * @return HasOne<Subscription, $this>
+     */
+    public function liveSubscription(): HasOne
+    {
+        return $this->hasOne(Subscription::class, 'active_for_tenant_id');
+    }
+
+    /**
+     * Get the tier the agency is on: its live subscription's. Trialing, Active
+     * and PastDue count; an agency with no live subscription has no tier.
+     */
+    public function currentTier(): ?PlanTier
+    {
+        $subscription = $this->liveSubscription;
+
+        return $subscription !== null && $subscription->status->isLive() ? $subscription->tier : null;
+    }
+
+    /**
+     * Determine if the agency's tier includes the feature. The one check every
+     * gate goes through: route middleware, the @feature Blade directive and
+     * the `use-feature` ability.
+     */
+    public function hasFeature(PlanFeature $feature): bool
+    {
+        $tier = $this->currentTier();
+
+        return $tier !== null && app(PlanFeatureMatrix::class)->includes($tier, $feature);
+    }
+
+    /**
+     * Get every feature the agency's tier includes, in the enum's order.
+     *
+     * @return list<PlanFeature>
+     */
+    public function features(): array
+    {
+        $tier = $this->currentTier();
+
+        return $tier === null ? [] : app(PlanFeatureMatrix::class)->featuresFor($tier);
     }
 
     /**

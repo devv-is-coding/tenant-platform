@@ -10,7 +10,7 @@ return new class extends Migration
      * The platform's price list: the plans a super admin offers agencies.
      *
      * A plan is a template, not a contract. Putting an agency on a plan copies
-     * its name, price and interval onto the subscription, so repricing a plan
+     * its name, tier, price and interval onto the subscription, so repricing a plan
      * here changes what the next agency agrees to, never what an existing one
      * already did.
      *
@@ -24,6 +24,11 @@ return new class extends Migration
             $table->id();
 
             $table->string('name');
+
+            // The feature tier the plan sells (PlanTier). A tier may have
+            // several plans, such as Pro Monthly and Pro Annual.
+            $table->unsignedTinyInteger('tier')->index();
+
             $table->unsignedBigInteger('amount_minor');
 
             // The platform's billing currency when the plan was priced, from
