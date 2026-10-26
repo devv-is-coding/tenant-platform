@@ -87,6 +87,17 @@ enum TenantStatus: int
     }
 
     /**
+     * Get the reason a write is refused while the agency is read-only, the
+     * same from the route guard and from a policy.
+     */
+    public function readOnlyNotice(): string
+    {
+        return __('This agency is :status, so its records are read-only.', [
+            'status' => mb_strtolower($this->label()),
+        ]);
+    }
+
+    /**
      * Determine if the agency's screens must mask customers' personal details
      * and money figures - bookings, payments, refunds, reports - until it
      * subscribes again. Staff still see that a booking exists, its reference,

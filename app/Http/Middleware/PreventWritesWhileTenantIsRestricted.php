@@ -13,8 +13,8 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * Part of the `tenant` middleware group, so every tenant route is covered
  * without having to remember it. Livewire update requests do not pass through
- * tenant routes, so policies must deny writes as well once tenant-side
- * components exist.
+ * tenant routes, so every agency-side policy refuses writes as well
+ * (AgencyPolicy).
  */
 class PreventWritesWhileTenantIsRestricted
 {
@@ -28,9 +28,7 @@ class PreventWritesWhileTenantIsRestricted
         $tenant = tenant();
 
         if (! $request->isMethodSafe() && $tenant instanceof Tenant && $tenant->status->isReadOnly()) {
-            abort(Response::HTTP_FORBIDDEN, __('This agency is :status, so its records are read-only.', [
-                'status' => mb_strtolower($tenant->status->label()),
-            ]));
+            abort(Response::HTTP_FORBIDDEN, $tenant->status->readOnlyNotice());
         }
 
         return $next($request);
