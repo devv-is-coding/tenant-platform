@@ -170,3 +170,31 @@ test('only super admins may record a payment against an invoice, even the billed
 
     expect($user->can('recordPayment', $invoice))->toBe($allowed);
 })->with($superAdminsOnly);
+
+test('the agency\'s own staff, and only they, may open its dashboard', function (Role $role, ?string $tenantId, bool $allowed) {
+    $tenant = Tenant::factory()->make(['id' => 'dumaguete']);
+    $user = User::factory()->role($role)->make(['tenant_id' => $tenantId]);
+
+    expect($user->can('viewAgencyDashboard', $tenant))->toBe($allowed);
+})->with([
+    'its admin' => [Role::Admin, 'dumaguete', true],
+    'its manager' => [Role::Manager, 'dumaguete', true],
+    'its staff' => [Role::Staff, 'dumaguete', true],
+    'its customer' => [Role::Customer, 'dumaguete', false],
+    'another agency\'s admin' => [Role::Admin, 'tanjay', false],
+    'a super admin' => [Role::SuperAdmin, null, false],
+]);
+
+test('only the agency\'s own admin may see its plan and its team', function (string $ability, Role $role, ?string $tenantId, bool $allowed) {
+    $tenant = Tenant::factory()->make(['id' => 'dumaguete']);
+    $user = User::factory()->role($role)->make(['tenant_id' => $tenantId]);
+
+    expect($user->can($ability, $tenant))->toBe($allowed);
+})->with(['viewAgencyPlan', 'viewAgencyTeam'])->with([
+    'its admin' => [Role::Admin, 'dumaguete', true],
+    'its manager' => [Role::Manager, 'dumaguete', false],
+    'its staff' => [Role::Staff, 'dumaguete', false],
+    'its customer' => [Role::Customer, 'dumaguete', false],
+    'another agency\'s admin' => [Role::Admin, 'tanjay', false],
+    'a super admin' => [Role::SuperAdmin, null, false],
+]);

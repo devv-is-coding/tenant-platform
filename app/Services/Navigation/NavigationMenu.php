@@ -56,7 +56,7 @@ class NavigationMenu
     private function tenantSections(): array
     {
         return [
-            $this->section(__('Dashboard'), 'home', route('tenant.dashboard'), 'tenant.dashboard'),
+            $this->section(__('Dashboard'), 'squares-2x2', route('tenant.dashboard'), 'tenant.dashboard'),
         ];
     }
 

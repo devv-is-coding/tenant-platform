@@ -2,7 +2,7 @@
 
 namespace App\Http\Responses;
 
-use App\Concerns\LandsSuperAdminsOnTheirDashboard;
+use App\Concerns\LandsUsersOnTheirDashboard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
@@ -11,11 +11,11 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Fortify's password sign-in response, landing a super admin on the admin
- * dashboard.
+ * dashboard and an agency's staff on their agency's dashboard.
  */
 class LoginResponse implements LoginResponseContract
 {
-    use LandsSuperAdminsOnTheirDashboard;
+    use LandsUsersOnTheirDashboard;
 
     /**
      * Create an HTTP response that represents the object.

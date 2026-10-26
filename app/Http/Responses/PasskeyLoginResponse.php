@@ -2,7 +2,7 @@
 
 namespace App\Http\Responses;
 
-use App\Concerns\LandsSuperAdminsOnTheirDashboard;
+use App\Concerns\LandsUsersOnTheirDashboard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Laravel\Passkeys\Contracts\PasskeyLoginResponse as PasskeyLoginResponseContract;
@@ -14,7 +14,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class PasskeyLoginResponse implements PasskeyLoginResponseContract
 {
-    use LandsSuperAdminsOnTheirDashboard;
+    use LandsUsersOnTheirDashboard;
 
     /**
      * Create an HTTP response that represents the object.

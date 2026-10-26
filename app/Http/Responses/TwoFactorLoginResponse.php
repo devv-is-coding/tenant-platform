@@ -2,7 +2,7 @@
 
 namespace App\Http\Responses;
 
-use App\Concerns\LandsSuperAdminsOnTheirDashboard;
+use App\Concerns\LandsUsersOnTheirDashboard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Laravel\Fortify\Contracts\TwoFactorLoginResponse as TwoFactorLoginResponseContract;
@@ -11,11 +11,11 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Fortify's response once a two-factor challenge is passed, landing a super
- * admin on the admin dashboard.
+ * admin on the admin dashboard and an agency's staff on their agency's.
  */
 class TwoFactorLoginResponse implements TwoFactorLoginResponseContract
 {
-    use LandsSuperAdminsOnTheirDashboard;
+    use LandsUsersOnTheirDashboard;
 
     /**
      * Create an HTTP response that represents the object.
