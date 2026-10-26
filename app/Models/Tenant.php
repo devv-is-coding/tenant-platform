@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\PlanFeature;
 use App\Enums\PlanTier;
+use App\Enums\Role;
 use App\Enums\TenantStatus;
 use App\Services\Plans\PlanFeatureMatrix;
 use Database\Factories\TenantFactory;
@@ -110,13 +111,25 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     }
 
     /**
-     * Get the tenant's admins, managers and staff.
+     * Get the agency's admins, managers and staff, the people who run it. The
+     * console lists and counts only these, never the agency's customers.
      *
      * @return HasMany<User, $this>
      */
-    public function users(): HasMany
+    public function staff(): HasMany
     {
-        return $this->hasMany(User::class);
+        return $this->hasMany(User::class)->whereIn('role', Role::tenantRoles());
+    }
+
+    /**
+     * Get the customers who belong to the agency, the ones who signed up in
+     * its app or transferred to it.
+     *
+     * @return HasMany<User, $this>
+     */
+    public function customers(): HasMany
+    {
+        return $this->hasMany(User::class)->where('role', Role::Customer);
     }
 
     /**

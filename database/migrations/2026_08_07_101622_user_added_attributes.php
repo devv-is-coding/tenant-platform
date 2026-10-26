@@ -24,12 +24,16 @@ return new class extends Migration
             $table->string('contact_number', 20)->nullable()->after('last_name');
             $table->string('profile_picture')->nullable()->after('contact_number');
             $table->unsignedTinyInteger('role')->default(0)->after('profile_picture');
-            // Admins, managers and staff belong to one tenant; super admins and customers do not.
+            // The agency the user belongs to: admins, managers and staff work for
+            // it, and a customer signed up in its app. Only super admins have none.
             $table->string('tenant_id')->nullable()->after('role');
             $table->boolean('is_active')->default(true)->after('tenant_id');
             $table->softDeletes()->after('updated_at');
 
-            $table->foreign('tenant_id')->references('id')->on('tenants')->cascadeOnUpdate()->cascadeOnDelete();
+            // RESTRICT, not CASCADE: hard-deleting an agency must never silently
+            // take its customers' accounts with it. The app only soft-deletes
+            // agencies, so this guards a force delete.
+            $table->foreign('tenant_id')->references('id')->on('tenants')->cascadeOnUpdate()->restrictOnDelete();
         });
     }
 

@@ -27,10 +27,11 @@ function agencyDatabaseKept(Tenant $tenant): bool
     return $tenant->database()->manager()->databaseExists($tenant->database()->getName());
 }
 
-test('deleting an agency soft-deletes it with its users, domains and billing, and keeps its database', function () {
+test('deleting an agency soft-deletes it with its staff, customers, domains and billing, and keeps its database', function () {
     $tenant = Tenant::factory()->create(['name' => 'Dumaguete Travel']);
     $domain = $tenant->domains()->create(['domain' => "{$tenant->id}.localhost"]);
     $admin = User::factory()->role(Role::Admin)->for($tenant)->create();
+    $customer = User::factory()->role(Role::Customer)->for($tenant)->create();
     $live = Subscription::factory()->for($tenant)->create();
     $invoice = SubscriptionInvoice::factory()->for($live)->create();
     $payment = SubscriptionPayment::factory()->for($invoice, 'invoice')->create();
@@ -46,6 +47,7 @@ test('deleting an agency soft-deletes it with its users, domains and billing, an
     expect(Tenant::find($tenant->id))->toBeNull()
         ->and(Tenant::withTrashed()->find($tenant->id)?->deleted_at)->not->toBeNull()
         ->and(User::find($admin->id))->toBeNull()
+        ->and(User::find($customer->id))->toBeNull()
         ->and(Domain::query()->where('tenant_id', $tenant->id)->count())->toBe(0)
         ->and(Subscription::query()->where('tenant_id', $tenant->id)->count())->toBe(0)
         ->and(SubscriptionInvoice::count())->toBe(0)
@@ -61,7 +63,7 @@ test('deleting an agency soft-deletes it with its users, domains and billing, an
             'subscription' => [$live->id],
             'subscription_invoice' => [$invoice->id],
             'subscription_payment' => [$payment->id],
-            'user' => [$admin->id],
+            'user' => [$admin->id, $customer->id],
             'domain' => [$domain->id],
         ]]);
 

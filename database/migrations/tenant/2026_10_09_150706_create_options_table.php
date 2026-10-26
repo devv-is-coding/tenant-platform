@@ -28,8 +28,7 @@ return new class extends Migration
      * and a fixed-date New Year's package.
      *
      * There is no `currency` column: a tenant trades in exactly one currency,
-     * held in `tenants.data` where the central marketplace can read it without
-     * initialising tenancy.
+     * held in `tenants.data` (see the settings table for why).
      */
     public function up(): void
     {

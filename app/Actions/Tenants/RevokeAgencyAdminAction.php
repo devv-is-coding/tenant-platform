@@ -38,7 +38,7 @@ class RevokeAgencyAdminAction
 
         $tenant->getConnection()->transaction(function () use ($actor, $tenant, $admin, $reason): void {
             Tenant::query()->whereKey($tenant->id)->lockForUpdate()->firstOrFail();
-            $locked = $tenant->users()->whereKey($admin->id)->where('role', Role::Admin)->lockForUpdate()->firstOrFail();
+            $locked = $tenant->staff()->whereKey($admin->id)->where('role', Role::Admin)->lockForUpdate()->firstOrFail();
 
             $this->ensureNotLastActiveAdmin($tenant, $locked);
 
@@ -67,7 +67,7 @@ class RevokeAgencyAdminAction
             return;
         }
 
-        $otherActiveAdmins = $tenant->users()
+        $otherActiveAdmins = $tenant->staff()
             ->where('role', Role::Admin)
             ->where('is_active', true)
             ->whereKeyNot($user->id)

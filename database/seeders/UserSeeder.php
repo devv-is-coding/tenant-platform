@@ -10,8 +10,13 @@ use Illuminate\Database\Seeder;
 class UserSeeder extends Seeder
 {
     /**
-     * Seed one platform-wide super admin and customer, plus an admin, two managers
-     * and two staff members for every tenant. Run TenantSeeder first.
+     * Seed one platform-wide super admin, plus an admin, two managers, two
+     * staff members and a few named customers for every tenant. Run
+     * TenantSeeder first.
+     *
+     * Every customer belongs to exactly one agency, the one whose app they
+     * signed up in; only the super admin belongs to none. The demo `customer`
+     * account belongs to Dumaguete.
      *
      * Users are keyed by username so the seeder can be re-run. The role is always
      * set explicitly because the column default is super admin. Every seeded
@@ -20,13 +25,6 @@ class UserSeeder extends Seeder
     public function run(): void
     {
         $this->seedUser('superadmin', Role::SuperAdmin);
-        $this->seedUser('customer', Role::Customer);
-
-        // A handful of extra named customers, so marketplace mock data (wishlists,
-        // bookings, reviews) has more than one customer to spread across.
-        foreach (['beatriz', 'tomas', 'carmela', 'julio', 'nadia', 'rafael', 'liza', 'miguel', 'andrea', 'paolo'] as $username) {
-            $this->seedCustomer($username);
-        }
 
         // Iterated on the builder: the stancl base model's TenantCollection is not
         // generic, so a fetched collection would lose the Tenant type.
@@ -39,6 +37,10 @@ class UserSeeder extends Seeder
             // person per role. Catalog and booking seeders keep using the first.
             foreach ([Role::Manager, Role::Staff] as $role) {
                 $this->seedUser("{$tenant->id}_".strtolower($role->name).'2', $role, $tenant);
+            }
+
+            foreach ($this->customersOf($tenant->id) as $username) {
+                $this->seedCustomer($username, $tenant);
             }
         });
     }
@@ -67,19 +69,36 @@ class UserSeeder extends Seeder
     }
 
     /**
-     * Create a customer unless one with the username already exists, keeping
-     * the factory's realistic random name rather than the role-labelled name
-     * used for the fixed demo accounts.
+     * Create one of the agency's customers unless one with the username
+     * already exists, keeping the factory's realistic random name.
      */
-    private function seedCustomer(string $username): void
+    private function seedCustomer(string $username, Tenant $tenant): void
     {
         if (User::withTrashed()->where('username', $username)->exists()) {
             return;
         }
 
-        User::factory()->role(Role::Customer)->create([
+        User::factory()->role(Role::Customer)->for($tenant)->create([
             'username' => $username,
             'email' => $username.'@example.com',
         ]);
+    }
+
+    /**
+     * Get the usernames of the agency's demo customers, enough for the booking
+     * and wishlist seeders to spread their mock data across.
+     *
+     * @return list<string>
+     */
+    private function customersOf(string $tenantId): array
+    {
+        return match ($tenantId) {
+            'dumaguete' => ['customer', 'beatriz', 'tomas', 'carmela', 'julio'],
+            'zamboanguita' => ['nadia', 'ramon', 'isabel', 'diego'],
+            'tanjay' => ['sofia', 'marco', 'elena', 'gabriel'],
+            'dauin' => ['rafael', 'liza', 'miguel', 'andrea'],
+            'bayawan' => ['paolo', 'teresa', 'ramil', 'joy'],
+            default => [],
+        };
     }
 }

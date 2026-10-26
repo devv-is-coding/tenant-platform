@@ -13,11 +13,11 @@ return new class extends Migration
      * each setting gets a real type and default instead of a string parsed at
      * every read.
      *
-     * Currency is deliberately absent. It lives only in `tenants.data`, because
-     * the central discovery projection renders prices on the central domain
-     * where tenancy is never initialized - a tenant-DB-only currency would be
-     * unreadable there. Two sources of truth for money is how this goes wrong,
-     * so this table holds only what the central domain never needs.
+     * Currency is deliberately absent. It lives only in `tenants.data`, which
+     * onboarding writes on the central domain before this database exists,
+     * and which tenancy loads with the tenant on every request. Two sources
+     * of truth for money is how this goes wrong, so this table holds only
+     * what the central side never sets.
      */
     public function up(): void
     {

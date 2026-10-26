@@ -48,16 +48,4 @@ enum NotificationType: int
             self::RefundProcessed => __('Refund processed'),
         };
     }
-
-    /**
-     * Determine if the notification concerns a specific tenant.
-     *
-     * Platform-level notifications leave `notifications.tenant_id` null, which
-     * is what lets a customer's bell render in one central query across every
-     * agency they have booked with.
-     */
-    public function isTenantScoped(): bool
-    {
-        return ! in_array($this, [self::UserRegistered, self::ProfileUpdated], true);
-    }
 }

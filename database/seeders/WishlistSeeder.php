@@ -2,73 +2,82 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
+use App\Concerns\RunsInTenant;
+use App\Models\Tenant;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
 class WishlistSeeder extends Seeder
 {
+    use RunsInTenant;
+
     /**
-     * Seed a few cross-tenant wishlists: a customer saving a listing from one
-     * agency next to a listing from another, which is the reason this table is
-     * central rather than per-tenant.
+     * Seed a few wishlists in every agency: its own customers saving its own
+     * published items, since a customer belongs to one agency and its app
+     * shows only that agency's catalog.
      *
-     * Run CatalogSeeder first - it is what populates the central `listings`
-     * projection this table points at.
+     * Run UserSeeder and CatalogSeeder first - wishlists reference the
+     * agency's customers and items.
      */
     public function run(): void
     {
-        $now = now();
+        $this->runInEachTenant(function (Tenant $tenant): void {
+            $now = now();
 
-        foreach ($this->wishlists() as $username => $slugs) {
-            $userId = User::query()->where('username', $username)->value('id');
+            foreach ($this->wishlists($tenant->id) as $username => $slugs) {
+                $customerId = $tenant->customers()->where('username', $username)->value('id');
 
-            if ($userId === null) {
-                continue;
-            }
-
-            foreach ($slugs as $slug) {
-                $listingId = DB::table('listings')->where('slug', $slug)->value('id');
-
-                if ($listingId === null) {
+                if ($customerId === null) {
                     continue;
                 }
 
-                $alreadySaved = DB::table('wishlist_items')
-                    ->where('user_id', $userId)
-                    ->where('listing_id', $listingId)
-                    ->exists();
+                foreach ($slugs as $slug) {
+                    $itemId = DB::table('items')->where('slug', $slug)->value('id');
 
-                if ($alreadySaved) {
-                    continue;
+                    if ($itemId === null) {
+                        continue;
+                    }
+
+                    DB::table('wishlist_items')->insertOrIgnore([
+                        'customer_id' => $customerId,
+                        'item_id' => $itemId,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
                 }
-
-                DB::table('wishlist_items')->insert([
-                    'user_id' => $userId,
-                    'listing_id' => $listingId,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
             }
-        }
+        });
     }
 
     /**
      * @return array<string, list<string>>
      */
-    private function wishlists(): array
+    private function wishlists(string $tenantId): array
     {
-        return [
-            'beatriz' => ['hotel-palwa', 'seoul-busan-explorer'],
-            'tomas' => ['siquijor-island-hopping', 'tanjay-heritage-hotel'],
-            'carmela' => ['japan-discovery', 'zamboanguita-dive-resort'],
-            'julio' => ['south-korea-evisa'],
-            'nadia' => ['japan-evisa', 'taiwan-evisa'],
-            'rafael' => ['dauin-beach-villas', 'singapore-evisa'],
-            'liza' => ['apo-island-dive-snorkel', 'bayawan-sunrise-hotel'],
-            'miguel' => ['mabinay-caves-adventure'],
-            'andrea' => ['vietnam-evisa', 'dauin-beach-villas'],
-            'paolo' => ['mabinay-caves-adventure', 'seoul-busan-explorer'],
-        ];
+        return match ($tenantId) {
+            'dumaguete' => [
+                'beatriz' => ['hotel-palwa', 'japan-discovery'],
+                'tomas' => ['japan-evisa'],
+                'carmela' => ['japan-discovery', 'hotel-palwa'],
+            ],
+            'zamboanguita' => [
+                'nadia' => ['zamboanguita-dive-resort', 'siquijor-island-hopping'],
+                'ramon' => ['south-korea-evisa'],
+            ],
+            'tanjay' => [
+                'sofia' => ['tanjay-heritage-hotel', 'seoul-busan-explorer'],
+                'elena' => ['taiwan-evisa'],
+            ],
+            'dauin' => [
+                'rafael' => ['dauin-beach-villas', 'singapore-evisa'],
+                'liza' => ['apo-island-dive-snorkel'],
+                'andrea' => ['dauin-beach-villas'],
+            ],
+            'bayawan' => [
+                'paolo' => ['mabinay-caves-adventure', 'bayawan-sunrise-hotel'],
+                'joy' => ['vietnam-evisa'],
+            ],
+            default => [],
+        };
     }
 }

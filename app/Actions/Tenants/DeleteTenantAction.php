@@ -22,7 +22,7 @@ class DeleteTenantAction
 
     /**
      * Soft-delete an agency with everything the platform holds about it: its
-     * users, its domains, and its subscriptions with their invoices and
+     * staff and customers, its domains, and its subscriptions with their invoices and
      * payments.
      *
      * Nothing is destroyed. The agency's own database is kept - only a force
@@ -65,8 +65,9 @@ class DeleteTenantAction
             $cascaded['subscription'] = Subscription::query()->where('tenant_id', $locked->id)->pluck('id')->all();
             Subscription::query()->whereKey($cascaded['subscription'])->delete();
 
-            $cascaded['user'] = $locked->users()->pluck('id')->all();
-            $locked->users()->whereKey($cascaded['user'])->delete();
+            // Staff and customers alike: every account belongs to the agency.
+            $cascaded['user'] = User::query()->where('tenant_id', $locked->id)->pluck('id')->all();
+            User::query()->whereKey($cascaded['user'])->delete();
 
             $cascaded['domain'] = $locked->domains()->pluck('id')->all();
             $locked->domains()->whereKey($cascaded['domain'])->delete();

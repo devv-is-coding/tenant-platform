@@ -30,7 +30,8 @@ class OnboardTenantAction
      *
      * No transaction can roll back a created database, so a failure in a
      * later step is undone by deleting the tenant instead - which drops its
-     * database and, through the cascading foreign keys, its domain and users.
+     * database and, through the cascading foreign key, its domain. Users do
+     * not cascade (RESTRICT), so the new admin is deleted first.
      *
      * @param  array<string, string>  $input
      */
@@ -64,6 +65,7 @@ class OnboardTenantAction
         } catch (Throwable $exception) {
             // Undoing a half-created agency that never went live: a force
             // delete, so its database is dropped rather than left behind.
+            User::withTrashed()->where('tenant_id', $tenant->id)->forceDelete();
             $tenant->forceDelete();
 
             throw $exception;

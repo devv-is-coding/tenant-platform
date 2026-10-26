@@ -9,6 +9,9 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Only the current tenant's admins, managers and staff may use its pages.
+ *
+ * Belonging to the tenant is not enough: its customers belong to it too, and
+ * the tenant portal requires a staff role (Role::isTenantRole()) as well.
  */
 class EnsureUserBelongsToTenant
 {

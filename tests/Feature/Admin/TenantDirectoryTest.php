@@ -47,6 +47,17 @@ test('the directory lists each agency with its status, domain and user count', f
         ->assertSee(route('admin.tenants.show', $tenant));
 });
 
+test('the directory\'s user count is the agency\'s staff, never its customers', function () {
+    $tenant = Tenant::factory()->create();
+    User::factory()->role(Role::Admin)->for($tenant)->create();
+    User::factory()->role(Role::Staff)->for($tenant)->create();
+    User::factory()->role(Role::Customer)->for($tenant)->count(3)->create();
+
+    $listed = directory()->instance()->tenants->items()[0];
+
+    expect($listed->staff_count)->toBe(2);
+});
+
 test('the directory shows each agency\'s tier, plan, price and billing status', function () {
     Subscription::factory()->for(Tenant::factory()->create(['name' => 'Alpha Tours', 'created_at' => now()->subDays(1)]))->create([
         'plan_name' => 'Pro Monthly', 'tier' => PlanTier::Pro, 'amount_minor' => 350000, 'interval' => BillingInterval::Monthly,

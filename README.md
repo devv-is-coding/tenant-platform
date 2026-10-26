@@ -199,7 +199,7 @@ CI runs the same checks (`composer ci:check`) on every push and pull request aga
 ## Project status
 
 This is an active, from-scratch rebuild, developed in phases against a detailed internal
-roadmap. **The database schema is complete**: 24 tables across the central and tenant
+roadmap. **The database schema is complete**: 23 tables across the central and tenant
 connections, 19 domain enums, full multi-tenant provisioning verified end-to-end with
 `migrate:fresh --seed`, and an architecture test guarding the money-as-integers invariant
 permanently.
@@ -208,8 +208,8 @@ Application logic (models, services, policies, UI) is being layered on top of th
 phase by phase — platform-level tenant and subscription governance, the per-agency customer API
 and customer transfers, catalog management, inventory and date-ranged availability, the booking
 and payment lifecycle, refunds, reviews, QR check-in, and Stripe integration. The move to
-per-agency customer apps reshapes part of the schema (the central `listings` projection goes;
-wishlists and notifications move into tenant databases) in an upcoming rebuild.
+per-agency customer apps has already reshaped part of the schema: the central `listings`
+projection is gone, and wishlists and notifications live in tenant databases.
 
 **Design priority, in order:** correctness, security, maintainability, architecture, automated
 testing, UX, performance, documentation, deployment readiness. Speed of delivery is explicitly

@@ -271,7 +271,7 @@ new #[Title('Dashboard')] class extends Component {
         $this->authorize('viewAny', Tenant::class);
 
         return Tenant::query()
-            ->whereDoesntHave('users', fn (Builder $query) => $query->where('role', Role::Admin)->where('is_active', true))
+            ->whereDoesntHave('staff', fn (Builder $query) => $query->where('role', Role::Admin)->where('is_active', true))
             ->orderBy('id')
             ->get();
     }
