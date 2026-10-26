@@ -17,8 +17,8 @@ return new class extends Migration
      * `is_approved` defaults to true, faithful to the legacy, with moderation
      * available after the fact rather than before.
      *
-     * Approving or deleting a review recomputes the rating aggregate on the
-     * central `listings` projection. The delete side is the easy half to forget.
+     * An item's rating is read from its approved reviews, which the
+     * (item_id, is_approved, rating) index below serves.
      */
     public function up(): void
     {

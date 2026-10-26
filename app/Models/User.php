@@ -97,7 +97,8 @@ class User extends Authenticatable implements PasskeyUser
     }
 
     /**
-     * Get the tenant an admin, manager or staff member belongs to.
+     * Get the agency the user belongs to, as one of its staff or one of its
+     * customers. Super admins belong to none.
      *
      * @return BelongsTo<Tenant, $this>
      */

@@ -40,6 +40,9 @@ class BookingSeeder extends Seeder
      * rejected booking, and a completed stay that is later partially refunded
      * and reviewed.
      *
+     * Every booking is made by one of the agency's own customers: a customer
+     * belongs to one agency and books only there.
+     *
      * Run CatalogSeeder first - bookings reference its items and options.
      */
     public function run(): void
@@ -66,7 +69,7 @@ class BookingSeeder extends Seeder
      */
     private function seedBooking(Tenant $tenant, array $plan, int $sequence, ?int $staffId, ?int $managerId, string $currency): void
     {
-        $customer = User::query()->where('username', $plan['customer'])->first();
+        $customer = $tenant->customers()->where('username', $plan['customer'])->firstOrFail();
         $now = now();
         $createdAt = $now->copy()->subDays(21 - $sequence);
 
@@ -141,7 +144,7 @@ class BookingSeeder extends Seeder
             'created_at' => $createdAt,
         ]);
 
-        $this->notify($tenant, $customer->id, 4, 'Booking created', "Your booking {$reference} has been received.", $bookingId, $createdAt);
+        $this->notify($customer->id, 4, 'Booking created', "Your booking {$reference} has been received.", $bookingId, $createdAt);
 
         if ($plan['approval'] === BookingApprovalStatus::Approved) {
             DB::table('audit_events')->insert([
@@ -153,7 +156,7 @@ class BookingSeeder extends Seeder
                 'changes' => null,
                 'created_at' => $createdAt->copy()->addHour(),
             ]);
-            $this->notify($tenant, $customer->id, 5, 'Booking approved', "Your booking {$reference} has been approved.", $bookingId, $createdAt->copy()->addHour());
+            $this->notify($customer->id, 5, 'Booking approved', "Your booking {$reference} has been approved.", $bookingId, $createdAt->copy()->addHour());
         } elseif ($plan['approval'] === BookingApprovalStatus::Rejected) {
             DB::table('audit_events')->insert([
                 'actor_id' => $managerId,
@@ -164,7 +167,7 @@ class BookingSeeder extends Seeder
                 'changes' => json_encode(['approval_status' => ['old' => BookingApprovalStatus::Pending->value, 'new' => BookingApprovalStatus::Rejected->value]]),
                 'created_at' => $createdAt->copy()->addHour(),
             ]);
-            $this->notify($tenant, $customer->id, 6, 'Booking rejected', "Your booking {$reference} was rejected: {$plan['rejection_reason']}", $bookingId, $createdAt->copy()->addHour());
+            $this->notify($customer->id, 6, 'Booking rejected', "Your booking {$reference} was rejected: {$plan['rejection_reason']}", $bookingId, $createdAt->copy()->addHour());
 
             return;
         }
@@ -206,7 +209,6 @@ class BookingSeeder extends Seeder
             ]);
 
             $this->notify(
-                $tenant,
                 $customer->id,
                 7,
                 'Payment received',
@@ -248,11 +250,11 @@ class BookingSeeder extends Seeder
         }
 
         if (isset($plan['review'])) {
-            $this->seedReview($tenant, $plan['review'], $bookingId, $lines[0], $customer);
+            $this->seedReview($plan['review'], $bookingId, $lines[0], $customer);
         }
 
         if (isset($plan['refund'])) {
-            $this->seedRefund($tenant, $plan['refund'], $bookingId, $lineIds, $customer, $managerId, $currency, $subtotal, $amountPaid);
+            $this->seedRefund($plan['refund'], $bookingId, $lineIds, $customer, $managerId, $currency, $subtotal, $amountPaid);
         }
     }
 
@@ -361,7 +363,7 @@ class BookingSeeder extends Seeder
      * @param  array<string, mixed>  $review
      * @param  array<string, mixed>  $line
      */
-    private function seedReview(Tenant $tenant, array $review, int $bookingId, array $line, User $customer): void
+    private function seedReview(array $review, int $bookingId, array $line, User $customer): void
     {
         $now = now();
 
@@ -388,15 +390,6 @@ class BookingSeeder extends Seeder
             'changes' => null,
             'created_at' => $now,
         ]);
-
-        DB::connection(config('tenancy.database.central_connection'))->table('listings')
-            ->where('tenant_id', $tenant->id)
-            ->where('item_id', $line['item_id'])
-            ->update([
-                'rating_avg' => sprintf('%.2f', $review['rating']),
-                'reviews_count' => 1,
-                'synced_at' => $now,
-            ]);
     }
 
     /**
@@ -404,7 +397,6 @@ class BookingSeeder extends Seeder
      * @param  list<int>  $lineIds
      */
     private function seedRefund(
-        Tenant $tenant,
         array $refund,
         int $bookingId,
         array $lineIds,
@@ -431,7 +423,7 @@ class BookingSeeder extends Seeder
             'updated_at' => $now->copy()->subDays(2),
         ]);
 
-        $this->notify($tenant, $customer->id, 9, 'Refund requested', 'Your refund request for '.$this->money($refund['amount_minor']).' has been received.', $bookingId, $now->copy()->subDays(2));
+        $this->notify($customer->id, 9, 'Refund requested', 'Your refund request for '.$this->money($refund['amount_minor']).' has been received.', $bookingId, $now->copy()->subDays(2));
 
         DB::table('refunds')->where('id', $refundId)->update([
             'status' => RefundStatus::Processed->value,
@@ -463,8 +455,8 @@ class BookingSeeder extends Seeder
             ],
         ]);
 
-        $this->notify($tenant, $customer->id, 10, 'Refund approved', 'Your refund of '.$this->money($refund['amount_minor']).' has been approved.', $bookingId, $now->copy()->subDay());
-        $this->notify($tenant, $customer->id, 12, 'Refund processed', 'Your refund of '.$this->money($refund['amount_minor']).' has been processed.', $bookingId, $now);
+        $this->notify($customer->id, 10, 'Refund approved', 'Your refund of '.$this->money($refund['amount_minor']).' has been approved.', $bookingId, $now->copy()->subDay());
+        $this->notify($customer->id, 12, 'Refund processed', 'Your refund of '.$this->money($refund['amount_minor']).' has been processed.', $bookingId, $now);
 
         // Approval is what returns the inventory: hard-delete the released
         // unit's allocation rows so its unit_index becomes immediately reusable.
@@ -507,11 +499,14 @@ class BookingSeeder extends Seeder
         return BookingPaymentStatus::Unpaid;
     }
 
-    private function notify(Tenant $tenant, int $userId, int $notificationType, string $title, string $message, int $bookingId, string|CarbonInterface $createdAt): void
+    /**
+     * Write to the agency's own feed: notifications live in the tenant
+     * database, next to the booking they are about.
+     */
+    private function notify(int $userId, int $notificationType, string $title, string $message, int $bookingId, string|CarbonInterface $createdAt): void
     {
-        DB::connection(config('tenancy.database.central_connection'))->table('notifications')->insert([
+        DB::table('notifications')->insert([
             'user_id' => $userId,
-            'tenant_id' => $tenant->id,
             'notification_type' => $notificationType,
             'title' => $title,
             'message' => $message,
@@ -639,7 +634,7 @@ class BookingSeeder extends Seeder
                 'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2026-11-25 13:50:00'],
             ],
             [
-                'customer' => 'beatriz',
+                'customer' => 'ramon',
                 'approval' => BookingApprovalStatus::Approved,
                 'lines' => [
                     ['item_slug' => 'siquijor-island-hopping', 'option_name' => 'Couple', 'quantity' => 1],
@@ -651,7 +646,7 @@ class BookingSeeder extends Seeder
                 'checkin' => ['stop_sequence' => 1, 'checked_in_at' => '2026-11-20 08:30:00'],
             ],
             [
-                'customer' => 'tomas',
+                'customer' => 'isabel',
                 'approval' => BookingApprovalStatus::Pending,
                 'lines' => [
                     ['item_slug' => 'siquijor-island-hopping', 'option_name' => 'Solo', 'quantity' => 1],
@@ -660,7 +655,7 @@ class BookingSeeder extends Seeder
                 'payments' => [],
             ],
             [
-                'customer' => 'carmela',
+                'customer' => 'diego',
                 'approval' => BookingApprovalStatus::Rejected,
                 'rejection_reason' => 'Departure is full; offered the following week instead.',
                 'lines' => [
@@ -692,7 +687,7 @@ class BookingSeeder extends Seeder
     {
         return [
             [
-                'customer' => 'julio',
+                'customer' => 'sofia',
                 'approval' => BookingApprovalStatus::Approved,
                 'lines' => [
                     ['item_slug' => 'tanjay-heritage-hotel', 'option_name' => 'Deluxe Room', 'quantity' => 2, 'nights' => 3, 'starts_on' => '2026-11-28'],
@@ -705,7 +700,7 @@ class BookingSeeder extends Seeder
                 'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2026-11-28 14:10:00'],
             ],
             [
-                'customer' => 'nadia',
+                'customer' => 'marco',
                 'approval' => BookingApprovalStatus::Approved,
                 'lines' => [
                     ['item_slug' => 'seoul-busan-explorer', 'option_name' => 'Solo', 'quantity' => 1],
@@ -717,7 +712,7 @@ class BookingSeeder extends Seeder
                 'checkin' => ['stop_sequence' => 1, 'checked_in_at' => '2027-01-10 09:00:00'],
             ],
             [
-                'customer' => 'beatriz',
+                'customer' => 'elena',
                 'approval' => BookingApprovalStatus::Pending,
                 'lines' => [
                     ['item_slug' => 'seoul-busan-explorer', 'option_name' => 'Couple', 'quantity' => 1],
@@ -726,7 +721,7 @@ class BookingSeeder extends Seeder
                 'payments' => [],
             ],
             [
-                'customer' => 'tomas',
+                'customer' => 'gabriel',
                 'approval' => BookingApprovalStatus::Rejected,
                 'rejection_reason' => 'Departure is full; offered the following month instead.',
                 'lines' => [
@@ -735,7 +730,7 @@ class BookingSeeder extends Seeder
                 'payments' => [],
             ],
             [
-                'customer' => 'julio',
+                'customer' => 'sofia',
                 'approval' => BookingApprovalStatus::Approved,
                 'lines' => [
                     ['item_slug' => 'tanjay-heritage-hotel', 'option_name' => 'Suite', 'quantity' => 2, 'nights' => 2, 'starts_on' => '2027-01-12'],
@@ -837,7 +832,7 @@ class BookingSeeder extends Seeder
                 'checkin' => ['stop_sequence' => null, 'checked_in_at' => '2026-12-10 14:15:00'],
             ],
             [
-                'customer' => 'nadia',
+                'customer' => 'teresa',
                 'approval' => BookingApprovalStatus::Approved,
                 'lines' => [
                     ['item_slug' => 'mabinay-caves-adventure', 'option_name' => 'Couple', 'quantity' => 1],
@@ -849,7 +844,7 @@ class BookingSeeder extends Seeder
                 'checkin' => ['stop_sequence' => 1, 'checked_in_at' => '2026-11-27 07:30:00'],
             ],
             [
-                'customer' => 'julio',
+                'customer' => 'ramil',
                 'approval' => BookingApprovalStatus::Pending,
                 'lines' => [
                     ['item_slug' => 'mabinay-caves-adventure', 'option_name' => 'Solo', 'quantity' => 1],
@@ -858,7 +853,7 @@ class BookingSeeder extends Seeder
                 'payments' => [],
             ],
             [
-                'customer' => 'beatriz',
+                'customer' => 'joy',
                 'approval' => BookingApprovalStatus::Rejected,
                 'rejection_reason' => 'Departure is full; offered the following week instead.',
                 'lines' => [

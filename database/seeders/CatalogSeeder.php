@@ -14,7 +14,6 @@ use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class CatalogSeeder extends Seeder
 {
@@ -23,9 +22,7 @@ class CatalogSeeder extends Seeder
     /**
      * Seed each tenant's catalog: items, their typed profiles, itinerary stops,
      * media and options, plus the opening inventory batch for every option that
-     * tracks stock. Published items are also projected into the central
-     * `listings` table, mirroring what `SyncListingProjection` will eventually do
-     * from a queued domain event.
+     * tracks stock.
      *
      * Run TenantSeeder and UserSeeder first - items are attributed to a tenant's
      * seeded staff and manager.
@@ -39,10 +36,9 @@ class CatalogSeeder extends Seeder
 
             $staffId = User::query()->where('tenant_id', $tenant->id)->where('role', Role::Staff)->value('id');
             $managerId = User::query()->where('tenant_id', $tenant->id)->where('role', Role::Manager)->value('id');
-            $currency = tenant('currency') ?? 'PHP';
 
             foreach ($this->catalog($tenant->id) as $item) {
-                $this->seedItem($tenant, $item, $staffId, $managerId, $currency);
+                $this->seedItem($item, $staffId, $managerId);
             }
         });
     }
@@ -50,7 +46,7 @@ class CatalogSeeder extends Seeder
     /**
      * @param  array<string, mixed>  $item
      */
-    private function seedItem(Tenant $tenant, array $item, ?int $staffId, ?int $managerId, string $currency): void
+    private function seedItem(array $item, ?int $staffId, ?int $managerId): void
     {
         $now = now();
         $createdAt = $now->copy()->subDays(30);
@@ -85,12 +81,8 @@ class CatalogSeeder extends Seeder
             $this->seedItinerary($itemId, $item['stops']);
         }
 
-        $featuredMedia = $this->seedMedia($itemId, $item['media']);
-        $prices = $this->seedOptions($itemId, $item['options'], $staffId);
-
-        if ($status === ItemStatus::Published) {
-            $this->projectListing($tenant, $itemId, $item, $prices, $featuredMedia, $currency, $publishedAt);
-        }
+        $this->seedMedia($itemId, $item['media']);
+        $this->seedOptions($itemId, $item['options'], $staffId);
     }
 
     private function seedAuditTrail(
@@ -194,12 +186,10 @@ class CatalogSeeder extends Seeder
 
     /**
      * @param  list<array{path: string, file_name: string, featured: bool}>  $media
-     * @return array{disk: string, path: string}|null
      */
-    private function seedMedia(int $itemId, array $media): ?array
+    private function seedMedia(int $itemId, array $media): void
     {
         $now = now();
-        $featured = null;
 
         $rows = [];
 
@@ -216,22 +206,15 @@ class CatalogSeeder extends Seeder
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
-
-            if ($file['featured']) {
-                $featured = ['disk' => 'tenant', 'path' => $file['path']];
-            }
         }
 
         DB::table('media')->insert($rows);
-
-        return $featured;
     }
 
     /**
      * @param  non-empty-list<array{name: string, mode: AvailabilityMode, price_minor: int, min_nights?: int, max_nights?: int, batch_quantity?: int}>  $options
-     * @return array{min: int, max: int}
      */
-    private function seedOptions(int $itemId, array $options, ?int $staffId): array
+    private function seedOptions(int $itemId, array $options, ?int $staffId): void
     {
         $now = now();
 
@@ -264,51 +247,6 @@ class CatalogSeeder extends Seeder
             }
         }
 
-        $prices = array_column($options, 'price_minor');
-
-        return ['min' => min($prices), 'max' => max($prices)];
-    }
-
-    /**
-     * @param  array<string, mixed>  $item
-     * @param  array{min: int, max: int}  $prices
-     * @param  array{disk: string, path: string}|null  $featuredMedia
-     */
-    private function projectListing(
-        Tenant $tenant,
-        int $itemId,
-        array $item,
-        array $prices,
-        ?array $featuredMedia,
-        string $currency,
-        CarbonInterface $syncedAt,
-    ): void {
-        DB::connection(config('tenancy.database.central_connection'))->table('listings')->insert([
-            'id' => (string) Str::ulid(),
-            'tenant_id' => $tenant->id,
-            'item_id' => $itemId,
-            'item_type' => $item['type']->value,
-            'name' => $item['name'],
-            'slug' => $item['slug'],
-            'description' => $item['description'],
-            'tenant_name' => $tenant->name,
-            'locality' => $tenant->locality,
-            'country_code' => $item['country_code'],
-            'currency' => $currency,
-            'price_min_minor' => $prices['min'],
-            'price_max_minor' => $prices['max'],
-            'rating_avg' => null,
-            'reviews_count' => 0,
-            'available_from' => $item['profile']['departs_on'] ?? null,
-            'available_to' => $item['profile']['returns_on'] ?? null,
-            'featured_media_disk' => $featuredMedia['disk'] ?? null,
-            'featured_media_path' => $featuredMedia['path'] ?? null,
-            'latitude' => $item['stops'][0]['latitude'] ?? null,
-            'longitude' => $item['stops'][0]['longitude'] ?? null,
-            'synced_at' => $syncedAt,
-            'created_at' => $syncedAt,
-            'updated_at' => $syncedAt,
-        ]);
     }
 
     /**
@@ -337,7 +275,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'japan-discovery',
                 'description' => 'A 12-day loop through Tokyo, Hokkaido and Okinawa, with an English-speaking guide throughout.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'JP',
                 'profile' => [
                     'max_adults' => 4,
                     'max_kids' => 2,
@@ -368,7 +305,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'hotel-palwa',
                 'description' => 'A boulevard-front hotel in Dumaguete City, five minutes from Silliman University.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 2,
                     'amenities' => ['Wi-Fi', 'Air conditioning', 'Hot shower', 'Breakfast included'],
@@ -391,7 +327,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'japan-evisa',
                 'description' => 'Tourist e-visa processing for Japan, submitted through our accredited visa desk.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'JP',
                 'profile' => [
                     'processing_days_min' => 5,
                     'processing_days_max' => 10,
@@ -413,7 +348,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'bohol-countryside',
                 'description' => 'A day tour of the Chocolate Hills, the tarsier sanctuary and the Loboc river cruise.',
                 'status' => ItemStatus::Pending,
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 6,
                     'max_kids' => 3,
@@ -440,7 +374,6 @@ class CatalogSeeder extends Seeder
                 'description' => 'Simple rooms near the Dumaguete public market.',
                 'status' => ItemStatus::Rejected,
                 'rejection_reason' => 'No photographs, and the itinerary has no meeting point.',
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 2,
                     'amenities' => ['Fan', 'Shared bathroom'],
@@ -468,7 +401,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'siquijor-island-hopping',
                 'description' => 'A day of island hopping, Salagdoong cliff diving and the Cambugahay Falls rope swing.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 8,
                     'max_kids' => 4,
@@ -499,7 +431,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'zamboanguita-dive-resort',
                 'description' => 'A beachfront resort steps from the Apo Island dive boats, with a house reef out front.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 3,
                     'amenities' => ['Wi-Fi', 'Air conditioning', 'Dive gear storage', 'Beachfront'],
@@ -522,7 +453,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'south-korea-evisa',
                 'description' => 'K-ETA and tourist e-visa processing for South Korea.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'KR',
                 'profile' => [
                     'processing_days_min' => 3,
                     'processing_days_max' => 7,
@@ -544,7 +474,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'apo-island-snorkeling',
                 'description' => 'Snorkeling with sea turtles in the Apo Island marine sanctuary.',
                 'status' => ItemStatus::Pending,
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 10,
                     'max_kids' => 2,
@@ -571,7 +500,6 @@ class CatalogSeeder extends Seeder
                 'description' => 'A budget inn a short tricycle ride from the port.',
                 'status' => ItemStatus::Rejected,
                 'rejection_reason' => 'No photographs, and the room descriptions are missing.',
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 2,
                     'amenities' => ['Fan'],
@@ -599,7 +527,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'seoul-busan-explorer',
                 'description' => 'An 8-day loop through Seoul, Busan and Jeju Island, with a Filipino-speaking tour leader.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'KR',
                 'profile' => [
                     'max_adults' => 4,
                     'max_kids' => 2,
@@ -630,7 +557,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'tanjay-heritage-hotel',
                 'description' => 'A restored ancestral house turned boutique hotel in the heart of Tanjay City.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 2,
                     'amenities' => ['Wi-Fi', 'Air conditioning', 'Breakfast included', 'Courtyard garden'],
@@ -653,7 +579,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'taiwan-evisa',
                 'description' => 'Tourist e-visa processing for Taiwan.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'TW',
                 'profile' => [
                     'processing_days_min' => 4,
                     'processing_days_max' => 8,
@@ -675,7 +600,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'negros-oriental-waterfalls',
                 'description' => 'A day trip to Casaroro Falls and Pulangbato Falls, with a stop at Forest Camp.',
                 'status' => ItemStatus::Pending,
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 6,
                     'max_kids' => 3,
@@ -702,7 +626,6 @@ class CatalogSeeder extends Seeder
                 'description' => 'Basic rooms near the Tanjay public terminal.',
                 'status' => ItemStatus::Rejected,
                 'rejection_reason' => 'No photographs, and the room descriptions are missing.',
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 2,
                     'amenities' => ['Fan', 'Shared bathroom'],
@@ -730,7 +653,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'apo-island-dive-snorkel',
                 'description' => 'A boat trip from Dauin to Apo Island for guided dives or snorkeling with sea turtles.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 8,
                     'max_kids' => 2,
@@ -760,7 +682,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'dauin-beach-villas',
                 'description' => 'Garden rooms and beachfront villas a short walk from Dauin\'s muck-dive sites.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 3,
                     'amenities' => ['Wi-Fi', 'Air conditioning', 'Pool', 'Dive gear rinse area'],
@@ -783,7 +704,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'singapore-evisa',
                 'description' => 'Tourist visa processing for Singapore.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'SG',
                 'profile' => [
                     'processing_days_min' => 3,
                     'processing_days_max' => 6,
@@ -805,7 +725,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'dauin-mangrove-kayak',
                 'description' => 'A guided morning paddle through the Dauin river mangroves.',
                 'status' => ItemStatus::Pending,
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 8,
                     'max_kids' => 2,
@@ -832,7 +751,6 @@ class CatalogSeeder extends Seeder
                 'description' => 'Dorm beds near the Dauin market.',
                 'status' => ItemStatus::Rejected,
                 'rejection_reason' => 'No photographs, and the room descriptions are missing.',
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 1,
                     'amenities' => ['Fan', 'Shared bathroom'],
@@ -860,7 +778,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'mabinay-caves-adventure',
                 'description' => 'A guided day of cave exploring in Mabinay, with a lunch stop on the way back to Bayawan.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 8,
                     'max_kids' => 2,
@@ -890,7 +807,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'bayawan-sunrise-hotel',
                 'description' => 'A comfortable city hotel a few minutes from the Bayawan boulevard.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 3,
                     'amenities' => ['Wi-Fi', 'Air conditioning', 'Breakfast included', 'Parking'],
@@ -913,7 +829,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'vietnam-evisa',
                 'description' => 'Tourist e-visa processing for Vietnam.',
                 'status' => ItemStatus::Published,
-                'country_code' => 'VN',
                 'profile' => [
                     'processing_days_min' => 3,
                     'processing_days_max' => 5,
@@ -935,7 +850,6 @@ class CatalogSeeder extends Seeder
                 'slug' => 'bayawan-heritage-sunset',
                 'description' => 'An afternoon city tour ending with sunset on the Bayawan boulevard.',
                 'status' => ItemStatus::Pending,
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 10,
                     'max_kids' => 4,
@@ -962,7 +876,6 @@ class CatalogSeeder extends Seeder
                 'description' => 'Simple rooms near the Bayawan public market.',
                 'status' => ItemStatus::Rejected,
                 'rejection_reason' => 'No photographs, and the room descriptions are missing.',
-                'country_code' => 'PH',
                 'profile' => [
                     'max_adults' => 2,
                     'amenities' => ['Fan'],

@@ -17,12 +17,6 @@
 
         <flux:text>{{ $feature->description() }}</flux:text>
 
-        <flux:text>
-            @if ($currentTier)
-                {{ __('Your agency is on :current, which does not include it. Ask the platform to move you to :tier.', ['current' => $currentTier->label(), 'tier' => $requiredTier->label()]) }}
-            @else
-                {{ __('Your agency has no live plan. Ask the platform to put you on :tier.', ['tier' => $requiredTier->label()]) }}
-            @endif
-        </flux:text>
+        <x-tenant.feature-tier-hint :required-tier="$requiredTier" :current-tier="$currentTier" />
     </div>
 </x-layouts::app>

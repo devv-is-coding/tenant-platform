@@ -35,11 +35,23 @@ enum Role: int
     }
 
     /**
-     * Determine if the role belongs to a single tenant rather than the platform.
+     * Get the roles of the people who run an agency: its staff, as opposed
+     * to its customers.
+     *
+     * @return list<self>
+     */
+    public static function tenantRoles(): array
+    {
+        return [self::Admin, self::Manager, self::Staff];
+    }
+
+    /**
+     * Determine if the role is one of an agency's staff roles. A customer
+     * also belongs to one agency, but is not one of its staff.
      */
     public function isTenantRole(): bool
     {
-        return in_array($this, [self::Admin, self::Manager, self::Staff], true);
+        return in_array($this, self::tenantRoles(), true);
     }
 
     /**

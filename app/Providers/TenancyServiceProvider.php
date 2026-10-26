@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Http\Middleware\EnsureTenantHasFeature;
+use App\Http\Middleware\EnsureUserBelongsToTenant;
+use App\Http\Middleware\InitializeTenancyUnlessCentral;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Livewire\Livewire;
 use Stancl\JobPipeline\JobPipeline;
 use Stancl\Tenancy\Events;
 use Stancl\Tenancy\Jobs;
@@ -103,6 +107,35 @@ class TenancyServiceProvider extends ServiceProvider
     {
         $this->bootEvents();
         $this->mapRoutes();
+        $this->configureLivewire();
+    }
+
+    /**
+     * Make Livewire's update requests run inside the agency they come from.
+     *
+     * Every component posts its updates to one shared endpoint, not to the
+     * page's route, so none of the page's middleware runs there by default:
+     * on an agency domain there would be no tenancy, and so no agency session
+     * or database. The endpoint initializes tenancy itself on agency domains
+     * and leaves central requests untouched, like the Fortify routes.
+     *
+     * Persistent middleware is re-run on each update against the page's own
+     * route, so a page's staff-only and plan-tier guards hold for its actions
+     * too. The read-only guard is deliberately not persistent: every update
+     * is a POST, so it would refuse a restricted agency's searching and
+     * paging as well. Policies refuse its writes instead (AgencyPolicy).
+     */
+    protected function configureLivewire(): void
+    {
+        // Livewire adds the `web` group itself, and the priority list in
+        // bootstrap/app.php still initializes tenancy before the session.
+        Livewire::setUpdateRoute(fn (array $handle, string $path) => Route::post($path, $handle)
+            ->middleware(InitializeTenancyUnlessCentral::class));
+
+        Livewire::addPersistentMiddleware([
+            EnsureUserBelongsToTenant::class,
+            EnsureTenantHasFeature::class,
+        ]);
     }
 
     protected function bootEvents(): void

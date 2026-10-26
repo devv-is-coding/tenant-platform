@@ -1,9 +1,13 @@
 <?php
 
+use App\Enums\Role;
 use App\Enums\TenantStatus;
 use App\Models\Tenant;
+use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
+use function Pest\Laravel\assertModelExists;
 use function Pest\Laravel\freezeSecond;
 
 test('a new tenant starts pending and stores its status in a real column', function () {
@@ -57,4 +61,17 @@ test('a new tenant database is provisioned with one default settings row', funct
     expect($settings)->toHaveCount(1)
         ->and($settings->first()->booking_hold_minutes)->toEqual(1440)
         ->and($settings->first()->requires_listing_approval)->toEqual(1);
+});
+
+test('an agency with customers cannot be hard-deleted', function () {
+    $tenant = Tenant::factory()->create();
+    $customer = User::factory()->role(Role::Customer)->for($tenant)->create();
+
+    // Deleting through the app is a soft delete and never reaches the foreign
+    // key; RESTRICT is what keeps a force delete from taking the customers'
+    // accounts with it.
+    expect(fn () => $tenant->forceDelete())->toThrow(QueryException::class);
+
+    assertModelExists($tenant);
+    assertModelExists($customer);
 });

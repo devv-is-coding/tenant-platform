@@ -408,7 +408,7 @@ new class extends Component {
         ];
 
         return collect()
-            ->concat($this->tenant->users()->onlyTrashed()->get()->map($describe('user', __('User'))))
+            ->concat($this->tenant->staff()->onlyTrashed()->get()->map($describe('user', __('User'))))
             ->concat($this->tenant->subscriptions()->onlyTrashed()->get()->map($describe('subscription', __('Subscription'))))
             ->concat($this->tenant->subscriptionInvoices()->onlyTrashed()->get()->map($describe('invoice', __('Invoice'))))
             ->concat($this->tenant->subscriptionPayments()->onlyTrashed()->get()->map($describe('payment', __('Payment'))))
@@ -441,7 +441,7 @@ new class extends Component {
     private function recordToRestore(string $type, int $id): User|Subscription|SubscriptionInvoice|SubscriptionPayment
     {
         return match ($type) {
-            'user' => $this->tenant->users()->onlyTrashed()->findOrFail($id),
+            'user' => $this->tenant->staff()->onlyTrashed()->findOrFail($id),
             'subscription' => $this->tenant->subscriptions()->onlyTrashed()->findOrFail($id),
             'invoice' => $this->tenant->subscriptionInvoices()->onlyTrashed()->findOrFail($id),
             'payment' => $this->tenant->subscriptionPayments()->onlyTrashed()->findOrFail($id),
@@ -478,7 +478,7 @@ new class extends Component {
     private function recordToDelete(string $type, int $id): User|Subscription|SubscriptionInvoice|SubscriptionPayment
     {
         return match ($type) {
-            'user' => $this->tenant->users()->findOrFail($id),
+            'user' => $this->tenant->staff()->findOrFail($id),
             'subscription' => $this->tenant->subscriptions()->findOrFail($id),
             'invoice' => $this->tenant->subscriptionInvoices()->findOrFail($id),
             'payment' => $this->tenant->subscriptionPayments()->findOrFail($id),
@@ -559,7 +559,7 @@ new class extends Component {
     #[Computed]
     public function activeAdmins(): Collection
     {
-        return $this->tenant->users()->where('role', Role::Admin)->where('is_active', true)->orderBy('first_name')->orderBy('last_name')->get();
+        return $this->tenant->staff()->where('role', Role::Admin)->where('is_active', true)->orderBy('first_name')->orderBy('last_name')->get();
     }
 
     /**
@@ -570,7 +570,7 @@ new class extends Component {
     #[Computed]
     public function promotableUsers(): Collection
     {
-        return $this->tenant->users()
+        return $this->tenant->staff()
             ->whereIn('role', [Role::Manager, Role::Staff])
             ->where('is_active', true)
             ->orderBy('first_name')
@@ -618,7 +618,7 @@ new class extends Component {
     public function confirmRevoke(int $id): void
     {
         $this->authorize('manageAdmins', $this->tenant);
-        $admin = $this->tenant->users()->where('role', Role::Admin)->findOrFail($id);
+        $admin = $this->tenant->staff()->where('role', Role::Admin)->findOrFail($id);
 
         $this->resetErrorBag();
         $this->reset('revoke_reason');
@@ -634,7 +634,7 @@ new class extends Component {
     public function revokeAdmin(RevokeAgencyAdminAction $revokeAdmin): void
     {
         $this->authorize('manageAdmins', $this->tenant);
-        $admin = $this->tenant->users()->where('role', Role::Admin)->findOrFail($this->revoking_id);
+        $admin = $this->tenant->staff()->where('role', Role::Admin)->findOrFail($this->revoking_id);
 
         $revokeAdmin->handle(Auth::user(), $this->tenant, $admin, $this->only('revoke_reason'));
 
@@ -650,7 +650,7 @@ new class extends Component {
     #[Computed]
     public function revoking(): ?User
     {
-        return $this->revoking_id === null ? null : $this->tenant->users()->find($this->revoking_id);
+        return $this->revoking_id === null ? null : $this->tenant->staff()->find($this->revoking_id);
     }
 
     /**
@@ -661,7 +661,7 @@ new class extends Component {
     #[Computed]
     public function users(): Collection
     {
-        return $this->tenant->users()->orderBy('role')->orderBy('first_name')->orderBy('last_name')->get();
+        return $this->tenant->staff()->orderBy('role')->orderBy('first_name')->orderBy('last_name')->get();
     }
 
     #[Computed]

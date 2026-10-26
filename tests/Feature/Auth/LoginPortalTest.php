@@ -90,12 +90,15 @@ test('inactive users cannot log in', function () {
     assertGuest();
 });
 
-test('the tenant login screen shows the tenant', function () {
+test('the tenant login screen shows the tenant, with its own panel rather than the defaults', function () {
     $tenant = tenantOnDomain();
 
     get("http://{$tenant->id}.localhost/login")
         ->assertOk()
-        ->assertSee($tenant->name);
+        ->assertSee($tenant->name)
+        ->assertSee('The staff portal for '.e($tenant->name).'&#039;s administrators, managers and staff', escape: false)
+        ->assertSee('Staff only. Activity is attributable to your account.')
+        ->assertDontSee('Staff portal for administrators, managers and staff of this agency.');
 });
 
 test('tenant users can log in on their own tenant domain', function (Role $role) {
@@ -135,6 +138,17 @@ test('the tenant login refuses platform-wide roles', function (Role $role) {
     'super admin' => Role::SuperAdmin,
     'customer' => Role::Customer,
 ]);
+
+test('the agency\'s own customers can neither sign in to its staff portal nor open its staff pages', function () {
+    $tenant = tenantOnDomain();
+    $customer = User::factory()->role(Role::Customer)->for($tenant)->create();
+
+    post("http://{$tenant->id}.localhost/login", ['email' => $customer->email, 'password' => 'password'])
+        ->assertSessionHasErrors(['email' => __('auth.failed')]);
+    assertGuest();
+
+    actingAs($customer)->get("http://{$tenant->id}.localhost/dashboard")->assertForbidden();
+});
 
 test('nobody from a pending agency can sign in or keep using a session, since it is not live yet', function () {
     $tenant = tenantOnDomain(TenantStatus::Pending);
@@ -195,9 +209,9 @@ test('the tenant dashboard is forbidden to users of another tenant', function ()
         ->assertForbidden();
 });
 
-test('the tenant dashboard redirects guests to the tenant login', function () {
+test('the tenant dashboard sends guests to the agency\'s homepage, one step before its login', function () {
     $tenant = tenantOnDomain();
 
     get("http://{$tenant->id}.localhost/dashboard")
-        ->assertRedirect("http://{$tenant->id}.localhost/login");
+        ->assertRedirect("http://{$tenant->id}.localhost");
 });

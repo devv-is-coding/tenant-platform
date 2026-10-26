@@ -84,6 +84,20 @@ test('the detail page reads only that agency\'s users, subscription and audit ev
         ->and($detail->recentActivity->modelKeys())->toBe([$ownEvent->id]);
 });
 
+test('the detail page lists the agency\'s staff but never its customers', function () {
+    $tenant = Tenant::factory()->create();
+    $manager = User::factory()->role(Role::Manager)->for($tenant)->create();
+    $deletedStaff = User::factory()->role(Role::Staff)->for($tenant)->create(['deleted_at' => now()]);
+    User::factory()->role(Role::Customer)->for($tenant)->create();
+    User::factory()->role(Role::Customer)->for($tenant)->create(['deleted_at' => now()]);
+
+    $detail = tenantDetail($tenant)->instance();
+
+    expect($detail->users->modelKeys())->toBe([$manager->id])
+        ->and($detail->promotableUsers->modelKeys())->toBe([$manager->id])
+        ->and(collect($detail->deletedRecords)->pluck('id')->all())->toBe([$deletedStaff->id]);
+});
+
 test('the subscription shown is the live one rather than an older ended one', function () {
     $tenant = Tenant::factory()->create();
     Subscription::factory()->for($tenant)->expired()->create();

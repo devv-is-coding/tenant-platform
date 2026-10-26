@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\Role;
 use App\Models\Tenant;
 use App\Models\User;
 
@@ -73,5 +74,46 @@ class TenantPolicy
     public function restore(User $user, Tenant $tenant): bool
     {
         return $user->isSuperAdmin() && $tenant->trashed();
+    }
+
+    /*
+    | The agency's own side: what its staff see of their agency on its domain.
+    | Never the super admin, who sees agencies only through the console, and
+    | never the agency's customers.
+    */
+
+    /**
+     * Determine whether the user can open the agency's dashboard: any of its
+     * admins, managers or staff, whatever its status or plan.
+     */
+    public function viewAgencyDashboard(User $user, Tenant $tenant): bool
+    {
+        return $this->isStaffOf($user, $tenant);
+    }
+
+    /**
+     * Determine whether the user can see the agency's plan tier and
+     * subscription status: its admins, who are the ones who can act on them.
+     */
+    public function viewAgencyPlan(User $user, Tenant $tenant): bool
+    {
+        return $this->isStaffOf($user, $tenant) && $user->role === Role::Admin;
+    }
+
+    /**
+     * Determine whether the user can see who is on the agency's team: its
+     * admins, who manage it.
+     */
+    public function viewAgencyTeam(User $user, Tenant $tenant): bool
+    {
+        return $this->isStaffOf($user, $tenant) && $user->role === Role::Admin;
+    }
+
+    /**
+     * Determine if the user is one of the agency's admins, managers or staff.
+     */
+    private function isStaffOf(User $user, Tenant $tenant): bool
+    {
+        return $user->role->isTenantRole() && $user->tenant_id === $tenant->id;
     }
 }

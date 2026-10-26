@@ -67,7 +67,7 @@ class AssignAgencyAdminAction
         ])->validate();
 
         return $tenant->getConnection()->transaction(function () use ($actor, $tenant, $validated): User {
-            $user = $tenant->users()->whereKey($validated['user_id'])->lockForUpdate()->firstOrFail();
+            $user = $tenant->staff()->whereKey($validated['user_id'])->lockForUpdate()->firstOrFail();
             $previousRole = $user->role;
 
             $user->update(['role' => Role::Admin]);

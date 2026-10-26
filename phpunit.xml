@@ -19,6 +19,11 @@
     </source>
     <php>
         <!--
+            The suite's memory grows with every test (130 MB at ~800 tests), past
+            PHP's 128 MB default, so the tests get their own ceiling.
+        -->
+        <ini name="memory_limit" value="512M"/>
+        <!--
             These MUST be <server>, not <env>. docker compose passes .env through
             `env_file`, so DB_CONNECTION and friends exist as real environment
             variables and land in $_SERVER. Laravel's env() reads $_SERVER before

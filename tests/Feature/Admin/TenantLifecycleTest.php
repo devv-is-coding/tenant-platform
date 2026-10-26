@@ -111,7 +111,7 @@ test('reactivating restores the agency and its staff exactly as they were before
     $tenant->domains()->create(['domain' => "{$tenant->id}.localhost"]);
     User::factory()->role(Role::Admin)->for($tenant)->create();
     User::factory()->role(Role::Staff)->for($tenant)->inactive()->create();
-    $staffBefore = $tenant->users()->orderBy('id')->get()->map->only(['id', 'role', 'is_active', 'tenant_id', 'deleted_at'])->all();
+    $staffBefore = $tenant->staff()->orderBy('id')->get()->map->only(['id', 'role', 'is_active', 'tenant_id', 'deleted_at'])->all();
     $changeStatus = app(ChangeTenantStatusAction::class);
 
     $changeStatus->handle($superAdmin, $tenant, TenantStatus::Suspended, ['status_reason' => 'Unpaid.']);
@@ -120,7 +120,7 @@ test('reactivating restores the agency and its staff exactly as they were before
     expect($tenant->status)->toBe(TenantStatus::Active)
         ->and($tenant->status_reason)->toBeNull()
         ->and($tenant->domains()->pluck('domain')->all())->toBe(["{$tenant->id}.localhost"])
-        ->and($tenant->users()->orderBy('id')->get()->map->only(['id', 'role', 'is_active', 'tenant_id', 'deleted_at'])->all())->toBe($staffBefore)
+        ->and($tenant->staff()->orderBy('id')->get()->map->only(['id', 'role', 'is_active', 'tenant_id', 'deleted_at'])->all())->toBe($staffBefore)
         ->and(PlatformAuditEvent::orderBy('id')->pluck('action')->all())->toBe([AuditAction::TenantSuspended, AuditAction::TenantReactivated])
         ->and(tenantAuditLog($tenant)->sortBy('id')->pluck('action')->all())->toBe([AuditAction::TenantSuspended, AuditAction::TenantReactivated]);
 });

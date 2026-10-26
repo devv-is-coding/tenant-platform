@@ -77,7 +77,7 @@ new #[Title('Agencies')] class extends Component {
             // A deleted agency's domains were deleted with it; show them anyway.
             ->with(['domains' => fn ($query) => $query->when($deleted, fn ($query) => $query->withTrashed())])
             ->with('liveSubscription')
-            ->withCount('users')
+            ->withCount('staff')
             ->when($deleted, fn (Builder $query) => $query->onlyTrashed())
             ->when($search !== '', fn (Builder $query) => $query->search($search))
             ->when(TenantStatus::tryFrom((int) $this->status), fn (Builder $query, TenantStatus $status) => $query->where('status', $status))
@@ -186,7 +186,7 @@ new #[Title('Agencies')] class extends Component {
                         @endif
                     </flux:table.cell>
 
-                    <flux:table.cell class="max-sm:hidden" align="end">{{ $tenant->users_count }}</flux:table.cell>
+                    <flux:table.cell class="max-sm:hidden" align="end">{{ $tenant->staff_count }}</flux:table.cell>
 
                     <flux:table.cell class="max-lg:hidden">{{ $tenant->created_at?->toFormattedDateString() }}</flux:table.cell>
                 </flux:table.row>

@@ -36,7 +36,7 @@ class DeleteAgencyUserAction
 
         $user->getConnection()->transaction(function () use ($actor, $tenant, $user, $reason): void {
             Tenant::query()->whereKey($tenant->id)->lockForUpdate()->firstOrFail();
-            $locked = $tenant->users()->whereKey($user->id)->lockForUpdate()->firstOrFail();
+            $locked = $tenant->staff()->whereKey($user->id)->lockForUpdate()->firstOrFail();
 
             $this->revokeAdmin->ensureNotLastActiveAdmin($tenant, $locked);
 

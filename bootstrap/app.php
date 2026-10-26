@@ -54,11 +54,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         // Guests opening an admin page are sent to the admin homepage, one step
-        // before the super admin login - not to the customer one. The page they
-        // asked for is still remembered, so signing in returns them to it.
-        $middleware->redirectGuestsTo(fn (Request $request): string => $request->routeIs('admin.*')
-            ? route('admin.homepage')
-            : route('login'));
+        // before the super admin login - not to the customer one - and guests
+        // opening an agency page to that agency's homepage. The page they asked
+        // for is still remembered, so signing in returns them to it.
+        $middleware->redirectGuestsTo(fn (Request $request): string => match (true) {
+            $request->routeIs('admin.*') => route('admin.homepage'),
+            tenancy()->initialized => route('tenant.homepage'),
+            default => route('login'),
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
