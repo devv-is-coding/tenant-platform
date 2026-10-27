@@ -3,8 +3,10 @@
 namespace App\Http\Middleware;
 
 use App\Enums\LoginPortal;
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -12,6 +14,10 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * Belonging to the tenant is not enough: its customers belong to it too, and
  * the tenant portal requires a staff role (Role::isTenantRole()) as well.
+ *
+ * A deactivated account is signed out here, on its next request, so locking
+ * out a leaver also ends the sessions they already have open. Persistent for
+ * Livewire (TenancyServiceProvider), so it holds on update requests too.
  */
 class EnsureUserBelongsToTenant
 {
@@ -22,6 +28,16 @@ class EnsureUserBelongsToTenant
      */
     public function handle(Request $request, Closure $next): Response
     {
+        $user = $request->user();
+
+        if ($user instanceof User && ! $user->is_active) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('tenant.homepage');
+        }
+
         abort_unless(LoginPortal::Tenant->allows($request->user()), Response::HTTP_FORBIDDEN);
 
         return $next($request);

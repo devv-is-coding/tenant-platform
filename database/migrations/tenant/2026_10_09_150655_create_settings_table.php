@@ -49,6 +49,19 @@ return new class extends Migration
             // approval.
             $table->boolean('requires_listing_approval')->default(true);
 
+            // The agency's branded app, served to it at runtime by
+            // GET /api/v1/app-config. NULL means the platform default.
+            $table->string('app_display_name', 40)->nullable();
+            $table->char('brand_primary_color', 7)->nullable();
+            $table->char('brand_accent_color', 7)->nullable();
+
+            // A path on the agency's own `public` disk, which tenancy roots
+            // in its own storage folder.
+            $table->string('logo_path')->nullable();
+
+            $table->string('support_email')->nullable();
+            $table->string('support_phone', 20)->nullable();
+
             $table->timestamps();
             $table->softDeletes();
         });

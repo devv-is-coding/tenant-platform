@@ -132,6 +132,12 @@ class TenancyServiceProvider extends ServiceProvider
         Livewire::setUpdateRoute(fn (array $handle, string $path) => Route::post($path, $handle)
             ->middleware(InitializeTenancyUnlessCentral::class));
 
+        // File uploads post to an endpoint of their own first. Without
+        // tenancy there, an agency's upload would land in central storage,
+        // and the update that saves it, which runs inside the agency, would
+        // not find it. Livewire's own default throttle is kept.
+        config(['livewire.temporary_file_upload.middleware' => ['throttle:60,1', InitializeTenancyUnlessCentral::class]]);
+
         Livewire::addPersistentMiddleware([
             EnsureUserBelongsToTenant::class,
             EnsureTenantHasFeature::class,

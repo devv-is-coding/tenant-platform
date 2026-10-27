@@ -24,7 +24,9 @@ use Illuminate\Auth\Access\Response;
  *    whose whole purpose is the feature.
  *
  * Outside an agency nothing may be written: these records only exist inside
- * one.
+ * one. Account security actions, such as locking out a leaver, are the one
+ * exception to the status and tier rules (securityAbilities()): an agency
+ * must always be able to take access away.
  */
 abstract class AgencyPolicy
 {
@@ -35,6 +37,16 @@ abstract class AgencyPolicy
     abstract protected function feature(): ?PlanFeature;
 
     /**
+     * Get the plan feature one ability needs: the policy's own, unless its
+     * records hold fields on more than one tier (the agency's settings hold
+     * its operating defaults and its app branding).
+     */
+    protected function featureFor(string $ability): ?PlanFeature
+    {
+        return $this->feature();
+    }
+
+    /**
      * Get the abilities that only read. Every other ability writes.
      *
      * @return list<string>
@@ -42,6 +54,17 @@ abstract class AgencyPolicy
     protected function readAbilities(): array
     {
         return ['viewAny', 'view'];
+    }
+
+    /**
+     * Get the abilities that take access away, which neither the agency's
+     * status nor its tier refuses. They still need an agency.
+     *
+     * @return list<string>
+     */
+    protected function securityAbilities(): array
+    {
+        return [];
     }
 
     /**
@@ -60,11 +83,15 @@ abstract class AgencyPolicy
             return Response::deny(__('Agency records can only be changed from within the agency.'));
         }
 
+        if (in_array($ability, $this->securityAbilities(), true)) {
+            return null;
+        }
+
         if ($tenant->status->isReadOnly()) {
             return Response::deny($tenant->status->readOnlyNotice());
         }
 
-        $feature = $this->feature();
+        $feature = $this->featureFor($ability);
 
         if ($feature !== null && ! $tenant->hasFeature($feature)) {
             return Response::deny(__(':feature is available on :tier.', [

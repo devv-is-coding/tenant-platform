@@ -164,17 +164,7 @@ new #[Title('Dashboard')] class extends Component {
         </flux:text>
     </div>
 
-    @if ($this->agency->status->isReadOnly())
-        <flux:callout variant="warning" icon="lock-closed" :heading="__('This agency is :status. You can view its records but not change them.', ['status' => mb_strtolower($this->agency->status->label())])">
-            @if ($this->agency->status_reason)
-                <flux:callout.text>{{ __('Reason: :reason', ['reason' => $this->agency->status_reason]) }}</flux:callout.text>
-            @endif
-
-            @if ($this->agency->status->hidesCustomersAndMoney())
-                <flux:callout.text>{{ __('Customers\' details and money figures are hidden until the agency is on a plan again. Bookings still show their reference, dates and status, so you can honour travel already sold.') }}</flux:callout.text>
-            @endif
-        </flux:callout>
-    @endif
+    <x-tenant.read-only-notice :agency="$this->agency" />
 
     {{-- Headline figures --}}
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
