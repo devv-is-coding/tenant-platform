@@ -29,8 +29,9 @@ return new class extends Migration
         Schema::create('tour_profiles', function (Blueprint $table) {
             $table->id();
 
-            // Unique is what makes this a satellite rather than a collection,
-            // and what stops a Hotel item being given a tour profile.
+            // Unique is what makes this a satellite rather than a collection.
+            // It does not stop a Hotel item being given a tour profile; the
+            // model refuses that (BelongsToItemOfType).
             $table->foreignId('item_id')->unique()->constrained()->cascadeOnDelete();
 
             $table->unsignedSmallInteger('max_adults');

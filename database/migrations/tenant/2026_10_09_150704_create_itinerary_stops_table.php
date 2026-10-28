@@ -15,11 +15,11 @@ return new class extends Migration
      * The coordinates are finally used: they existed in the legacy and every
      * row was NULL, so no map was ever drawn. Defect 11.
      *
-     * There is deliberately no soft delete. A tombstone would keep occupying its
-     * slot in UNIQUE(item_id, sequence) and block that position from being
-     * reused when stops are reordered - the same reasoning that makes inventory
-     * allocations hard-delete on release. Check-in history survives a deleted
-     * stop through its own snapshot instead.
+     * Soft-deleted like every project table (CLAUDE.md), so a deleted stop
+     * keeps its slot in UNIQUE(item_id, sequence): a new stop takes the next
+     * sequence after every stop the tour has had, deleted ones included
+     * (ItineraryStop::nextSequenceFor()). Check-in history survives a deleted
+     * stop through its own snapshot.
      */
     public function up(): void
     {

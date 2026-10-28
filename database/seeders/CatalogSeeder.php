@@ -9,6 +9,7 @@ use App\Enums\ItemStatus;
 use App\Enums\ItemType;
 use App\Enums\MediaType;
 use App\Enums\Role;
+use App\Models\Media;
 use App\Models\Tenant;
 use App\Models\User;
 use Carbon\CarbonInterface;
@@ -196,7 +197,7 @@ class CatalogSeeder extends Seeder
         foreach ($media as $sortOrder => $file) {
             $rows[] = [
                 'item_id' => $itemId,
-                'disk' => 'tenant',
+                'disk' => Media::DISK,
                 'path' => $file['path'],
                 'file_name' => $file['file_name'],
                 'media_type' => MediaType::Image->value,

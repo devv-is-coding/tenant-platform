@@ -21,6 +21,8 @@ class TenantFactory extends Factory
         return [
             'id' => fake()->unique()->slug(2),
             'status' => TenantStatus::Active,
+            // Every agency trades in one currency, set at onboarding.
+            'currency' => 'PHP',
         ];
     }
 }
