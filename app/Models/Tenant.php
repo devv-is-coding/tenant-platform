@@ -5,8 +5,10 @@ namespace App\Models;
 use App\Enums\PlanFeature;
 use App\Enums\PlanTier;
 use App\Enums\Role;
+use App\Enums\SubscriptionInvoiceStatus;
 use App\Enums\TenantStatus;
 use App\Services\Plans\PlanFeatureMatrix;
+use App\ValueObjects\Money;
 use Database\Factories\TenantFactory;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
@@ -220,6 +222,22 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     public function subscriptionPayments(): HasMany
     {
         return $this->hasMany(SubscriptionPayment::class);
+    }
+
+    /**
+     * Get what the agency still owes across every invoice it has not settled.
+     *
+     * Summed in minor units by the database, and only ever displayed through
+     * Money. Every invoice is billed in the platform's billing currency.
+     */
+    public function balanceOwed(): Money
+    {
+        $owedMinor = $this->subscriptionInvoices()
+            ->whereIn('status', [SubscriptionInvoiceStatus::Open, SubscriptionInvoiceStatus::PartiallyPaid])
+            ->selectRaw('COALESCE(SUM(amount_minor - amount_paid_minor), 0) as owed_minor')
+            ->value('owed_minor');
+
+        return Money::ofMinor((int) $owedMinor, config('tenancy.billing_currency'));
     }
 
     /**

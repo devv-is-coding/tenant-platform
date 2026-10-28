@@ -4,6 +4,9 @@ use App\Enums\Role;
 use App\Enums\SubscriptionStatus;
 use App\Models\Subscription;
 use App\Models\Tenant;
+use App\ValueObjects\Money;
+use Carbon\CarbonInterface;
+use Illuminate\Support\Carbon;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -60,6 +63,39 @@ new #[Title('Dashboard')] class extends Component {
     public function showsTeam(): bool
     {
         return auth()->user()->can('viewAgencyTeam', $this->agency);
+    }
+
+    /**
+     * Determine if the signed-in user may see what the agency owes.
+     */
+    #[Computed]
+    public function showsBilling(): bool
+    {
+        return auth()->user()->can('viewBilling', $this->agency);
+    }
+
+    /**
+     * Get what the agency owes and since when, while its subscription is
+     * past due: the balance on every unsettled invoice, and the due date of
+     * the oldest one still overdue.
+     *
+     * @return array{owed: Money, since: CarbonInterface|null}|null
+     */
+    #[Computed]
+    public function pastDue(): ?array
+    {
+        $this->authorize('viewBilling', $this->agency);
+
+        if ($this->subscription?->status !== SubscriptionStatus::PastDue) {
+            return null;
+        }
+
+        $oldestDueOn = $this->agency->subscriptionInvoices()->overdue(today())->min('due_on');
+
+        return [
+            'owed' => $this->agency->balanceOwed(),
+            'since' => $oldestDueOn === null ? null : Carbon::parse($oldestDueOn),
+        ];
     }
 
     /**
@@ -165,6 +201,23 @@ new #[Title('Dashboard')] class extends Component {
     </div>
 
     <x-tenant.read-only-notice :agency="$this->agency" />
+
+    @if ($this->showsBilling && $this->pastDue)
+        <flux:callout variant="danger" icon="exclamation-triangle" data-test="past-due-banner">
+            <flux:callout.heading>
+                @if ($this->pastDue['since'])
+                    {{ __('The agency owes the platform :amount, overdue since :date.', ['amount' => $this->pastDue['owed']->format(), 'date' => $this->pastDue['since']->toFormattedDateString()]) }}
+                @else
+                    {{ __('The agency owes the platform :amount.', ['amount' => $this->pastDue['owed']->format()]) }}
+                @endif
+            </flux:callout.heading>
+            <flux:callout.text>{{ __('Your subscription is past due. Settle it to keep the agency open.') }}</flux:callout.text>
+
+            <x-slot name="actions">
+                <flux:button size="sm" :href="route('tenant.billing')" wire:navigate>{{ __('View plan & billing') }}</flux:button>
+            </x-slot>
+        </flux:callout>
+    @endif
 
     {{-- Headline figures --}}
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

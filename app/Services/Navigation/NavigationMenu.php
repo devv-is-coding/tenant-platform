@@ -53,18 +53,20 @@ class NavigationMenu
 
     /**
      * Get the sections for a staff member on their agency's own domain: the
-     * dashboard, and for its Admin the agency's team, settings, app
-     * branding and audit log.
+     * dashboard, and for its Admin an Agency menu with how the agency runs
+     * (team, settings, app branding) and its records with the platform
+     * (plan and billing, audit log, restore requests).
      *
      * @return list<NavSection>
      */
     private function tenantSections(User $user): array
     {
         $tenant = tenant();
-        $links = [];
+        $running = [];
+        $records = [];
 
         if ($tenant instanceof Tenant && $user->can('viewAgencyTeam', $tenant)) {
-            $links[] = $this->link(
+            $running[] = $this->link(
                 __('Team'),
                 __('Your managers and staff, and who can sign in.'),
                 route('tenant.team'),
@@ -74,14 +76,14 @@ class NavigationMenu
         }
 
         if ($user->can('viewAny', Settings::class)) {
-            $links[] = $this->link(
+            $running[] = $this->link(
                 __('Settings'),
                 __('Deposits, holds, cancellations and hotel times.'),
                 route('tenant.settings'),
                 'cog-6-tooth',
                 'tenant.settings',
             );
-            $links[] = $this->link(
+            $running[] = $this->link(
                 __('App branding'),
                 __('Your app\'s name, colours, logo and support contacts.'),
                 route('tenant.branding'),
@@ -90,8 +92,18 @@ class NavigationMenu
             );
         }
 
+        if ($tenant instanceof Tenant && $user->can('viewBilling', $tenant)) {
+            $records[] = $this->link(
+                __('Plan & billing'),
+                __('Your plan, what it includes, invoices and payments.'),
+                route('tenant.billing'),
+                'credit-card',
+                'tenant.billing',
+            );
+        }
+
         if ($user->can('viewAny', AuditEvent::class)) {
-            $links[] = $this->link(
+            $records[] = $this->link(
                 __('Audit log'),
                 __('Who changed what at the agency, and what the platform did.'),
                 route('tenant.audit'),
@@ -100,9 +112,24 @@ class NavigationMenu
             );
         }
 
+        if ($tenant instanceof Tenant && $user->can('viewAgencyRestoreRequests', $tenant)) {
+            $records[] = $this->link(
+                __('Restore requests'),
+                __('Ask the platform to bring back deleted records.'),
+                route('tenant.restore-requests'),
+                'arrow-uturn-left',
+                'tenant.restore-requests',
+            );
+        }
+
+        $groups = array_values(array_filter([
+            $running === [] ? null : $this->group(__('Running the agency'), $running),
+            $records === [] ? null : $this->group(__('Records'), $records),
+        ]));
+
         return [
             $this->section(__('Dashboard'), 'squares-2x2', route('tenant.dashboard'), 'tenant.dashboard'),
-            ...($links === [] ? [] : [$this->dropdown(__('Agency'), 'building-office', [$this->group(null, $links)])]),
+            ...($groups === [] ? [] : [$this->dropdown(__('Agency'), 'building-office', $groups)]),
         ];
     }
 
@@ -152,6 +179,13 @@ class NavigationMenu
                         route('admin.restore-requests.index'),
                         'arrow-uturn-left',
                         'admin.restore-requests.index',
+                    ),
+                    $this->link(
+                        __('Plan requests'),
+                        __('Plans agency admins are asking to be put on.'),
+                        route('admin.plan-requests.index'),
+                        'arrows-right-left',
+                        'admin.plan-requests.index',
                     ),
                 ]),
                 $this->group(__('Billing'), [

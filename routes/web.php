@@ -61,6 +61,8 @@ Route::domain((string) parse_url((string) config('app.url'), PHP_URL_HOST))->gro
 
             Route::livewire('restore-requests', 'pages::admin.restore-requests.index')->name('restore-requests.index');
 
+            Route::livewire('plan-requests', 'pages::admin.plan-requests.index')->name('plan-requests.index');
+
             Route::livewire('plans', 'pages::admin.plans.index')->name('plans.index');
 
             Route::livewire('invoices/overdue', 'pages::admin.invoices.overdue')->name('invoices.overdue');

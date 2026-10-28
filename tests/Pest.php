@@ -4,6 +4,7 @@ use App\Concerns\RunsInTenant;
 use App\Enums\PlanTier;
 use App\Enums\Role;
 use App\Enums\TenantStatus;
+use App\Models\PlanChangeRequest;
 use App\Models\RestoreRequest;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
@@ -82,12 +83,13 @@ function cleanUpTenancy(): void
     // an SQLite database file that is still open.
     tenancy()->end();
 
-    // A tenant with users, billing history or a restore request cannot be
+    // A tenant with users, billing history, a restore or plan request cannot be
     // deleted (RESTRICT), so clear those first. Payments reference invoices.
     SubscriptionPayment::withTrashed()->forceDelete();
     SubscriptionInvoice::withTrashed()->forceDelete();
     Subscription::withTrashed()->forceDelete();
     RestoreRequest::withTrashed()->forceDelete();
+    PlanChangeRequest::withTrashed()->forceDelete();
     User::withTrashed()->whereNotNull('tenant_id')->forceDelete();
 
     // Drops the tenant databases created during the test, and the storage

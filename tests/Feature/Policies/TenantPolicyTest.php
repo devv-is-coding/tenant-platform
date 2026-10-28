@@ -185,12 +185,12 @@ test('the agency\'s own staff, and only they, may open its dashboard', function 
     'a super admin' => [Role::SuperAdmin, null, false],
 ]);
 
-test('only the agency\'s own admin may see its plan and its team', function (string $ability, Role $role, ?string $tenantId, bool $allowed) {
+test('only the agency\'s own admin may see its plan, team, billing and restore requests', function (string $ability, Role $role, ?string $tenantId, bool $allowed) {
     $tenant = Tenant::factory()->make(['id' => 'dumaguete']);
     $user = User::factory()->role($role)->make(['tenant_id' => $tenantId]);
 
     expect($user->can($ability, $tenant))->toBe($allowed);
-})->with(['viewAgencyPlan', 'viewAgencyTeam'])->with([
+})->with(['viewAgencyPlan', 'viewAgencyTeam', 'viewBilling', 'viewAgencyRestoreRequests'])->with([
     'its admin' => [Role::Admin, 'dumaguete', true],
     'its manager' => [Role::Manager, 'dumaguete', false],
     'its staff' => [Role::Staff, 'dumaguete', false],

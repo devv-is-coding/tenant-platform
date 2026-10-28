@@ -48,7 +48,7 @@ test('super admins open on their dashboard, a top-level link ahead of the platfo
         ->not->toContain('Console');
 });
 
-test('super admins get the dashboard, audit log, agency directory, onboarding, restore requests, plans and overdue invoices, not the customer dashboard', function () {
+test('super admins get the dashboard, audit log, agency directory, onboarding, restore and plan requests, plans and overdue invoices, not the customer dashboard', function () {
     $sections = navigationFor(User::factory()->superAdmin()->create());
 
     expect(navigationHrefs($sections))
@@ -57,6 +57,7 @@ test('super admins get the dashboard, audit log, agency directory, onboarding, r
         ->toContain(route('admin.tenants.index'))
         ->toContain(route('admin.tenants.create'))
         ->toContain(route('admin.restore-requests.index'))
+        ->toContain(route('admin.plan-requests.index'))
         ->toContain(route('admin.plans.index'))
         ->toContain(route('admin.invoices.overdue'))
         ->not->toContain(route('dashboard'));
@@ -72,6 +73,7 @@ test('every other central role gets the dashboard and never the console', functi
         ->not->toContain(route('admin.tenants.index'))
         ->not->toContain(route('admin.tenants.create'))
         ->not->toContain(route('admin.restore-requests.index'))
+        ->not->toContain(route('admin.plan-requests.index'))
         ->not->toContain(route('admin.plans.index'))
         ->not->toContain(route('admin.invoices.overdue'));
 })->with([
@@ -103,7 +105,7 @@ test('tenant context exposes only the tenant dashboard', function () {
         ->and($sections[0]['href'])->toBe(route('tenant.dashboard'));
 });
 
-test('inside an agency, its admin also gets the team, settings, branding and audit log; managers and staff do not', function (Role $role, bool $managesAgency) {
+test('inside an agency, its admin also gets the team, settings, branding, billing, audit log and restore requests; managers and staff do not', function (Role $role, bool $managesAgency) {
     $tenant = tenantOnDomain();
     tenancy()->initialize($tenant);
 
@@ -113,6 +115,8 @@ test('inside an agency, its admin also gets the team, settings, branding and aud
         ->and(in_array(route('tenant.settings'), $hrefs, true))->toBe($managesAgency)
         ->and(in_array(route('tenant.branding'), $hrefs, true))->toBe($managesAgency)
         ->and(in_array(route('tenant.audit'), $hrefs, true))->toBe($managesAgency)
+        ->and(in_array(route('tenant.billing'), $hrefs, true))->toBe($managesAgency)
+        ->and(in_array(route('tenant.restore-requests'), $hrefs, true))->toBe($managesAgency)
         ->and($hrefs)->toContain(route('tenant.dashboard'));
 })->with([
     'admin' => [Role::Admin, true],

@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Enums\PlanFeature;
 use App\Models\Passkey;
 use App\Models\PersonalAccessToken;
+use App\Models\PlanChangeRequest;
 use App\Models\PlanFeatureSetting;
 use App\Models\RestoreRequest;
 use App\Models\Settings;
@@ -86,6 +87,7 @@ class AppServiceProvider extends ServiceProvider
     protected function configureMorphMap(): void
     {
         Relation::enforceMorphMap([
+            'plan_change_request' => PlanChangeRequest::class,
             'plan_feature' => PlanFeatureSetting::class,
             'restore_request' => RestoreRequest::class,
             'settings' => Settings::class,

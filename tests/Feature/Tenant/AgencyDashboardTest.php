@@ -4,10 +4,13 @@ use App\Enums\PlanTier;
 use App\Enums\Role;
 use App\Enums\SubscriptionStatus;
 use App\Models\Subscription;
+use App\Models\SubscriptionInvoice;
 use App\Models\Tenant;
 use App\Models\User;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
+
+use function Pest\Laravel\travelTo;
 
 /**
  * Open the agency's dashboard as the user, from within the agency.
@@ -96,3 +99,36 @@ test('the dashboard component refuses anyone but the agency\'s own staff, withou
     'the agency\'s own customer' => [fn (Tenant $tenant) => User::factory()->role(Role::Customer)->for($tenant)->create()],
     'a super admin' => [fn () => User::factory()->superAdmin()->create()],
 ]);
+
+test('a past-due agency\'s admin sees what it owes and since when, with a way to the bill', function () {
+    travelTo('2026-10-28 09:00:00');
+    $tenant = tenantOnDomain();
+    $subscription = Subscription::factory()->for($tenant)->create(['status' => SubscriptionStatus::PastDue]);
+    SubscriptionInvoice::factory()->for($subscription)->overdue(20)->create(['amount_minor' => 250000, 'period_start_on' => '2026-09-01']);
+    SubscriptionInvoice::factory()->for($subscription)->overdue(5)->partiallyPaid(100000)->create(['amount_minor' => 250000, 'period_start_on' => '2026-10-01']);
+
+    agencyDashboard($tenant, User::factory()->role(Role::Admin)->for($tenant)->create())
+        ->assertSeeHtml('data-test="past-due-banner"')
+        ->assertSee('The agency owes the platform ₱4,000.00, overdue since Oct 8, 2026.')
+        ->assertSee(route('tenant.billing'));
+});
+
+test('managers and staff never see what a past-due agency owes', function (Role $role) {
+    $tenant = tenantOnDomain();
+    $subscription = Subscription::factory()->for($tenant)->create(['status' => SubscriptionStatus::PastDue]);
+    SubscriptionInvoice::factory()->for($subscription)->overdue()->create();
+
+    agencyDashboard($tenant, User::factory()->role($role)->for($tenant)->create())
+        ->assertDontSeeHtml('data-test="past-due-banner"')
+        ->assertDontSee('owes the platform');
+})->with([
+    'manager' => Role::Manager,
+    'staff' => Role::Staff,
+]);
+
+test('an agency whose subscription is not past due shows no banner', function () {
+    $tenant = tenantOnDomain(tier: PlanTier::Basic);
+
+    agencyDashboard($tenant, User::factory()->role(Role::Admin)->for($tenant)->create())
+        ->assertDontSeeHtml('data-test="past-due-banner"');
+});
