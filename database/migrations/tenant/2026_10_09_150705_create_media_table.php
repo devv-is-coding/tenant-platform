@@ -14,9 +14,9 @@ return new class extends Migration
      * filesystem bootstrapper already generates per-tenant URLs from a disk and
      * a path - so persisting the URL would both duplicate and outdate it.
      *
-     * There is deliberately no soft delete: a tombstone would keep occupying the
-     * featured slot and block a replacement. The deletion is recorded in the
-     * audit log instead.
+     * Soft-deleted like every project table (CLAUDE.md). A deleted row would
+     * keep the featured slot and block a replacement, so the model frees the
+     * slot as it deletes (Media::booted()).
      */
     public function up(): void
     {

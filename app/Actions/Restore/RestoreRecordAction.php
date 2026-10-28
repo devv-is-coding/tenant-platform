@@ -13,6 +13,7 @@ use App\Models\SubscriptionPayment;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Audit\AuditRecorder;
+use Carbon\CarbonInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Validation\ValidationException;
 
@@ -85,6 +86,68 @@ class RestoreRecordAction
             $record instanceof User => $record->full_name,
             $record instanceof Subscription => $record->plan_name,
             $record instanceof SubscriptionInvoice, $record instanceof SubscriptionPayment => $record->reference,
+        };
+    }
+
+    /**
+     * Name the kind of record, as a list of deleted records shows it.
+     */
+    public function kindFor(User|Subscription|SubscriptionInvoice|SubscriptionPayment $record): string
+    {
+        return match (true) {
+            $record instanceof User => __('User'),
+            $record instanceof Subscription => __('Subscription'),
+            $record instanceof SubscriptionInvoice => __('Invoice'),
+            $record instanceof SubscriptionPayment => __('Payment'),
+        };
+    }
+
+    /**
+     * Get the agency's deleted staff, subscriptions, invoices and payments,
+     * most recently deleted first: what the console can restore and the
+     * agency's admin can ask for. Never its customers, and never another
+     * agency's records.
+     *
+     * @return list<array{type: string, id: int, kind: string, name: string, deleted_at: CarbonInterface|null}>
+     */
+    public function deletedRecordsOf(Tenant $tenant): array
+    {
+        $records = [];
+
+        foreach ([
+            'user' => $tenant->staff()->onlyTrashed()->get(),
+            'subscription' => $tenant->subscriptions()->onlyTrashed()->get(),
+            'invoice' => $tenant->subscriptionInvoices()->onlyTrashed()->get(),
+            'payment' => $tenant->subscriptionPayments()->onlyTrashed()->get(),
+        ] as $type => $deleted) {
+            foreach ($deleted as $record) {
+                $records[] = [
+                    'type' => $type,
+                    'id' => $record->id,
+                    'kind' => $this->kindFor($record),
+                    'name' => $this->labelFor($record),
+                    'deleted_at' => $record->deleted_at,
+                ];
+            }
+        }
+
+        usort($records, fn (array $a, array $b): int => ($b['deleted_at']?->getTimestamp() ?? 0) <=> ($a['deleted_at']?->getTimestamp() ?? 0));
+
+        return $records;
+    }
+
+    /**
+     * Find one of the agency's deleted records by the type deletedRecordsOf()
+     * gives it, or fail with a 404: another agency's record is not found.
+     */
+    public function findDeleted(Tenant $tenant, string $type, int $id): User|Subscription|SubscriptionInvoice|SubscriptionPayment
+    {
+        return match ($type) {
+            'user' => $tenant->staff()->onlyTrashed()->findOrFail($id),
+            'subscription' => $tenant->subscriptions()->onlyTrashed()->findOrFail($id),
+            'invoice' => $tenant->subscriptionInvoices()->onlyTrashed()->findOrFail($id),
+            'payment' => $tenant->subscriptionPayments()->onlyTrashed()->findOrFail($id),
+            default => abort(404),
         };
     }
 

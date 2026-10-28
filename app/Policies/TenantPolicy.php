@@ -110,6 +110,26 @@ class TenantPolicy
     }
 
     /**
+     * Determine whether the user can see the agency's deleted records and the
+     * restore requests it has sent: its admins, who are the ones who may ask
+     * (RestoreRequestPolicy::create). In any status and on any plan.
+     */
+    public function viewAgencyRestoreRequests(User $user, Tenant $tenant): bool
+    {
+        return $this->isStaffOf($user, $tenant) && $user->role === Role::Admin;
+    }
+
+    /**
+     * Determine whether the user can see the agency's plan with its price,
+     * its invoices and its payments: its admins only, so managers and staff
+     * never see what the agency pays. In any status and on any plan.
+     */
+    public function viewBilling(User $user, Tenant $tenant): bool
+    {
+        return $this->isStaffOf($user, $tenant) && $user->role === Role::Admin;
+    }
+
+    /**
      * Determine if the user is one of the agency's admins, managers or staff.
      */
     private function isStaffOf(User $user, Tenant $tenant): bool

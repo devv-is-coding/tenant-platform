@@ -16,8 +16,8 @@ use App\Enums\AuditAction;
 use App\Enums\PaymentMethod;
 use App\Enums\PlanFeature;
 use App\Enums\Role;
-use App\Enums\SubscriptionInvoiceStatus;
 use App\Enums\TenantStatus;
+use App\Models\PlanChangeRequest;
 use App\Models\PlatformAuditEvent;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
@@ -398,23 +398,7 @@ new class extends Component {
             return [];
         }
 
-        $restoreRecord = app(RestoreRecordAction::class);
-        $describe = fn (string $type, string $kind) => fn (User|Subscription|SubscriptionInvoice|SubscriptionPayment $record): array => [
-            'type' => $type,
-            'id' => $record->id,
-            'kind' => $kind,
-            'name' => $restoreRecord->labelFor($record),
-            'deleted_at' => $record->deleted_at,
-        ];
-
-        return collect()
-            ->concat($this->tenant->staff()->onlyTrashed()->get()->map($describe('user', __('User'))))
-            ->concat($this->tenant->subscriptions()->onlyTrashed()->get()->map($describe('subscription', __('Subscription'))))
-            ->concat($this->tenant->subscriptionInvoices()->onlyTrashed()->get()->map($describe('invoice', __('Invoice'))))
-            ->concat($this->tenant->subscriptionPayments()->onlyTrashed()->get()->map($describe('payment', __('Payment'))))
-            ->sortByDesc(fn (array $record): int => $record['deleted_at']?->getTimestamp() ?? 0)
-            ->values()
-            ->all();
+        return app(RestoreRecordAction::class)->deletedRecordsOf($this->tenant);
     }
 
     /**
@@ -440,13 +424,7 @@ new class extends Component {
      */
     private function recordToRestore(string $type, int $id): User|Subscription|SubscriptionInvoice|SubscriptionPayment
     {
-        return match ($type) {
-            'user' => $this->tenant->staff()->onlyTrashed()->findOrFail($id),
-            'subscription' => $this->tenant->subscriptions()->onlyTrashed()->findOrFail($id),
-            'invoice' => $this->tenant->subscriptionInvoices()->onlyTrashed()->findOrFail($id),
-            'payment' => $this->tenant->subscriptionPayments()->onlyTrashed()->findOrFail($id),
-            default => abort(404),
-        };
+        return app(RestoreRecordAction::class)->findDeleted($this->tenant, $type, $id);
     }
 
     /**
@@ -671,6 +649,15 @@ new class extends Component {
     }
 
     /**
+     * Get the plan the agency's admin is waiting to be put on, if they asked.
+     */
+    #[Computed]
+    public function pendingPlanRequest(): ?PlanChangeRequest
+    {
+        return PlanChangeRequest::query()->with('plan')->where('pending_for_tenant_id', $this->tenant->id)->first();
+    }
+
+    /**
      * Get every subscription the agency has held, newest first.
      *
      * @return Collection<int, Subscription>
@@ -723,19 +710,11 @@ new class extends Component {
 
     /**
      * Get what the agency still owes across every invoice it has not settled.
-     *
-     * Summed in minor units by the database, and only ever displayed through
-     * Money. Every invoice is billed in the platform's billing currency.
      */
     #[Computed]
     public function balanceOwed(): Money
     {
-        $owedMinor = $this->tenant->subscriptionInvoices()
-            ->whereIn('status', [SubscriptionInvoiceStatus::Open, SubscriptionInvoiceStatus::PartiallyPaid])
-            ->selectRaw('COALESCE(SUM(amount_minor - amount_paid_minor), 0) as owed_minor')
-            ->value('owed_minor');
-
-        return Money::ofMinor((int) $owedMinor, config('tenancy.billing_currency'));
+        return $this->tenant->balanceOwed();
     }
 
     /**
@@ -1133,6 +1112,16 @@ new class extends Component {
                     <flux:text>{{ __('This agency has never had a subscription.') }}</flux:text>
                 @endif
             </flux:card>
+
+            @if ($this->pendingPlanRequest)
+                <flux:callout icon="information-circle" :heading="__('The agency\'s admin asked for :plan.', ['plan' => $this->pendingPlanRequest->plan?->name])" data-test="pending-plan-request">
+                    <x-slot name="actions">
+                        @can('viewAny', \App\Models\PlanChangeRequest::class)
+                            <flux:button size="sm" :href="route('admin.plan-requests.index')" wire:navigate>{{ __('Review request') }}</flux:button>
+                        @endcan
+                    </x-slot>
+                </flux:callout>
+            @endif
 
             <flux:modal name="start-subscription" class="md:w-[28rem]">
                 <form wire:submit="startSubscription" class="space-y-6">

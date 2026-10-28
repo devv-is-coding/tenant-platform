@@ -1,11 +1,13 @@
 <?php
 
+use App\Enums\PlanChangeRequestStatus;
 use App\Enums\PlanTier;
 use App\Enums\RestoreRequestStatus;
 use App\Enums\Role;
 use App\Enums\SubscriptionInvoiceStatus;
 use App\Enums\SubscriptionStatus;
 use App\Enums\TenantStatus;
+use App\Models\PlanChangeRequest;
 use App\Models\PlatformAuditEvent;
 use App\Models\RestoreRequest;
 use App\Models\Subscription;
@@ -113,6 +115,17 @@ new #[Title('Dashboard')] class extends Component {
         $this->authorize('viewAny', RestoreRequest::class);
 
         return RestoreRequest::query()->where('status', RestoreRequestStatus::Pending)->count();
+    }
+
+    /**
+     * Count the agency admins' plan requests waiting for a decision.
+     */
+    #[Computed]
+    public function pendingPlanRequests(): int
+    {
+        $this->authorize('viewAny', PlanChangeRequest::class);
+
+        return PlanChangeRequest::query()->where('status', PlanChangeRequestStatus::Pending)->count();
     }
 
     /**
@@ -528,8 +541,17 @@ new #[Title('Dashboard')] class extends Component {
                 @php($pending = $this->pendingAgencies)
                 @php($suspended = $this->suspendedAgencies)
 
-                @if ($pending->isEmpty() && $suspended->isEmpty() && $this->pastDueSubscriptions->isEmpty() && $this->agenciesWithoutAdmin->isEmpty() && $this->pendingRestoreRequests === 0)
+                @if ($pending->isEmpty() && $suspended->isEmpty() && $this->pastDueSubscriptions->isEmpty() && $this->agenciesWithoutAdmin->isEmpty() && $this->pendingRestoreRequests === 0 && $this->pendingPlanRequests === 0)
                     <flux:text>{{ __('Nothing needs a decision right now.') }}</flux:text>
+                @endif
+
+                @if ($this->pendingPlanRequests > 0)
+                    <div>
+                        <flux:text size="sm" class="mb-1">{{ __('Plan requests') }}</flux:text>
+                        <flux:link :href="route('admin.plan-requests.index')" class="block py-1" wire:navigate>
+                            {{ trans_choice(':count request waiting|:count requests waiting', $this->pendingPlanRequests) }}
+                        </flux:link>
+                    </div>
                 @endif
 
                 @if ($this->pendingRestoreRequests > 0)
