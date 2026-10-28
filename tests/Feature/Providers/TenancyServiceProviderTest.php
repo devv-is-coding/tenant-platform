@@ -9,20 +9,27 @@ use App\Models\Settings;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Policies\AgencyPolicy;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Testing\TestResponse;
 use Livewire\Component;
+use Livewire\Features\SupportFileUploads\FileUploadConfiguration;
 use Livewire\Livewire;
+use Stancl\Tenancy\Events\TenancyInitialized;
 
 use function Pest\Laravel\actingAs;
+use function Pest\Laravel\post;
 use function Pest\Laravel\postJson;
 
 /*
  * Livewire::test() never reaches the update endpoint, so these tests drive a
  * real one: open a probe page on the agency's domain, then post the update
- * the browser would send. No agency-side Livewire page exists yet.
+ * the browser would send. A probe keeps them apart from any real screen.
  */
 
 beforeEach(function () {
@@ -90,7 +97,7 @@ function callProbe(string $snapshot, Tenant $tenant, string $method): TestRespon
     tenancy()->end();
 
     return postJson(
-        "http://{$tenant->id}.localhost".app('livewire')->getUpdateUri(),
+        "http://{$tenant->id}.localhost".Livewire::getUpdateUri(),
         ['components' => [['snapshot' => $snapshot, 'updates' => [], 'calls' => [['method' => $method, 'params' => [], 'metadata' => []]]]]],
         ['X-Livewire' => 'true'],
     );
@@ -135,6 +142,30 @@ test('a downgraded agency still opens a lost feature\'s screen, but every Livewi
     callProbe($snapshot, $tenant, 'save')
         ->assertForbidden()
         ->assertJson(['message' => 'Reviews & wishlist is available on Advanced.']);
+});
+
+/*
+ * Under tests Livewire stores uploads on a fake disk of its own, so the folder
+ * cannot be observed; what matters is that the upload runs inside the agency,
+ * where tenancy roots the real disk in the agency's own storage.
+ */
+test('a Livewire file upload on an agency\'s domain runs inside that agency, so it lands in the agency\'s storage', function () {
+    $tenant = tenantOnDomain();
+    tenancy()->end();
+    actingAs(User::factory()->role(Role::Admin)->for($tenant)->create());
+    Storage::fake(FileUploadConfiguration::disk());
+
+    $uploadedInside = null;
+    Event::listen(TenancyInitialized::class, function (TenancyInitialized $event) use (&$uploadedInside): void {
+        $uploadedInside = $event->tenancy->tenant?->getTenantKey();
+    });
+
+    $uploadUrl = URL::temporarySignedRoute('livewire.upload-file', now()->addMinutes(5), absolute: false);
+
+    post("http://{$tenant->id}.localhost{$uploadUrl}", ['files' => [UploadedFile::fake()->image('logo.png')]])
+        ->assertOk();
+
+    expect($uploadedInside)->toBe($tenant->id);
 });
 
 test('an active agency on the feature\'s tier can write through Livewire', function () {

@@ -103,6 +103,23 @@ test('tenant context exposes only the tenant dashboard', function () {
         ->and($sections[0]['href'])->toBe(route('tenant.dashboard'));
 });
 
+test('inside an agency, its admin also gets the team, settings, branding and audit log; managers and staff do not', function (Role $role, bool $managesAgency) {
+    $tenant = tenantOnDomain();
+    tenancy()->initialize($tenant);
+
+    $hrefs = navigationHrefs(navigationFor(User::factory()->role($role)->for($tenant)->create(), tenantContext: true));
+
+    expect(in_array(route('tenant.team'), $hrefs, true))->toBe($managesAgency)
+        ->and(in_array(route('tenant.settings'), $hrefs, true))->toBe($managesAgency)
+        ->and(in_array(route('tenant.branding'), $hrefs, true))->toBe($managesAgency)
+        ->and(in_array(route('tenant.audit'), $hrefs, true))->toBe($managesAgency)
+        ->and($hrefs)->toContain(route('tenant.dashboard'));
+})->with([
+    'admin' => [Role::Admin, true],
+    'manager' => [Role::Manager, false],
+    'staff' => [Role::Staff, false],
+]);
+
 test('tenant context never exposes a central link', function (Role $role) {
     $sections = navigationFor(User::factory()->role($role)->create(), tenantContext: true);
 

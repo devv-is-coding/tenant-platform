@@ -11,6 +11,7 @@ use App\Models\SubscriptionPayment;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Laravel\Fortify\Features;
 use Tests\TestCase;
@@ -89,8 +90,12 @@ function cleanUpTenancy(): void
     RestoreRequest::withTrashed()->forceDelete();
     User::withTrashed()->whereNotNull('tenant_id')->forceDelete();
 
-    // Drops the tenant databases created during the test.
-    Tenant::withTrashed()->get()->each->forceDelete();
+    // Drops the tenant databases created during the test, and the storage
+    // folder tenancy gave each one (uploads, logos), which nothing else removes.
+    Tenant::withTrashed()->get()->each(function (Tenant $tenant): void {
+        File::deleteDirectory(storage_path("tenant{$tenant->id}"));
+        $tenant->forceDelete();
+    });
 }
 
 /**

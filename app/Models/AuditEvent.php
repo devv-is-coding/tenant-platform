@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\SummarizesAuditChanges;
 use App\Enums\AuditAction;
 use App\Enums\Role;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -46,7 +47,7 @@ use LogicException;
 ])]
 class AuditEvent extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, SummarizesAuditChanges;
 
     const UPDATED_AT = null;
 

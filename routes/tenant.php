@@ -32,5 +32,9 @@ Route::middleware('tenant')->group(function () {
     // Login itself is Fortify's /login, which serves the tenant portal on tenant domains.
     Route::middleware(['auth', EnsureUserBelongsToTenant::class])->group(function () {
         Route::livewire('dashboard', 'pages::tenant.dashboard')->name('tenant.dashboard');
+        Route::livewire('team', 'pages::tenant.team')->name('tenant.team');
+        Route::livewire('settings', 'pages::tenant.settings')->name('tenant.settings');
+        Route::livewire('branding', 'pages::tenant.branding')->name('tenant.branding');
+        Route::livewire('audit', 'pages::tenant.audit')->name('tenant.audit');
     });
 });

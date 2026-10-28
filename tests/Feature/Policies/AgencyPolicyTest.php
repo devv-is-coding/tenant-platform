@@ -12,9 +12,10 @@ use Illuminate\Auth\Access\Response;
 use Illuminate\Support\Facades\Gate;
 
 /*
- * No agency-side policy exists yet, so a stand-in extends AgencyPolicy over
- * the agency's Settings, the one tenant model there is. Its own rules are the
- * kind later policies state: anyone may look, only the Admin may change.
+ * A stand-in extends AgencyPolicy over the agency's Settings, so each layer
+ * can be switched on alone; SettingsPolicyTest and UserPolicyTest cover the
+ * real policies. Its own rules are the kind real policies state: anyone may
+ * look, only the Admin may change.
  */
 
 /**

@@ -2,6 +2,9 @@
 
 namespace App\Services\Navigation;
 
+use App\Models\AuditEvent;
+use App\Models\Settings;
+use App\Models\Tenant;
 use App\Models\User;
 
 /**
@@ -39,7 +42,7 @@ class NavigationMenu
         }
 
         if ($tenantContext) {
-            return $this->tenantSections();
+            return $this->tenantSections($user);
         }
 
         return [
@@ -49,14 +52,57 @@ class NavigationMenu
     }
 
     /**
-     * Get the sections for a staff member on their agency's own domain.
+     * Get the sections for a staff member on their agency's own domain: the
+     * dashboard, and for its Admin the agency's team, settings, app
+     * branding and audit log.
      *
      * @return list<NavSection>
      */
-    private function tenantSections(): array
+    private function tenantSections(User $user): array
     {
+        $tenant = tenant();
+        $links = [];
+
+        if ($tenant instanceof Tenant && $user->can('viewAgencyTeam', $tenant)) {
+            $links[] = $this->link(
+                __('Team'),
+                __('Your managers and staff, and who can sign in.'),
+                route('tenant.team'),
+                'user-group',
+                'tenant.team',
+            );
+        }
+
+        if ($user->can('viewAny', Settings::class)) {
+            $links[] = $this->link(
+                __('Settings'),
+                __('Deposits, holds, cancellations and hotel times.'),
+                route('tenant.settings'),
+                'cog-6-tooth',
+                'tenant.settings',
+            );
+            $links[] = $this->link(
+                __('App branding'),
+                __('Your app\'s name, colours, logo and support contacts.'),
+                route('tenant.branding'),
+                'paint-brush',
+                'tenant.branding',
+            );
+        }
+
+        if ($user->can('viewAny', AuditEvent::class)) {
+            $links[] = $this->link(
+                __('Audit log'),
+                __('Who changed what at the agency, and what the platform did.'),
+                route('tenant.audit'),
+                'clipboard-document-list',
+                'tenant.audit',
+            );
+        }
+
         return [
             $this->section(__('Dashboard'), 'squares-2x2', route('tenant.dashboard'), 'tenant.dashboard'),
+            ...($links === [] ? [] : [$this->dropdown(__('Agency'), 'building-office', [$this->group(null, $links)])]),
         ];
     }
 
