@@ -1,59 +1,151 @@
 # .env is the single source of truth for app config and secrets, and is gitignored.
-# The app service reads it wholesale via env_file - nothing here re-declares an app
+# The app services read it wholesale via env_file - nothing here re-declares an app
 # variable. The mariadb service can only take MARIADB_*-prefixed names, so those are
 # mapped from the same .env values; `:?` makes compose refuse to start if one is unset.
+
+# What every service running the app's image shares: the web nodes, the queue
+# worker, the scheduler and the one-off migration step.
+x-app: &app
+  build:
+    context: .
+    target: dev
+  image: tenant-platform
+  restart: unless-stopped
+  env_file:
+    - .env
+  environment:
+    # Not app config: tells FrankenPHP to serve plain HTTP on :80 inside the container.
+    SERVER_NAME: ":80"
+  # The source is NOT bind-mounted. On Windows a bind mount of the repo is a 9p
+  # share of the C: drive, roughly 15x slower per file than the container's own
+  # disk, and Laravel touches ~1,100 files per request - that alone made every
+  # page take ~3s. Instead the image carries the source and vendor/, and
+  # `docker compose up --watch` syncs host edits into /app (see develop.watch).
+  # The dev image's OPcache revalidates synced PHP every 2s (Dockerfile, zz-dev.ini).
+  #
+  # Sync is one-way, host -> container: run `php artisan make:*` on the host.
+  #
+  # Only rarely-touched paths stay bind-mounted, where the 9p cost is harmless:
+  volumes:
+    # Host-built assets (`npm run build`), the Vite HMR `hot` file
+    # (`npm run dev`), and the public/storage symlink.
+    - ./public:/app/public
+    # So storage/logs/laravel.log is readable from the host.
+    - ./storage/logs:/app/storage/logs
+    # So uploaded files survive the container being recreated.
+    - ./storage/app:/app/storage/app
+  depends_on:
+    mariadb:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    s3-bucket:
+      condition: service_completed_successfully
+    migrate:
+      condition: service_completed_successfully
+
+# The develop.watch entries the app services share.
+x-watch:
+  source: &source-sync
+    path: .
+    target: /app
+    initial_sync: true
+    ignore:
+      - vendor/
+      - node_modules/
+      - public/
+      - storage/
+      - bootstrap/cache/
+      - .git/
+  composer-json: &rebuild-on-composer-json
+    path: composer.json
+    action: rebuild
+  composer-lock: &rebuild-on-composer-lock
+    path: composer.lock
+    action: rebuild
+
 services:
-  app:
-    build:
-      context: .
-      target: dev
-    image: tenant-platform
+  # The load balancer in front of the web nodes (docker/proxy/Caddyfile). It
+  # alone is published, so the app is only ever reached through it - which is
+  # what makes TRUSTED_PROXIES=* safe here.
+  proxy:
+    image: caddy:2.8.4-alpine
     restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:80"
+    volumes:
+      - ./docker/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/up"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # The web nodes: two by default, as on two servers; more with
+  # `docker compose up --scale app=N`. They share everything that must be
+  # shared - database, sessions (in the database), cache and locks (Redis),
+  # files (S3) - so any node can answer any request.
+  app:
+    <<: *app
+    deploy:
+      replicas: 2
+    develop:
+      watch:
+        - <<: *source-sync
+          action: sync
+        - *rebuild-on-composer-json
+        - *rebuild-on-composer-lock
+
+  # Runs queued jobs. A worker keeps the code it booted with, so in development
+  # every synced edit restarts it.
+  worker:
+    <<: *app
+    command: ["php", "artisan", "queue:work", "--tries=3", "--max-time=3600"]
+    healthcheck:
+      disable: true
+    develop:
+      watch:
+        - <<: *source-sync
+          action: sync+restart
+        - *rebuild-on-composer-json
+        - *rebuild-on-composer-lock
+
+  # Runs the schedule (routes/console.php). Exactly one, whatever the number of
+  # web nodes; the scheduled commands also take a lock (onOneServer()), so a
+  # second scheduler could not run them twice.
+  scheduler:
+    <<: *app
+    command: ["php", "artisan", "schedule:work"]
+    healthcheck:
+      disable: true
+    develop:
+      watch:
+        - <<: *source-sync
+          action: sync
+        - *rebuild-on-composer-json
+        - *rebuild-on-composer-lock
+
+  # The release step: migrate the central database and every agency's, once,
+  # before any node starts. Web nodes no longer migrate on boot, where several
+  # starting together would race. It runs the image's migrations: after
+  # editing one, rebuild (or migrate inside the app container) as before.
+  migrate:
+    <<: *app
+    restart: "no"
+    environment:
+      SERVER_NAME: ":80"
+      RUN_MIGRATIONS: "true"
+    command: ["php", "artisan", "tenants:migrate", "--force"]
+    healthcheck:
+      disable: true
     depends_on:
       mariadb:
         condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      # Not app config: tells FrankenPHP to serve plain HTTP on :80 inside the container.
-      SERVER_NAME: ":80"
-    ports:
-      - "${APP_PORT:-8000}:80"
-    # The source is NOT bind-mounted. On Windows a bind mount of the repo is a 9p
-    # share of the C: drive, roughly 15x slower per file than the container's own
-    # disk, and Laravel touches ~1,100 files per request - that alone made every
-    # page take ~3s. Instead the image carries the source and vendor/, and
-    # `docker compose up --watch` syncs host edits into /app (see develop.watch).
-    # opcache.validate_timestamps=1 picks up synced PHP within revalidate_freq (2s).
-    #
-    # Sync is one-way, host -> container: run `php artisan make:*` on the host.
-    #
-    # Only rarely-touched paths stay bind-mounted, where the 9p cost is harmless:
-    volumes:
-      # Host-built assets (`npm run build`), the Vite HMR `hot` file
-      # (`npm run dev`), and the public/storage symlink.
-      - ./public:/app/public
-      # So storage/logs/laravel.log is readable from the host.
-      - ./storage/logs:/app/storage/logs
-      # So uploaded files survive the container being recreated.
-      - ./storage/app:/app/storage/app
-    develop:
-      watch:
-        - path: .
-          target: /app
-          action: sync
-          initial_sync: true
-          ignore:
-            - vendor/
-            - node_modules/
-            - public/
-            - storage/
-            - bootstrap/cache/
-            - .git/
-        - path: composer.json
-          action: rebuild
-        - path: composer.lock
-          action: rebuild
+      redis:
+        condition: service_healthy
 
   mariadb:
     image: mariadb:11.4
@@ -77,5 +169,57 @@ services:
       retries: 30
       start_period: 20s
 
+  # The shared cache, and the store behind locks (onOneServer) and the
+  # maintenance flag. It must support tags: tenancy tags every cache call with
+  # the agency (CacheTenancyBootstrapper), which the database store cannot do.
+  # Nothing is persisted; a restart empties it.
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Local stand-in for S3 (AGENCY_FILES_DRIVER=s3): agencies' files and
+  # Livewire's temporary uploads, shared by every node. Production points the
+  # same AWS_* settings at a real bucket. Run without an access config, so it
+  # accepts any credentials and anonymous reads - acceptable only because it
+  # is bound to this machine (127.0.0.1); the app still signs every request.
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.45
+    restart: unless-stopped
+    command: ["server", "-s3", "-dir=/data"]
+    ports:
+      # The browser loads agency files from here (AWS_URL).
+      - "127.0.0.1:${FORWARD_S3_PORT:-8333}:8333"
+    volumes:
+      - seaweedfs-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8333/"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  # Creates the bucket once; 409 means it is already there.
+  s3-bucket:
+    image: chrislusf/seaweedfs:4.45
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        code=$$(curl -s -o /dev/null -w '%{http_code}' -X PUT "http://seaweedfs:8333/$${AWS_BUCKET}");
+        echo "bucket $${AWS_BUCKET}: HTTP $$code";
+        [ "$$code" = 200 ] || [ "$$code" = 409 ]
+    environment:
+      AWS_BUCKET: "${AWS_BUCKET:?missing in .env}"
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+
 volumes:
   mariadb-data:
+  seaweedfs-data:

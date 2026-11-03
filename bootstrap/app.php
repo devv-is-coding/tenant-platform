@@ -3,9 +3,11 @@
 use App\Http\Middleware\EnsureTenantHasFeature;
 use App\Http\Middleware\InitializeTenancyUnlessCentral;
 use App\Http\Middleware\PreventWritesWhileTenantIsRestricted;
+use App\Http\Middleware\TrustConfiguredProxies;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\StartSession;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -19,6 +21,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Proxies come from config (TRUSTED_PROXIES), so a load balancer is
+        // trusted only where one is actually in front of the app.
+        $middleware->replace(TrustProxies::class, TrustConfiguredProxies::class);
+
         // Tenancy must be initialized before the session starts, otherwise the
         // session would be resolved against the wrong database connection.
         // Laravel 11+ replaced App\Http\Kernel, so priority is declared here

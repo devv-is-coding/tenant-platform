@@ -19,11 +19,14 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Plans\PlanFeatureMatrix;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Passkeys\Passkeys;
@@ -46,6 +49,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureStorageDrivers();
         $this->configureCentralAuthModels();
         $this->configureMorphMap();
         $this->configurePlanFeatureGates();
@@ -135,5 +139,16 @@ class AppServiceProvider extends ServiceProvider
                 ->uncompromised()
             : null,
         );
+    }
+
+    /**
+     * Register `s3-via-app`: S3 under another name, for Livewire's temporary
+     * uploads (the `uploads` disk). Livewire sends files straight from the
+     * browser to the bucket only for a driver named `s3`; under this name they
+     * still go through the app, and land where every node can read them.
+     */
+    protected function configureStorageDrivers(): void
+    {
+        Storage::extend('s3-via-app', fn (Application $app, array $config): Filesystem => Storage::createS3Driver($config));
     }
 }

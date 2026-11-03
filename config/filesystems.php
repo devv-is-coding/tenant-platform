@@ -1,5 +1,26 @@
 <?php
 
+$s3 = [
+    'driver' => 's3',
+    'key' => env('AWS_ACCESS_KEY_ID'),
+    'secret' => env('AWS_SECRET_ACCESS_KEY'),
+    'region' => env('AWS_DEFAULT_REGION'),
+    'bucket' => env('AWS_BUCKET'),
+    'url' => env('AWS_URL'),
+    'endpoint' => env('AWS_ENDPOINT'),
+    'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+    'throw' => false,
+    'report' => false,
+];
+
+/*
+ * Where agencies' files live: "local" (this node's disk; tests and a single
+ * node) or "s3" (one bucket every node shares, which is what lets more than
+ * one node serve the app). Tenancy keeps each agency's files under its own
+ * prefix either way (config/tenancy.php).
+ */
+$agencyFilesOnS3 = env('AGENCY_FILES_DRIVER', 'local') === 's3';
+
 return [
 
     /*
@@ -38,7 +59,10 @@ return [
             'report' => false,
         ],
 
-        'public' => [
+        // An agency's public files: gallery media and its logo. On S3 no
+        // per-object ACL is set (most buckets refuse ACLs); the bucket's own
+        // policy makes the agency prefixes publicly readable.
+        'public' => $agencyFilesOnS3 ? $s3 : [
             'driver' => 'local',
             'root' => storage_path('app/public'),
             'url' => rtrim((string) env('APP_URL', 'http://localhost'), '/').'/storage',
@@ -47,18 +71,19 @@ return [
             'report' => false,
         ],
 
-        's3' => [
-            'driver' => 's3',
-            'key' => env('AWS_ACCESS_KEY_ID'),
-            'secret' => env('AWS_SECRET_ACCESS_KEY'),
-            'region' => env('AWS_DEFAULT_REGION'),
-            'bucket' => env('AWS_BUCKET'),
-            'url' => env('AWS_URL'),
-            'endpoint' => env('AWS_ENDPOINT'),
-            'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+        // Livewire's temporary uploads, which must be readable from whichever
+        // node handles the next request. On S3 the driver is named
+        // `s3-via-app` (AppServiceProvider): the same S3 adapter, but Livewire
+        // only switches to direct browser-to-bucket uploads for a driver named
+        // `s3`, which would need CORS and a bucket host the browser can reach.
+        'uploads' => $agencyFilesOnS3 ? [...$s3, 'driver' => 's3-via-app'] : [
+            'driver' => 'local',
+            'root' => storage_path('app/private'),
             'throw' => false,
             'report' => false,
         ],
+
+        's3' => $s3,
 
     ],
 

@@ -31,6 +31,7 @@
             latter two - so <env> alone leaves the suite pointed at the
             development database, where RefreshDatabase wipes it.
         -->
+        <server name="AGENCY_FILES_DRIVER" value="local" force="true"/>
         <server name="APP_ENV" value="testing" force="true"/>
         <server name="APP_MAINTENANCE_DRIVER" value="file" force="true"/>
         <server name="BCRYPT_ROUNDS" value="4" force="true"/>
@@ -44,6 +45,7 @@
         <server name="SESSION_CONNECTION" value="sqlite" force="true"/>
         <server name="MAIL_MAILER" value="array" force="true"/>
         <server name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <server name="TRUSTED_PROXIES" value="" force="true"/>
         <server name="SESSION_DRIVER" value="array" force="true"/>
         <server name="PULSE_ENABLED" value="false" force="true"/>
         <server name="TELESCOPE_ENABLED" value="false" force="true"/>

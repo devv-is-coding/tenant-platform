@@ -3,8 +3,11 @@
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 use function Pest\Laravel\get;
 
@@ -69,6 +72,57 @@ test('two tenants get separate databases', function () {
     $secondDatabase = DB::connection('tenant')->getDatabaseName();
 
     expect($firstDatabase)->not->toBe($secondDatabase);
+});
+
+/**
+ * Point the cache at the real Redis store, under a prefix of the test's own,
+ * or skip where none is reachable (the host and CI have no Redis; the app
+ * container does). The array store cannot show isolation across contexts:
+ * tenancy builds a new cache manager, and so a new, empty array, each time.
+ */
+function useRedisCacheOrSkip(): void
+{
+    if (! extension_loaded('redis')) {
+        test()->markTestSkipped('The redis extension is not loaded here.');
+    }
+
+    try {
+        Redis::connection('cache')->ping();
+    } catch (Throwable) {
+        test()->markTestSkipped('No Redis server is reachable here.');
+    }
+
+    config(['cache.default' => 'redis', 'cache.prefix' => 'test-'.Str::random(8).'-']);
+}
+
+test('an agency\'s cache keys are tagged with the agency, never written as the plain key', function () {
+    $dumaguete = Tenant::factory()->create();
+
+    $seen = withinTenant($dumaguete, function (): array {
+        Cache::put('greeting', 'dumaguete');
+
+        return ['agency' => Cache::get('greeting'), 'untagged' => Cache::store()->get('greeting')];
+    });
+
+    expect($seen)->toBe(['agency' => 'dumaguete', 'untagged' => null]);
+});
+
+test('on Redis, each agency\'s cache is its own across requests, and flushing it leaves the others\' and the central cache', function () {
+    useRedisCacheOrSkip();
+    $dumaguete = Tenant::factory()->create();
+    $tanjay = Tenant::factory()->create();
+    Cache::put('greeting', 'central', 60);
+    withinTenant($dumaguete, fn () => Cache::put('greeting', 'dumaguete', 60));
+    withinTenant($tanjay, fn () => Cache::put('greeting', 'tanjay', 60));
+
+    withinTenant($dumaguete, fn () => Cache::flush());
+
+    expect(withinTenant($dumaguete, fn () => Cache::get('greeting')))->toBeNull()
+        ->and(withinTenant($tanjay, fn () => Cache::get('greeting')))->toBe('tanjay')
+        ->and(Cache::get('greeting'))->toBe('central');
+
+    withinTenant($tanjay, fn () => Cache::flush());
+    Cache::forget('greeting');
 });
 
 test('tenant routes are unreachable from a central domain', function () {

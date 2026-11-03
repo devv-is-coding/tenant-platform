@@ -76,6 +76,21 @@ test('another agency\'s disk never has the file', function () {
     expect(withinTenant($other, fn (): bool => Storage::disk(Media::DISK)->exists($media->path)))->toBeFalse();
 });
 
+test('on S3, an upload lands under the agency\'s prefix in the shared bucket, gets the bucket\'s URL, and no other agency can read it', function () {
+    useAgencyS3OrSkip();
+    $tenant = tenantOnDomain();
+    $other = tenantOnDomain();
+
+    ['media' => $media] = uploadToNewItem($tenant, UploadedFile::fake()->image('tokyo.jpg'));
+
+    $key = "tenant{$tenant->id}/{$media->path}";
+    expect(Storage::disk('s3')->exists($key))->toBeTrue()
+        ->and(withinTenant($tenant, fn (): string => $media->url()))->toBe(config('filesystems.disks.s3.url')."/{$key}")
+        ->and(withinTenant($other, fn (): bool => Storage::disk(Media::DISK)->exists($media->path)))->toBeFalse();
+
+    Storage::disk('s3')->deleteDirectory("tenant{$tenant->id}");
+});
+
 test('the type is read from the file, and each upload goes to the end of the gallery', function () {
     $tenant = tenantOnDomain();
     actingAs(User::factory()->role(Role::Staff)->for($tenant)->create());

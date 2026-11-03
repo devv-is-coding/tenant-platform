@@ -7,11 +7,15 @@ namespace App\Providers;
 use App\Http\Middleware\EnsureTenantHasFeature;
 use App\Http\Middleware\EnsureUserBelongsToTenant;
 use App\Http\Middleware\InitializeTenancyUnlessCentral;
+use Illuminate\Cache\TaggableStore;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
+use LogicException;
 use Stancl\JobPipeline\JobPipeline;
+use Stancl\Tenancy\Bootstrappers\CacheTenancyBootstrapper;
 use Stancl\Tenancy\Events;
 use Stancl\Tenancy\Jobs;
 use Stancl\Tenancy\Listeners;
@@ -73,7 +77,11 @@ class TenancyServiceProvider extends ServiceProvider
             Events\DatabaseDeleted::class => [],
 
             // Tenancy events
-            Events\InitializingTenancy::class => [],
+            // Before tenancy counts as initialized, so a refusal leaves the
+            // central context whole.
+            Events\InitializingTenancy::class => [
+                $this->refuseCacheStoreThatCannotTag(...),
+            ],
             Events\TenancyInitialized::class => [
                 Listeners\BootstrapTenancy::class,
             ],
@@ -136,12 +144,41 @@ class TenancyServiceProvider extends ServiceProvider
         // tenancy there, an agency's upload would land in central storage,
         // and the update that saves it, which runs inside the agency, would
         // not find it. Livewire's own default throttle is kept.
-        config(['livewire.temporary_file_upload.middleware' => ['throttle:60,1', InitializeTenancyUnlessCentral::class]]);
+        // The `uploads` disk keeps them where every node can read them (S3
+        // when agency files are), since the next request may reach another node.
+        config([
+            'livewire.temporary_file_upload.middleware' => ['throttle:60,1', InitializeTenancyUnlessCentral::class],
+            'livewire.temporary_file_upload.disk' => 'uploads',
+        ]);
 
         Livewire::addPersistentMiddleware([
             EnsureUserBelongsToTenant::class,
             EnsureTenantHasFeature::class,
         ]);
+    }
+
+    /**
+     * Refuse to enter an agency when the cache store cannot tag.
+     *
+     * CacheTenancyBootstrapper keeps each agency's cache apart by tagging
+     * every call with the agency. On a store without tags (database, file)
+     * every cache call inside an agency would throw, but only once some code
+     * first caches something there; failing here, on entering any agency,
+     * surfaces the misconfiguration at once instead.
+     *
+     * @throws LogicException
+     */
+    private function refuseCacheStoreThatCannotTag(): void
+    {
+        if (! in_array(CacheTenancyBootstrapper::class, config()->array('tenancy.bootstrappers'), true)) {
+            return;
+        }
+
+        if (! Cache::getStore() instanceof TaggableStore) {
+            $store = config()->string('cache.default');
+
+            throw new LogicException("The [{$store}] cache store cannot tag, so it cannot keep each agency's cache apart. Set CACHE_STORE to redis, memcached or array.");
+        }
     }
 
     protected function bootEvents(): void

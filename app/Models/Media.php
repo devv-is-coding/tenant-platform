@@ -20,7 +20,8 @@ use LogicException;
  * generated on every read (url()).
  *
  * Gallery files go on the agency's own `public` disk, which tenancy roots in
- * its storage folder, so one agency's files are never read through another's.
+ * its storage folder (or, on S3, under its `tenant{id}/` prefix), so one
+ * agency's files are never read through another's.
  *
  * At most one image per item is featured: `featured_for_item_id` holds the
  * item's id on that one row and is unique. A deleted row gives the slot up,
@@ -113,17 +114,29 @@ class Media extends Model
 
     /**
      * Get the file's URL, generated from its disk and path.
-     *
-     * The agency's `public` disk is rooted in the agency's storage folder,
-     * which no web server path points at, so its files are served through
-     * tenancy's asset route on the agency's own domain. Any other disk names
-     * its own URL.
      */
     public function url(): string
     {
-        return $this->disk === self::DISK && tenancy()->initialized
-            ? tenant_asset($this->path)
-            : Storage::disk($this->disk)->url($this->path);
+        return self::urlFor($this->disk, $this->path);
+    }
+
+    /**
+     * Get the URL of a file on one of the agency's disks.
+     *
+     * While the agency's `public` disk is local it is rooted in the agency's
+     * storage folder, which no web server path points at, so its files are
+     * served through tenancy's asset route on the agency's own domain. Any
+     * other disk, the `public` disk on S3 included, names its own URL; on S3
+     * that URL carries the agency's `tenant{id}/` prefix, so build it inside
+     * the agency.
+     */
+    public static function urlFor(string $disk, string $path): string
+    {
+        $servedByTenancy = $disk === self::DISK
+            && config('filesystems.disks.'.self::DISK.'.driver') === 'local'
+            && tenancy()->initialized;
+
+        return $servedByTenancy ? tenant_asset($path) : Storage::disk($disk)->url($path);
     }
 
     /**
