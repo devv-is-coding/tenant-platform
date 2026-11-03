@@ -4,13 +4,23 @@ use App\Concerns\RunsInTenant;
 use App\Enums\PlanTier;
 use App\Enums\Role;
 use App\Enums\TenantStatus;
+use App\Models\Booking;
+use App\Models\InventoryBatch;
+use App\Models\Item;
+use App\Models\Option;
 use App\Models\PlanChangeRequest;
 use App\Models\RestoreRequest;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPayment;
 use App\Models\Tenant;
+use App\Models\TourProfile;
 use App\Models\User;
+use App\Services\Booking\BookingDraft;
+use App\Services\Booking\BookingDraftLine;
+use App\Services\Booking\BookingService;
+use App\ValueObjects\DateRange;
+use App\ValueObjects\Money;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\File;
@@ -37,6 +47,10 @@ pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->afterEach(fn () => cleanUpTenancy())
     ->in('Feature');
+
+// No RefreshDatabase: these tests run against a real MariaDB server, on a
+// database of their own that they set up and drop themselves.
+pest()->extend(TestCase::class)->in('Concurrency');
 
 /*
 |--------------------------------------------------------------------------
@@ -195,4 +209,56 @@ function actingAsTenantUser(Tenant $tenant, Role $role = Role::Staff): User
     actingAs($user);
 
     return $user;
+}
+
+/**
+ * A seat on a published tour departing 1 December 2026 and back on the 12th,
+ * with the given stock, at 499.00. Call inside the agency.
+ */
+function seatOnTour(int $stock = 20): Option
+{
+    $tour = Item::factory()->published()->create(['name' => 'Japan Discovery']);
+    TourProfile::factory()->for($tour)->create(['departs_on' => '2026-12-01', 'returns_on' => '2026-12-12']);
+    $seat = Option::factory()->for($tour)->create(['name' => 'Solo', 'price' => Money::parse('499.00', 'PHP')]);
+    InventoryBatch::factory()->for($seat)->create(['quantity' => $stock]);
+
+    return $seat;
+}
+
+/**
+ * A room on a published hotel with the given number of rooms, at 199.00 a
+ * night. Call inside the agency.
+ */
+function bookableRoom(int $rooms = 2): Option
+{
+    $room = Option::factory()->nightly()->for(Item::factory()->hotel()->published()->create(['name' => 'Hotel Palwa']))->create(['name' => 'Room 101', 'price' => Money::parse('199.00', 'PHP')]);
+    InventoryBatch::factory()->for($room)->create(['quantity' => $rooms]);
+
+    return $room;
+}
+
+/**
+ * An e-visa on a published visa item, at 450.00. Call inside the agency.
+ */
+function bookableVisa(): Option
+{
+    return Option::factory()->unlimited()->for(Item::factory()->visa()->published()->create(['name' => 'Japan e-Visa']))->create(['price' => Money::parse('450.00', 'PHP')]);
+}
+
+/**
+ * Book the lines for the customer through BookingService, inside the agency.
+ *
+ * @param  list<BookingDraftLine>  $lines
+ */
+function bookFor(User $customer, array $lines): Booking
+{
+    return app(BookingService::class)->create(new BookingDraft($customer, $lines));
+}
+
+/**
+ * A stay from one Y-m-d date to another.
+ */
+function stay(string $startsOn, string $endsOn): DateRange
+{
+    return DateRange::of($startsOn, $endsOn);
 }

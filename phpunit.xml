@@ -3,6 +3,7 @@
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          bootstrap="vendor/autoload.php"
          colors="true"
+         defaultTestSuite="Unit,Feature"
 >
     <testsuites>
         <testsuite name="Unit">
@@ -10,6 +11,15 @@
         </testsuite>
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
+        </testsuite>
+        <!--
+            Real processes racing on MariaDB (TA-17): slow, and they need the
+            database server, so they are left out of the default run. Run them in
+            the app container with the testsuite option set to Concurrency
+            (tests/Concurrency/BookingRaceTest.php has the command).
+        -->
+        <testsuite name="Concurrency">
+            <directory>tests/Concurrency</directory>
         </testsuite>
     </testsuites>
     <source>

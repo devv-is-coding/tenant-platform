@@ -12,3 +12,6 @@ Artisan::command('inspire', function () {
 // the lock in the shared cache runs the command.
 Schedule::command('subscriptions:issue-invoices')->daily()->withoutOverlapping()->onOneServer();
 Schedule::command('audit:prune')->daily()->withoutOverlapping()->onOneServer();
+// A hold is counted in minutes (Settings::booking_hold_minutes), so it is
+// released within a minute of running out.
+Schedule::command('bookings:release-expired')->everyMinute()->withoutOverlapping()->onOneServer();
