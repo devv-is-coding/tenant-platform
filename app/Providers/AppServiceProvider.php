@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Enums\PlanFeature;
+use App\Models\Booking;
 use App\Models\Item;
 use App\Models\Media;
 use App\Models\Passkey;
@@ -22,6 +23,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Filesystem\FilesystemManager;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -93,6 +95,7 @@ class AppServiceProvider extends ServiceProvider
     protected function configureMorphMap(): void
     {
         Relation::enforceMorphMap([
+            'booking' => Booking::class,
             'item' => Item::class,
             'media' => Media::class,
             'plan_change_request' => PlanChangeRequest::class,
@@ -149,6 +152,6 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureStorageDrivers(): void
     {
-        Storage::extend('s3-via-app', fn (Application $app, array $config): Filesystem => Storage::createS3Driver($config));
+        Storage::extend('s3-via-app', fn (Application $app, array $config): Filesystem => $app->make(FilesystemManager::class)->createS3Driver($config));
     }
 }
