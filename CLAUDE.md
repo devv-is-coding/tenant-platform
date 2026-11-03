@@ -267,6 +267,10 @@ Branch naming and commit messages are separate conventions; commits still follow
 
 - Before writing code, confirm the setup is actually working: the Docker stack is up and healthy (`docker compose ps`), migrations are current (`php artisan migrate:status`), and there's no unexplained failure already present (e.g. a broken container, a stale schema, a red test). Fix or flag that first rather than building on top of it.
 
+## After Finishing a Task
+
+- Every time a task is finished, update `TODO.md` before ending the turn — not only after building an item, but also after a commit, push, pull request, merge or reorganization. Its *Where things stand* (next up, branch, blockers, log) and the item's boxes and *Built as* notes must match what just happened.
+
 ## Before Pushing
 
 - Before any `git push`, run `composer ci:check` — the same command CI runs (Pint style check, PHPStan, and the full Pest suite).
