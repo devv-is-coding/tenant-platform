@@ -13,7 +13,8 @@ RUN install-php-extensions \
         gd \
         exif \
         pcntl \
-        opcache
+        opcache \
+        redis
 
 COPY --from=composer/composer:2-bin /composer /usr/bin/composer
 
@@ -99,3 +100,8 @@ CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
 FROM app AS dev
 
 RUN composer install --prefer-dist --no-progress
+
+# Production never re-checks file timestamps (docker/php.ini); here synced
+# edits must show up, so OPcache revalidates every 2s.
+RUN printf 'opcache.validate_timestamps = 1\nopcache.revalidate_freq = 2\n' \
+        > /usr/local/etc/php/conf.d/zz-dev.ini

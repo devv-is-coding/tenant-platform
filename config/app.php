@@ -56,6 +56,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Trusted Proxies
+    |--------------------------------------------------------------------------
+    |
+    | The load balancers whose X-Forwarded-* headers are believed: a comma
+    | list of IPs or CIDR ranges, or "*" for any. Behind one, the client's IP
+    | (which the login throttles key on) and the https scheme come from these
+    | headers. Leave it empty while the app is reachable directly, or any
+    | client could claim another IP.
+    |
+    */
+
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

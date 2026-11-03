@@ -1,7 +1,9 @@
 <?php
 
+use App\Enums\InventoryBatchReason;
 use App\Enums\Role;
 use App\Models\HotelProfile;
+use App\Models\InventoryBatch;
 use App\Models\Item;
 use App\Models\ItineraryStop;
 use App\Models\Media;
@@ -10,6 +12,7 @@ use App\Models\Tenant;
 use App\Models\TourProfile;
 use App\Models\User;
 use App\Models\VisaProfile;
+use App\Services\Inventory\AvailabilityService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -54,7 +57,7 @@ test('every seeded catalog row obeys the models\' own rules, and its media are o
             // The seeder writes raw rows; saving each through its model runs
             // the checks a real write would (type, date ranges, coordinates,
             // modes and lengths of stay).
-            foreach ([TourProfile::class, VisaProfile::class, HotelProfile::class, ItineraryStop::class, Option::class] as $model) {
+            foreach ([TourProfile::class, VisaProfile::class, HotelProfile::class, ItineraryStop::class, Option::class, InventoryBatch::class] as $model) {
                 $model::query()->each(fn (Model $row) => $row->save());
             }
 
@@ -62,4 +65,35 @@ test('every seeded catalog row obeys the models\' own rules, and its media are o
                 ->and(Media::query()->where('disk', '!=', Media::DISK)->count())->toBe(0, "{$tenant->id} has media on another disk");
         });
     });
+});
+
+test('every seeded option that tracks stock opens with one InitialStock batch, added by the agency\'s own staff', function () {
+    seed(DatabaseSeeder::class);
+
+    $dumaguete = Tenant::query()->findOrFail('dumaguete');
+
+    $seeded = withinTenant($dumaguete, fn (): array => [
+        'capacity' => Option::query()->orderBy('id')->get()->mapWithKeys(fn (Option $option): array => [
+            $option->name => app(AvailabilityService::class)->capacityOf($option),
+        ])->all(),
+        'reasons' => InventoryBatch::query()->distinct()->pluck('reason')->all(),
+        'added_by' => InventoryBatch::query()->distinct()->pluck('added_by')->all(),
+    ]);
+
+    expect($seeded['capacity'])->toBe([
+        'Solo' => 20,
+        'Couple' => 20,
+        'Family (5)' => 10,
+        'Room 101' => 2,
+        'Standard Double, 2 Queen Beds' => 3,
+        'e-Visa' => 0,
+        'In-person appointment' => 0,
+        'Per person' => 15,
+        'Single Room' => 4,
+    ]);
+
+    expect($seeded['reasons'])->toBe([InventoryBatchReason::InitialStock]);
+
+    expect(User::query()->whereIn('id', $seeded['added_by'])->where('tenant_id', 'dumaguete')->whereIn('role', Role::tenantRoles())->count())
+        ->toBe(count($seeded['added_by']));
 });

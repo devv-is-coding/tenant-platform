@@ -14,6 +14,8 @@ use Stancl\Tenancy\TenantDatabaseManagers\PostgreSQLDatabaseManager;
 use Stancl\Tenancy\TenantDatabaseManagers\SQLiteDatabaseManager;
 use Stancl\Tenancy\UUIDGenerator;
 
+$agencyFilesOnS3 = env('AGENCY_FILES_DRIVER', 'local') === 's3';
+
 return [
     'tenant_model' => Tenant::class,
     'id_generator' => UUIDGenerator::class,
@@ -113,19 +115,24 @@ return [
         'disks' => [
             'local',
             'public',
-            // 's3',
+            'uploads',
         ],
 
         /**
          * Use this for local disks.
          *
          * See https://tenancyforlaravel.com/docs/v3/tenancy-bootstrappers/#filesystem-tenancy-boostrapper
+         *
+         * On S3 (AGENCY_FILES_DRIVER, config/filesystems.php) `public` and
+         * `uploads` have no override: the bootstrapper then prefixes every key
+         * with `tenant{id}/`, keeping each agency's files apart in the bucket.
          */
-        'root_override' => [
+        'root_override' => array_filter([
             // Disks whose roots should be overridden after storage_path() is suffixed.
             'local' => '%storage_path%/app/',
-            'public' => '%storage_path%/app/public/',
-        ],
+            'public' => $agencyFilesOnS3 ? null : '%storage_path%/app/public/',
+            'uploads' => $agencyFilesOnS3 ? null : '%storage_path%/app/',
+        ]),
 
         /**
          * Should storage_path() be suffixed.

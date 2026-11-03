@@ -2,6 +2,7 @@
 
 use App\Models\Settings;
 use App\Models\Tenant;
+use Illuminate\Support\Facades\URL;
 
 test('a new agency\'s settings read back typed, with the defaults it starts on', function () {
     $settings = withinTenant(Tenant::factory()->create(), fn (): Settings => Settings::current());
@@ -22,4 +23,19 @@ test('each agency reads and changes only its own settings', function () {
 
     expect(withinTenant($agency, fn (): int => Settings::current()->deposit_percentage))->toBe(30)
         ->and(withinTenant($otherAgency, fn (): int => Settings::current()->deposit_percentage))->toBe(50);
+});
+
+test('an agency\'s logo is served on its own domain, and an agency without one has no logo URL', function () {
+    $withLogo = tenantOnDomain();
+    $withoutLogo = tenantOnDomain();
+    URL::forceRootUrl("http://{$withLogo->id}.localhost");
+
+    $logoUrl = withinTenant($withLogo, function (): ?string {
+        Settings::current()->update(['logo_path' => 'branding/logo.png']);
+
+        return Settings::current()->logoUrl();
+    });
+
+    expect($logoUrl)->toBe("http://{$withLogo->id}.localhost/tenancy/assets/branding/logo.png")
+        ->and(withinTenant($withoutLogo, fn (): ?string => Settings::current()->logoUrl()))->toBeNull();
 });

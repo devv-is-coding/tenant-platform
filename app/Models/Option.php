@@ -8,9 +8,11 @@ use App\Enums\ItemType;
 use App\ValueObjects\Money;
 use Database\Factories\OptionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
@@ -46,6 +48,7 @@ use LogicException;
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
  * @property-read Item|null $item
+ * @property-read Collection<int, InventoryBatch> $inventoryBatches
  */
 #[Fillable([
     'item_id',
@@ -115,5 +118,15 @@ class Option extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
+    }
+
+    /**
+     * Get the option's inventory ledger.
+     *
+     * @return HasMany<InventoryBatch, $this>
+     */
+    public function inventoryBatches(): HasMany
+    {
+        return $this->hasMany(InventoryBatch::class);
     }
 }

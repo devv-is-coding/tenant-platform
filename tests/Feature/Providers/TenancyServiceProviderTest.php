@@ -168,6 +168,26 @@ test('a Livewire file upload on an agency\'s domain runs inside that agency, so 
     expect($uploadedInside)->toBe($tenant->id);
 });
 
+/*
+ * Under test Livewire always swaps its temporary disk for a local fake
+ * (`tmp-for-tests`), so an upload request cannot reach S3 here. This checks
+ * what the real upload relies on instead: the disk Livewire is given.
+ */
+test('on S3, Livewire\'s temporary uploads still go through the app, onto the shared bucket under the agency\'s prefix', function () {
+    useAgencyS3OrSkip();
+    $tenant = tenantOnDomain();
+
+    $livewireDisk = config()->array('livewire.temporary_file_upload')['disk'];
+
+    withinTenant($tenant, fn (): bool => Storage::disk($livewireDisk)->put('livewire-tmp/logo.png', 'png bytes'));
+
+    expect($livewireDisk)->toBe('uploads')
+        ->and(FileUploadConfiguration::isUsingS3())->toBeFalse()
+        ->and(Storage::disk('s3')->exists("tenant{$tenant->id}/livewire-tmp/logo.png"))->toBeTrue();
+
+    Storage::disk('s3')->deleteDirectory("tenant{$tenant->id}");
+});
+
 test('an active agency on the feature\'s tier can write through Livewire', function () {
     $tenant = tenantOnDomain(tier: PlanTier::Advanced);
     $snapshot = probeSnapshotFor(User::factory()->role(Role::Admin)->for($tenant)->create(), $tenant);
@@ -175,4 +195,14 @@ test('an active agency on the feature\'s tier can write through Livewire', funct
     $response = callProbe($snapshot, $tenant, 'save')->assertOk();
 
     expect($response->json('components.0.effects.html'))->toContain('saved');
+});
+
+test('entering an agency is refused on a cache store that cannot tag, and the app stays central', function () {
+    $tenant = Tenant::factory()->create();
+    config(['cache.default' => 'database']);
+
+    expect(fn () => tenancy()->initialize($tenant))
+        ->toThrow(LogicException::class, 'The [database] cache store cannot tag, so it cannot keep each agency\'s cache apart. Set CACHE_STORE to redis, memcached or array.');
+
+    expect(tenancy()->initialized)->toBeFalse();
 });

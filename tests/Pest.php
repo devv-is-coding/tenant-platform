@@ -12,7 +12,10 @@ use App\Models\SubscriptionPayment;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Fortify\Features;
 use Tests\TestCase;
@@ -69,6 +72,39 @@ function skipUnlessFortifyHas(string $feature, ?string $message = null): void
     if (! Features::enabled($feature)) {
         TestCase::markTestSkipped($message ?? "Fortify feature [{$feature}] is not enabled.");
     }
+}
+
+/**
+ * Put the agencies' disks (`public`, `uploads`) on the real S3 bucket, as
+ * AGENCY_FILES_DRIVER=s3 does, or skip where no bucket answers: the host and
+ * CI have none, the app container reaches the compose SeaweedFS.
+ *
+ * Tenants get random ids, so each test's files sit under a prefix of their own;
+ * remove them with Storage::disk('s3')->deleteDirectory("tenant{id}").
+ */
+function useAgencyS3OrSkip(): void
+{
+    $s3 = config()->array('filesystems.disks.s3');
+    $endpoint = $s3['endpoint'] ?? null;
+
+    try {
+        $reachable = is_string($endpoint) && $endpoint !== '' && Http::timeout(2)->get($endpoint)->successful();
+    } catch (ConnectionException) {
+        $reachable = false;
+    }
+
+    if (! $reachable) {
+        TestCase::markTestSkipped('No S3 bucket is reachable here.');
+    }
+
+    config([
+        'filesystems.disks.public' => $s3,
+        'filesystems.disks.uploads' => [...$s3, 'driver' => 's3-via-app'],
+        'tenancy.filesystem.root_override.public' => null,
+        'tenancy.filesystem.root_override.uploads' => null,
+    ]);
+
+    Storage::forgetDisk(['public', 'uploads']);
 }
 
 /**

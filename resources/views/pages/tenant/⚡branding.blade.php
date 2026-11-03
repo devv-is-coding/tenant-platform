@@ -204,7 +204,7 @@ new #[Title('App branding')] class extends Component {
                         @if ($this->saved->brand_primary_color) style="background-color: {{ $this->saved->brand_primary_color }}" @endif
                     >
                         @if ($this->saved->logo_path)
-                            <img src="{{ tenant_asset($this->saved->logo_path) }}" alt="{{ __('Logo') }}" class="size-10 rounded-md bg-white object-contain" />
+                            <img src="{{ $this->saved->logoUrl() }}" alt="{{ __('Logo') }}" class="size-10 rounded-md bg-white object-contain" />
                         @else
                             <div class="flex size-10 items-center justify-center rounded-md bg-white/20">
                                 <flux:icon.photo variant="mini" />

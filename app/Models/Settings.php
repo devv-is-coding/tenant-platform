@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Actions\Agency\UpdateAgencyBrandingAction;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -62,6 +63,15 @@ class Settings extends Model
     public static function current(): self
     {
         return static::query()->firstOrFail();
+    }
+
+    /**
+     * Get the URL of the agency's logo, if it has one. Build it inside the
+     * agency, like every agency file's URL (Media::urlFor()).
+     */
+    public function logoUrl(): ?string
+    {
+        return $this->logo_path === null ? null : Media::urlFor(UpdateAgencyBrandingAction::LOGO_DISK, $this->logo_path);
     }
 
     /**

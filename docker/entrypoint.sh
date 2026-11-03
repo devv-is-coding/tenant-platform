@@ -38,7 +38,9 @@ case "${DB_CONNECTION}" in
         ;;
 esac
 
-if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
+# Off by default: several nodes starting together would race. Migrating is the
+# release step's job (the `migrate` service in compose.yaml), run once per deploy.
+if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
     php artisan migrate --force
 fi
 
