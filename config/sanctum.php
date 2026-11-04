@@ -9,6 +9,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Routes
+    |--------------------------------------------------------------------------
+    |
+    | Sanctum's /sanctum/csrf-cookie route is for single-page apps signing in
+    | with cookies. Nothing here is one: the web side is server-rendered and
+    | carries its own CSRF token, and the customer apps use API tokens. Left on,
+    | it would start a session on every agency domain without tenancy, so in
+    | the central database rather than the agency's own.
+    |
+    */
+
+    'routes' => false,
+
+    /*
+    |--------------------------------------------------------------------------
     | Stateful Domains
     |--------------------------------------------------------------------------
     |

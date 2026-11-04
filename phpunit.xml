@@ -52,7 +52,8 @@
         <server name="DB_URL" value="" force="true"/>
         <server name="DB_CACHE_CONNECTION" value="sqlite" force="true"/>
         <server name="DB_QUEUE_CONNECTION" value="sqlite" force="true"/>
-        <server name="SESSION_CONNECTION" value="sqlite" force="true"/>
+        <!-- Empty, as in production: a session follows the default connection, the agency's own inside tenancy. -->
+        <server name="SESSION_CONNECTION" value="" force="true"/>
         <server name="MAIL_MAILER" value="array" force="true"/>
         <server name="QUEUE_CONNECTION" value="sync" force="true"/>
         <server name="TRUSTED_PROXIES" value="" force="true"/>

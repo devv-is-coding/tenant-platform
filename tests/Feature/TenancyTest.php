@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\Role;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -10,6 +11,8 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 use function Pest\Laravel\get;
+use function Pest\Laravel\post;
+use function Pest\Laravel\withCookie;
 
 uses(RefreshDatabase::class);
 
@@ -123,6 +126,38 @@ test('on Redis, each agency\'s cache is its own across requests, and flushing it
 
     withinTenant($tanjay, fn () => Cache::flush());
     Cache::forget('greeting');
+});
+
+test('a sign-in on an agency\'s domain keeps its session in the agency\'s own database, and the console\'s stays central', function () {
+    // The suite keeps sessions in memory; the bug was in where the database driver writes them.
+    config(['session.driver' => 'database']);
+    app('session')->forgetDrivers();
+    $tenant = tenantOnDomain();
+    $admin = User::factory()->role(Role::Admin)->for($tenant)->create();
+    $central = DB::connection(config()->string('tenancy.database.central_connection'));
+    get(route('admin.login'))->assertOk();
+
+    // Fortify's login builds the session before tenancy runs; it must still land in the agency.
+    $signIn = post("http://{$tenant->id}.localhost/login", ['email' => $admin->email, 'password' => 'password']);
+
+    $signIn->assertRedirect("http://{$tenant->id}.localhost/dashboard");
+    tenancy()->end();
+    expect(withinTenant($tenant, fn (): array => DB::table('sessions')->pluck('user_id')->all()))->toBe([$admin->id])
+        ->and($central->table('sessions')->whereNotNull('user_id')->count())->toBe(0)
+        ->and($central->table('sessions')->count())->toBe(1);
+
+    // The next agency page finds that session, so the admin is still signed in.
+    tenancy()->end();
+    $sessionCookie = config()->string('session.cookie');
+    withCookie($sessionCookie, (string) $signIn->getCookie($sessionCookie)?->getValue())
+        ->get("http://{$tenant->id}.localhost/dashboard")
+        ->assertOk();
+});
+
+test('an agency\'s domain has no cookie sign-in route for single-page apps, which would start a session outside the agency', function () {
+    $tenant = tenantOnDomain();
+
+    get("http://{$tenant->id}.localhost/sanctum/csrf-cookie")->assertNotFound();
 });
 
 test('tenant routes are unreachable from a central domain', function () {

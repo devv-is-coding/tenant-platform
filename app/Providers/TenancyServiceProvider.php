@@ -7,11 +7,16 @@ namespace App\Providers;
 use App\Http\Middleware\EnsureTenantHasFeature;
 use App\Http\Middleware\EnsureUserBelongsToTenant;
 use App\Http\Middleware\InitializeTenancyUnlessCentral;
+use App\Services\Session\DefaultConnectionSessionHandler;
 use Illuminate\Cache\TaggableStore;
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\DatabaseManager;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Session;
 use Illuminate\Support\ServiceProvider;
+use Livewire\Features\SupportFileUploads\FilePreviewController;
 use Livewire\Livewire;
 use LogicException;
 use Stancl\JobPipeline\JobPipeline;
@@ -116,6 +121,23 @@ class TenancyServiceProvider extends ServiceProvider
         $this->bootEvents();
         $this->mapRoutes();
         $this->configureLivewire();
+        $this->configureSessions();
+    }
+
+    /**
+     * Keep each agency's sessions in its own database, the platform's in the
+     * central one, by choosing the session's connection when it is read or
+     * written (DefaultConnectionSessionHandler explains why that matters).
+     */
+    protected function configureSessions(): void
+    {
+        Session::extend('database', fn (Application $app): DefaultConnectionSessionHandler => new DefaultConnectionSessionHandler(
+            $app->make(DatabaseManager::class),
+            config('session.connection') ?: null,
+            config()->string('session.table'),
+            config()->integer('session.lifetime'),
+            $app,
+        ));
     }
 
     /**
@@ -150,6 +172,11 @@ class TenancyServiceProvider extends ServiceProvider
             'livewire.temporary_file_upload.middleware' => ['throttle:60,1', InitializeTenancyUnlessCentral::class],
             'livewire.temporary_file_upload.disk' => 'uploads',
         ]);
+
+        // A picked file is previewed from its own endpoint too, which reads it
+        // back from the agency's upload folder: without tenancy it would look
+        // in the central one and miss it, and start a session outside the agency.
+        FilePreviewController::$middleware = ['web', InitializeTenancyUnlessCentral::class];
 
         Livewire::addPersistentMiddleware([
             EnsureUserBelongsToTenant::class,

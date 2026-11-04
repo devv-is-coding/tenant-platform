@@ -73,9 +73,14 @@ return [
     |
     */
 
-    // Defaults to the central connection so sessions keep working on tenant
-    // domains, where tenancy swaps the default connection to the tenant database.
-    'connection' => env('SESSION_CONNECTION', env('DB_CONNECTION')),
+    // No connection named on purpose: the session uses whichever connection is
+    // the default when it starts. On an agency's domain tenancy has already made
+    // that the agency's own database (it runs before StartSession, see
+    // bootstrap/app.php), so the agency's sessions live in its own `sessions`
+    // table; on the central domain they stay central. Naming a connection, as
+    // the queue rightly does for its central `jobs` table, would pin every
+    // session to that one database, whatever the domain.
+    'connection' => env('SESSION_CONNECTION'),
 
     /*
     |--------------------------------------------------------------------------

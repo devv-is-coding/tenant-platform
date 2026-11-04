@@ -12,8 +12,8 @@ namespace App\Enums;
  * PartiallyRefunded stays at 6 so ported rows keep their meaning.
  *
  * This status is always *derived* from the booking's amounts and never
- * assigned, so it cannot contradict the payment ledger. The pure function that
- * derives it arrives with the payment work, together with its table-driven test.
+ * assigned, so it cannot contradict the payment ledger: fromAmounts() is the
+ * only way a booking's payment status changes.
  */
 enum BookingPaymentStatus: int
 {
@@ -22,6 +22,27 @@ enum BookingPaymentStatus: int
     case Paid = 3;
     case Refunded = 4;
     case PartiallyRefunded = 6;
+
+    /**
+     * Derive the status from what the booking costs, what has been paid
+     * against it and what has been refunded, all in minor units.
+     *
+     * A refund outranks the rest: once money has gone back, the status says
+     * so, Refunded when all of it has, PartiallyRefunded otherwise. Paying more
+     * than the total still reads Paid (only a gateway can overpay; staff are
+     * refused). Nothing received is Unpaid, a free booking included: the
+     * status describes money received, and none was.
+     */
+    public static function fromAmounts(int $totalMinor, int $paidMinor, int $refundedMinor): self
+    {
+        return match (true) {
+            $paidMinor <= 0 => self::Unpaid,
+            $refundedMinor >= $paidMinor => self::Refunded,
+            $refundedMinor > 0 => self::PartiallyRefunded,
+            $paidMinor >= $totalMinor => self::Paid,
+            default => self::PartiallyPaid,
+        };
+    }
 
     /**
      * Get the human-readable label for the status.

@@ -7,9 +7,11 @@ use App\Models\Booking;
 use App\Models\Item;
 use App\Models\Media;
 use App\Models\Passkey;
+use App\Models\Payment;
 use App\Models\PersonalAccessToken;
 use App\Models\PlanChangeRequest;
 use App\Models\PlanFeatureSetting;
+use App\Models\Refund;
 use App\Models\RestoreRequest;
 use App\Models\Settings;
 use App\Models\Subscription;
@@ -31,6 +33,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Cashier\Cashier;
 use Laravel\Passkeys\Passkeys;
 use Laravel\Sanctum\Sanctum;
 
@@ -43,6 +46,12 @@ class AppServiceProvider extends ServiceProvider
     {
         // Scoped, so the feature overrides are read once per request or job.
         $this->app->scoped(PlanFeatureMatrix::class);
+
+        // Cashier's routes would answer on every agency's domain, and its
+        // webhook accepts unsigned events while no secret is set. The app's
+        // own webhook replaces it (routes/api.php); nothing here uses
+        // Cashier's subscriptions, so its payment page is not needed either.
+        Cashier::ignoreRoutes();
     }
 
     /**
@@ -98,8 +107,10 @@ class AppServiceProvider extends ServiceProvider
             'booking' => Booking::class,
             'item' => Item::class,
             'media' => Media::class,
+            'payment' => Payment::class,
             'plan_change_request' => PlanChangeRequest::class,
             'plan_feature' => PlanFeatureSetting::class,
+            'refund' => Refund::class,
             'restore_request' => RestoreRequest::class,
             'settings' => Settings::class,
             'subscription' => Subscription::class,
