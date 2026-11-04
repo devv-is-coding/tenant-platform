@@ -23,6 +23,7 @@ use Livewire\Livewire;
 use Stancl\Tenancy\Events\TenancyInitialized;
 
 use function Pest\Laravel\actingAs;
+use function Pest\Laravel\get;
 use function Pest\Laravel\post;
 use function Pest\Laravel\postJson;
 
@@ -166,6 +167,24 @@ test('a Livewire file upload on an agency\'s domain runs inside that agency, so 
         ->assertOk();
 
     expect($uploadedInside)->toBe($tenant->id);
+});
+
+test('a Livewire preview of a picked file on an agency\'s domain runs inside that agency, and serves the agency\'s file', function () {
+    $tenant = tenantOnDomain();
+    Storage::fake(FileUploadConfiguration::disk());
+    withinTenant($tenant, fn (): bool => FileUploadConfiguration::storage()->put(FileUploadConfiguration::path('logo.png'), 'png bytes'));
+    tenancy()->end();
+
+    $previewedInside = null;
+    Event::listen(TenancyInitialized::class, function (TenancyInitialized $event) use (&$previewedInside): void {
+        $previewedInside = $event->tenancy->tenant?->getTenantKey();
+    });
+
+    $previewUrl = URL::temporarySignedRoute('livewire.preview-file', now()->addMinutes(5), ['filename' => 'logo.png'], absolute: false);
+
+    get("http://{$tenant->id}.localhost{$previewUrl}")->assertOk();
+
+    expect($previewedInside)->toBe($tenant->id);
 });
 
 /*
