@@ -1,6 +1,7 @@
 <?php
 
 use App\Concerns\RunsInTenant;
+use App\Enums\PaymentMethod;
 use App\Enums\PlanTier;
 use App\Enums\Role;
 use App\Enums\TenantStatus;
@@ -8,6 +9,7 @@ use App\Models\Booking;
 use App\Models\InventoryBatch;
 use App\Models\Item;
 use App\Models\Option;
+use App\Models\Payment;
 use App\Models\PlanChangeRequest;
 use App\Models\RestoreRequest;
 use App\Models\Subscription;
@@ -19,6 +21,7 @@ use App\Models\User;
 use App\Services\Booking\BookingDraft;
 use App\Services\Booking\BookingDraftLine;
 use App\Services\Booking\BookingService;
+use App\Services\Payment\PaymentService;
 use App\ValueObjects\DateRange;
 use App\ValueObjects\Money;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -28,6 +31,10 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Fortify\Features;
+use Stripe\StripeClient;
+use Stripe\StripeObject;
+use Stripe\Util\RequestOptions;
+use Stripe\Util\Util;
 use Tests\TestCase;
 
 use function Pest\Laravel\actingAs;
@@ -256,9 +263,75 @@ function bookFor(User $customer, array $lines): Booking
 }
 
 /**
+ * Record a cash payment of the decimal amount by the staff member, inside the agency.
+ */
+function takeCash(Tenant $tenant, Booking $booking, string $amount, User $staff): Payment
+{
+    return withinTenant($tenant, fn (): Payment => app(PaymentService::class)->recordByStaff(
+        $booking,
+        Money::parse($amount, 'PHP'),
+        PaymentMethod::Cash,
+        now(),
+        $staff,
+    ));
+}
+
+/**
  * A stay from one Y-m-d date to another.
  */
 function stay(string $startsOn, string $endsOn): DateRange
 {
     return DateRange::of($startsOn, $endsOn);
+}
+
+/**
+ * Answer the app's Stripe calls for this test instead of Stripe: Cashier's
+ * client comes from the container, which is rebuilt for every test, so
+ * nothing carries over. Answers are keyed "METHOD /v1/path", as an array or
+ * a closure given the request's params; a call with no answer fails the test.
+ *
+ * Returns every call made, in order, as [method, path, params, idempotency key].
+ *
+ * @param  array<string, array<string, mixed>|Closure(array<string, mixed>): array<string, mixed>>  $answers
+ * @return ArrayObject<int, array{0: string, 1: string, 2: array<string, mixed>, 3: string|null}>
+ */
+function fakeStripe(array $answers = []): ArrayObject
+{
+    /** @var ArrayObject<int, array{0: string, 1: string, 2: array<string, mixed>, 3: string|null}> $sent */
+    $sent = new ArrayObject;
+
+    $client = new class(['api_key' => 'sk_test_fake'], $answers, $sent) extends StripeClient
+    {
+        /**
+         * @param  array<string, mixed>  $config
+         * @param  array<string, array<string, mixed>|Closure(array<string, mixed>): array<string, mixed>>  $answers
+         * @param  ArrayObject<int, array{0: string, 1: string, 2: array<string, mixed>, 3: string|null}>  $sent
+         */
+        public function __construct(array $config, private array $answers, private ArrayObject $sent)
+        {
+            parent::__construct($config);
+        }
+
+        /**
+         * @param  'delete'|'get'|'post'  $method
+         * @param  string  $path
+         * @param  array<string, mixed>|null  $params
+         * @param  array<string, mixed>|RequestOptions|null  $opts
+         */
+        public function request($method, $path, $params, $opts): StripeObject
+        {
+            $params ??= [];
+            $key = strtoupper($method).' '.$path;
+            $idempotencyKey = is_array($opts) ? ($opts['idempotency_key'] ?? null) : null;
+            $this->sent->append([$key, $path, $params, is_string($idempotencyKey) ? $idempotencyKey : null]);
+
+            $answer = $this->answers[$key] ?? throw new RuntimeException("Unexpected Stripe call: {$key}");
+
+            return Util::convertToStripeObject($answer instanceof Closure ? $answer($params) : $answer, []);
+        }
+    };
+
+    app()->bind(StripeClient::class, fn (): StripeClient => $client);
+
+    return $sent;
 }

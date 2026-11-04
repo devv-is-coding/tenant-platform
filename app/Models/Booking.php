@@ -60,11 +60,16 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $cancelled_at
  * @property int|null $created_by
  * @property int|null $approved_by
+ * @property string|null $stripe_invoice_id
+ * @property string|null $stripe_customer_id
+ * @property string|null $stripe_invoice_url
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
  * @property-read Collection<int, BookingLine> $lines
  * @property-read Collection<int, InventoryAllocation> $allocations
+ * @property-read Collection<int, Payment> $payments
+ * @property-read Collection<int, Refund> $refunds
  * @property-read User|null $customer
  */
 #[Fillable([
@@ -153,6 +158,55 @@ class Booking extends Model
     public function allocations(): HasMany
     {
         return $this->hasMany(InventoryAllocation::class);
+    }
+
+    /**
+     * Get the money received against the booking, in the order it came in.
+     *
+     * @return HasMany<Payment, $this>
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class)->orderBy('id');
+    }
+
+    /**
+     * Get the booking's refunds, in the order they were asked for.
+     *
+     * @return HasMany<Refund, $this>
+     */
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(Refund::class)->orderBy('id');
+    }
+
+    /**
+     * Get what is still owed: the total less what has been paid, never below
+     * zero. Refunds do not reopen a balance; money returned is returned.
+     */
+    public function balance(): Money
+    {
+        return Money::ofMinor(max(0, $this->total_minor - $this->amount_paid_minor), $this->currency);
+    }
+
+    /**
+     * Recompute the paid and refunded amounts from the payment and refund
+     * ledgers, and the payment status from those, then save them.
+     *
+     * Called inside the transaction that writes a payment or refund, with the
+     * booking's row locked. The amounts are summed from source every time,
+     * never incremented: incrementing is how balances drift.
+     */
+    public function recomputeMoney(): void
+    {
+        $paidMinor = (int) $this->payments()->countingAsPaid()->sum('amount_minor');
+        $refundedMinor = (int) $this->refunds()->countingAsRefunded()->sum('amount_minor');
+
+        $this->forceFill([
+            'amount_paid_minor' => $paidMinor,
+            'amount_refunded_minor' => $refundedMinor,
+            'payment_status' => BookingPaymentStatus::fromAmounts($this->total_minor, $paidMinor, $refundedMinor),
+        ])->save();
     }
 
     /**
