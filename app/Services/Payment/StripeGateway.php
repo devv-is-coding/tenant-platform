@@ -4,6 +4,7 @@ namespace App\Services\Payment;
 
 use App\Concerns\RecordsAuditEvents;
 use App\Enums\AuditAction;
+use App\Events\PaymentLinkGenerated;
 use App\Models\Booking;
 use App\Models\Payment;
 use App\Models\Refund;
@@ -126,6 +127,8 @@ class StripeGateway
             'balance' => $balance->format(),
             'reference' => $booking->reference,
         ]), context: ['stripe_invoice_id' => $finalized->id, 'amount_minor' => $balance->minor]);
+
+        PaymentLinkGenerated::dispatch($booking, $balance);
 
         return $url;
     }

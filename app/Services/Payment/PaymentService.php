@@ -6,6 +6,7 @@ use App\Concerns\RecordsAuditEvents;
 use App\Enums\AuditAction;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentRecordStatus;
+use App\Events\PaymentReceived;
 use App\Models\Booking;
 use App\Models\Payment;
 use App\Models\User;
@@ -156,6 +157,8 @@ class PaymentService
             'amount_paid_minor' => ['old' => $before['amount_paid_minor'], 'new' => $locked->amount_paid_minor],
             'payment_status' => ['old' => $before['payment_status'], 'new' => $locked->payment_status->value],
         ], ['payment_reference' => $payment->reference, ...($context ?? [])]);
+
+        PaymentReceived::dispatch($payment);
 
         return $payment;
     }

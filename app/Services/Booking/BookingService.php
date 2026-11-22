@@ -10,6 +10,7 @@ use App\Enums\BookingPaymentStatus;
 use App\Enums\ItemStatus;
 use App\Enums\ItemType;
 use App\Enums\Role;
+use App\Events\BookingCreated;
 use App\Exceptions\OptionUnavailableException;
 use App\Models\Booking;
 use App\Models\Option;
@@ -194,6 +195,8 @@ class BookingService
             'reference' => $booking->reference,
             'customer' => $booking->customer_name,
         ]));
+
+        BookingCreated::dispatch($booking);
 
         return $booking;
     }

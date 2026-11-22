@@ -2,8 +2,10 @@
 
 namespace App\Actions\Subscriptions;
 
+use App\Actions\Notifications\SendPlatformNoticeAction;
 use App\Enums\AuditAction;
 use App\Enums\PlanChangeRequestStatus;
+use App\Enums\PlatformNoticeType;
 use App\Models\PlanChangeRequest;
 use App\Models\Subscription;
 use App\Models\User;
@@ -17,6 +19,7 @@ class DecidePlanChangeRequestAction
     public function __construct(
         private AuditRecorder $auditRecorder,
         private StartSubscriptionAction $startSubscription,
+        private SendPlatformNoticeAction $sendNotice,
     ) {}
 
     /**
@@ -62,6 +65,10 @@ class DecidePlanChangeRequestAction
                 context: ['subscription_id' => $subscription->id],
             );
 
+            $this->sendNotice->handle($tenant, PlatformNoticeType::PlanChangeApproved, __('Your agency is now on :plan.', [
+                'plan' => $subscription->plan_name,
+            ]), $locked);
+
             return $subscription;
         });
     }
@@ -98,6 +105,10 @@ class DecidePlanChangeRequestAction
                 $locked->decision_reason,
                 subject: $locked,
             );
+
+            $this->sendNotice->handle($locked->tenant, PlatformNoticeType::PlanChangeDeclined, __('Your plan change request was declined. Reason: :reason', [
+                'reason' => $locked->decision_reason,
+            ]), $locked);
         });
 
         $request->refresh();

@@ -48,6 +48,13 @@ return new class extends Migration
 
             $table->boolean('is_active')->default(true);
 
+            // Kept on the item so every listing request reads it without
+            // touching reviews. Recomputed from the approved reviews whenever
+            // one is written, hidden, approved or deleted (Item::recomputeRating());
+            // NULL until the first, so an unrated item never reads as 0.00.
+            $table->decimal('rating_avg', 3, 2)->nullable();
+            $table->unsignedInteger('reviews_count')->default(0);
+
             $table->timestamps();
             $table->softDeletes();
 

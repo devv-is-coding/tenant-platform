@@ -4,10 +4,12 @@ use App\Actions\Subscriptions\DecidePlanChangeRequestAction;
 use App\Enums\AuditAction;
 use App\Enums\PlanChangeRequestStatus;
 use App\Enums\PlanTier;
+use App\Enums\PlatformNoticeType;
 use App\Enums\Role;
 use App\Enums\SubscriptionStatus;
 use App\Models\PlanChangeRequest;
 use App\Models\PlatformAuditEvent;
+use App\Models\PlatformNotice;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
@@ -156,3 +158,26 @@ test('text the agency wrote is escaped when shown', function () {
         ->assertSee('&lt;script&gt;', escape: false)
         ->assertDontSee('<script>alert(1)</script>', escape: false);
 });
+
+test('approving or declining a plan request tells the agency\'s admin', function (Closure $decide, PlatformNoticeType $type, string $message) {
+    $tenant = Tenant::factory()->create();
+    $plan = SubscriptionPlan::factory()->create(['name' => 'Agency Advanced Monthly']);
+    $request = PlanChangeRequest::factory()->for($tenant)->for($plan, 'plan')->create();
+
+    $decide(planRequestsPage(), $request)->assertHasNoErrors();
+
+    expect(PlatformNotice::query()->get()->map(fn (PlatformNotice $notice): array => [
+        $notice->tenant_id, $notice->notice_type, $notice->message, $notice->subject_type, $notice->subject_id,
+    ])->all())->toBe([[$tenant->id, $type, $message, 'plan_change_request', $request->id]]);
+})->with([
+    'approved' => [
+        fn (Testable $page, PlanChangeRequest $request): Testable => $page->call('confirmApprove', $request->id)->call('approve'),
+        PlatformNoticeType::PlanChangeApproved,
+        'Your agency is now on Agency Advanced Monthly.',
+    ],
+    'declined' => [
+        fn (Testable $page, PlanChangeRequest $request): Testable => $page->call('confirmDecline', $request->id)->set('decision_reason', 'Pro needs a signed contract first.')->call('decline'),
+        PlatformNoticeType::PlanChangeDeclined,
+        'Your plan change request was declined. Reason: Pro needs a signed contract first.',
+    ],
+]);

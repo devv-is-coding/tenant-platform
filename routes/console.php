@@ -15,3 +15,5 @@ Schedule::command('audit:prune')->daily()->withoutOverlapping()->onOneServer();
 // A hold is counted in minutes (Settings::booking_hold_minutes), so it is
 // released within a minute of running out.
 Schedule::command('bookings:release-expired')->everyMinute()->withoutOverlapping()->onOneServer();
+// A checked-in booking completes the day after its last day.
+Schedule::command('bookings:complete-finished')->daily()->withoutOverlapping()->onOneServer();

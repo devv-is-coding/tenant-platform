@@ -2,9 +2,11 @@
 
 use App\Actions\Restore\RequestRestoreAction;
 use App\Enums\AuditAction;
+use App\Enums\PlatformNoticeType;
 use App\Enums\RestoreRequestStatus;
 use App\Enums\Role;
 use App\Models\PlatformAuditEvent;
+use App\Models\PlatformNotice;
 use App\Models\RestoreRequest;
 use App\Models\SubscriptionInvoice;
 use App\Models\Tenant;
@@ -194,3 +196,35 @@ test('restoring or declining is refused once the user is no longer a super admin
 
     expect($request->fresh()?->status)->toBe(RestoreRequestStatus::Pending);
 })->with(['restore', 'confirmDecline']);
+
+test('restoring what a request asks for tells the agency\'s admin, though the agency has no plan', function () {
+    $tenant = Tenant::factory()->create();
+    $request = RestoreRequest::factory()->create(['tenant_id' => $tenant->id, 'restorable_id' => deletedStaffOf($tenant)->id]);
+
+    restoreRequestsPage()
+        ->call('restore', $request->id)
+        ->assertHasNoErrors();
+
+    expect($tenant->liveSubscription()->exists())->toBeFalse()
+        ->and(PlatformNotice::query()->get()->map(fn (PlatformNotice $notice): array => [
+            $notice->tenant_id, $notice->notice_type, $notice->title, $notice->message, $notice->subject_type, $notice->subject_id, $notice->read_at,
+        ])->all())->toBe([[
+            $tenant->id, PlatformNoticeType::RestoreRequestGranted, 'Restore request granted', 'User Ana Reyes was restored, as you asked.', 'restore_request', $request->id, null,
+        ]]);
+});
+
+test('declining a request tells the agency\'s admin why', function () {
+    $request = RestoreRequest::factory()->create();
+
+    restoreRequestsPage()
+        ->call('confirmDecline', $request->id)
+        ->set('decision_reason', 'The account was deleted on purpose.')
+        ->call('decline')
+        ->assertHasNoErrors();
+
+    expect(PlatformNotice::query()->get()->map(fn (PlatformNotice $notice): array => [
+        $notice->tenant_id, $notice->notice_type, $notice->message, $notice->subject_id,
+    ])->all())->toBe([[
+        $request->tenant_id, PlatformNoticeType::RestoreRequestDeclined, 'Your restore request was declined. Reason: The account was deleted on purpose.', $request->id,
+    ]]);
+});

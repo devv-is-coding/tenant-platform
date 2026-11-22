@@ -29,6 +29,11 @@ class CreateTenantsTable extends Migration
             // the operator.
             $table->foreignId('status_changed_by')->nullable()->index();
 
+            // The agency as a customer of the platform's own Stripe account,
+            // for paying its plan and invoices by card (TA-27). Created on the
+            // first card payment.
+            $table->string('stripe_customer_id')->nullable();
+
             $table->timestamps();
             $table->softDeletes();
             $table->json('data')->nullable();

@@ -31,6 +31,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property int $amount_minor
  * @property string $currency
  * @property int $amount_paid_minor
+ * @property int $credit_minor
  * @property SubscriptionInvoiceStatus $status
  * @property Carbon|null $voided_at
  * @property string|null $void_reason
@@ -49,6 +50,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
     'amount_minor',
     'currency',
     'amount_paid_minor',
+    'credit_minor',
     'status',
     'voided_at',
     'void_reason',
@@ -85,6 +87,7 @@ class SubscriptionInvoice extends Model
             'status' => SubscriptionInvoiceStatus::class,
             'amount_minor' => 'integer',
             'amount_paid_minor' => 'integer',
+            'credit_minor' => 'integer',
             'period_start_on' => 'date',
             'period_end_on' => 'date',
             'issued_on' => 'date',
@@ -151,6 +154,19 @@ class SubscriptionInvoice extends Model
     public function outstandingMinor(): int
     {
         return max(0, $this->amount_minor - $this->amount_paid_minor);
+    }
+
+    /**
+     * Get the reference the next invoice for a period ending in that month
+     * takes: `PLAT-YYYY-MM-NNNN`, counted with deleted invoices too, since
+     * they keep theirs.
+     */
+    public static function nextReference(CarbonInterface $periodEndOn): string
+    {
+        $prefix = 'PLAT-'.$periodEndOn->format('Y-m').'-';
+        $sequence = static::query()->withTrashed()->where('reference', 'like', $prefix.'%')->count() + 1;
+
+        return $prefix.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
     }
 
     /**

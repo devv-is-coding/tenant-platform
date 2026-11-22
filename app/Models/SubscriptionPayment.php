@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Stancl\Tenancy\Database\Concerns\CentralConnection;
 
 /**
@@ -105,6 +106,16 @@ class SubscriptionPayment extends Model
     public function recorder(): BelongsTo
     {
         return $this->belongsTo(User::class, 'recorded_by');
+    }
+
+    /**
+     * Get the reference the invoice's next payment takes: `PLATPAY-` and the
+     * invoice's own number, then its count, deleted payments included, since
+     * they keep theirs.
+     */
+    public static function nextReferenceFor(SubscriptionInvoice $invoice): string
+    {
+        return 'PLATPAY-'.Str::after($invoice->reference, 'PLAT-').'-'.($invoice->payments()->withTrashed()->count() + 1);
     }
 
     /**

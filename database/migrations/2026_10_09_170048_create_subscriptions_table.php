@@ -79,6 +79,14 @@ return new class extends Migration
             // period.
             $table->date('ends_on')->nullable();
 
+            // A move the agency's Admin chose that waits for the paid period to
+            // end: a lower tier, or the same tier billed differently (TA-27).
+            // The billing run applies it on `next_billing_on`. An upgrade is
+            // never scheduled: it is paid for and starts at once. A bare actor
+            // column beside it, like every other.
+            $table->foreignId('scheduled_plan_id')->nullable()->index();
+            $table->foreignId('scheduled_by')->nullable();
+
             // The super admin who set this up. Bare column with no foreign key,
             // following the same rule as every other actor column here: a
             // commercial record must outlive the operator who created it.

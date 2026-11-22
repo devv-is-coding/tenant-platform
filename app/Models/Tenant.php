@@ -38,6 +38,7 @@ use Stancl\Tenancy\Events;
  * @property string|null $status_reason
  * @property Carbon|null $status_changed_at
  * @property int|null $status_changed_by
+ * @property string|null $stripe_customer_id
  * @property Carbon|null $deleted_at
  * @property-read Subscription|null $latestSubscription
  * @property-read Subscription|null $liveSubscription
@@ -93,6 +94,7 @@ class Tenant extends BaseTenant implements TenantWithDatabase
             'status_reason',
             'status_changed_at',
             'status_changed_by',
+            'stripe_customer_id',
             'created_at',
             'updated_at',
             'deleted_at',

@@ -19,9 +19,9 @@ class ClearPastDueAction
      * The agency's own status is left alone: reactivating a suspended agency
      * stays a super admin's decision, never a side effect of the money. Call it
      * inside the transaction that changed the invoices, with the subscription
-     * row locked.
+     * row locked. No actor when Stripe confirmed the payment.
      */
-    public function handle(User $actor, Subscription $subscription): bool
+    public function handle(?User $actor, Subscription $subscription): bool
     {
         if ($subscription->status !== SubscriptionStatus::PastDue
             || $subscription->invoices()->overdue(today())->exists()) {

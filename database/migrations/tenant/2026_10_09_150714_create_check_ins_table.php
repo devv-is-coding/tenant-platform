@@ -21,13 +21,13 @@ return new class extends Migration
      *           NULL and `recorded_by` is the staff member. Cross-tenant use is
      *           already blocked by the tenant middleware on the scanning session.
      *
-     * UNIQUE(customer_id, itinerary_stop_id) prevents a double check-in at one
-     * stop. Note the honest limits: for the hotel flow the stop is NULL, and
-     * repeated NULLs do not collide on either driver, so "one check-in per
-     * booking" there is a service-layer rule. And a customer who books the same
-     * tour twice can only check in at a given stop once - the key should be
-     * UNIQUE(booking_id, itinerary_stop_id), which is an approved fix pending
-     * the next rebuild.
+     * UNIQUE(booking_id, itinerary_stop_id) prevents a double check-in at one
+     * stop, per booking, so a customer who books the same tour twice checks in
+     * at each stop once per trip (the legacy keyed it on the customer, which
+     * blocked the second trip). The honest limit: for the hotel flow the stop
+     * is NULL, and repeated NULLs do not collide on either driver, so "one
+     * check-in per booking" there is FulfilmentService's rule, checked under
+     * the booking's row lock.
      *
      * `auto_detected` is deliberately dropped. Without geofencing nothing would
      * ever write it, and a column no producer sets is worse than no column.
@@ -57,7 +57,7 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
-            $table->unique(['customer_id', 'itinerary_stop_id']);
+            $table->unique(['booking_id', 'itinerary_stop_id']);
             $table->index(['booking_id', 'checked_in_at']);
         });
     }

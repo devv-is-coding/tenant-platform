@@ -8,6 +8,10 @@ use App\Enums\BookingApprovalStatus;
 use App\Enums\PaymentRecordStatus;
 use App\Enums\RefundStatus;
 use App\Enums\RefundType;
+use App\Events\RefundApproved;
+use App\Events\RefundProcessed;
+use App\Events\RefundRejected;
+use App\Events\RefundRequested;
 use App\Models\Booking;
 use App\Models\Payment;
 use App\Models\Refund;
@@ -76,6 +80,8 @@ class RefundService
                 'reference' => $locked->reference,
             ]), context: ['refund_id' => $refund->id]);
 
+            RefundRequested::dispatch($refund);
+
             return $refund;
         });
     }
@@ -130,6 +136,8 @@ class RefundService
                 'reference' => $booking->reference,
             ]), context: ['refund_id' => $locked->id, 'released_units' => $released]);
 
+            RefundApproved::dispatch($locked);
+
             return $locked;
         });
     }
@@ -161,6 +169,8 @@ class RefundService
                 'amount' => $locked->amount->format(),
                 'reference' => $booking->reference,
             ]), context: ['refund_id' => $locked->id]);
+
+            RefundRejected::dispatch($locked);
 
             return $locked;
         });
@@ -231,6 +241,8 @@ class RefundService
                 'amount_refunded_minor' => ['old' => $before['amount_refunded_minor'], 'new' => $booking->amount_refunded_minor],
                 'payment_status' => ['old' => $before['payment_status'], 'new' => $booking->payment_status->value],
             ], ['refund_id' => $locked->id, 'stripe_refund_id' => $locked->stripe_refund_id]);
+
+            RefundProcessed::dispatch($locked);
 
             return $locked;
         });

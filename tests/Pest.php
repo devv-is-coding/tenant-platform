@@ -6,8 +6,10 @@ use App\Enums\PlanTier;
 use App\Enums\Role;
 use App\Enums\TenantStatus;
 use App\Models\Booking;
+use App\Models\BookingLine;
 use App\Models\InventoryBatch;
 use App\Models\Item;
+use App\Models\ItineraryStop;
 use App\Models\Option;
 use App\Models\Payment;
 use App\Models\PlanChangeRequest;
@@ -230,6 +232,31 @@ function seatOnTour(int $stock = 20): Option
     InventoryBatch::factory()->for($seat)->create(['quantity' => $stock]);
 
     return $seat;
+}
+
+/**
+ * A stop at Tokyo on a new tour departing 1 December (seatOnTour()). Call
+ * inside the agency.
+ */
+function tourStop(): ItineraryStop
+{
+    return ItineraryStop::factory()->create(['item_id' => seatOnTour()->item_id, 'location' => 'Tokyo']);
+}
+
+/**
+ * An approved booking for the customer on the stop's tour, 1 to 12 December.
+ * Call inside the agency.
+ */
+function approvedBookingOn(ItineraryStop $stop, User $customer, string $reference = 'DGTE-2026-0002'): Booking
+{
+    $booking = Booking::factory()->approved()->create(['customer_id' => $customer->id, 'reference' => $reference]);
+    BookingLine::factory()->for($booking)->create([
+        'option_id' => Option::query()->where('item_id', $stop->item_id)->firstOrFail()->id,
+        'starts_on' => '2026-12-01',
+        'ends_on' => '2026-12-12',
+    ]);
+
+    return $booking;
 }
 
 /**

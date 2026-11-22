@@ -2,9 +2,11 @@
 
 use App\Enums\AuditAction;
 use App\Enums\BookingApprovalStatus;
+use App\Enums\NotificationType;
 use App\Enums\Role;
 use App\Models\AuditEvent;
 use App\Models\Booking;
+use App\Models\Notification;
 use App\Models\Payment;
 use App\Models\Refund;
 use App\Models\User;
@@ -138,4 +140,19 @@ test('a refund goes back through the payment it reverses, keyed so a retry canno
     expect($answer)->toBe(['id' => 're_1', 'status' => 'succeeded'])
         ->and($sent[0][2])->toMatchArray(['payment_intent' => 'pi_1', 'amount' => 5000, 'metadata' => ['tenant_id' => $tenant->id, 'refund_id' => (string) $refund->id, 'payment_reference' => $payment->reference]])
         ->and($sent[0][3])->toBe("refund:{$tenant->id}:{$refund->id}");
+});
+
+test('a payment link tells the customer the balance it charges', function () {
+    $tenant = tenantOnDomain();
+    $staff = User::factory()->role(Role::Staff)->for($tenant)->create();
+    $booking = withinTenant($tenant, fn (): Booking => Booking::factory()->create(['total' => Money::parse('599.00', 'PHP'), 'reference' => 'DUMA-2026-AAAAAA']));
+    takeCash($tenant, $booking, '400.00', $staff);
+    fakeStripe(newBalanceInvoice(19900));
+
+    withinTenant($tenant, fn (): string => app(StripeGateway::class)->balanceInvoiceUrl($booking->fresh() ?? $booking));
+
+    expect(withinTenant($tenant, fn (): array => Notification::query()
+        ->where('notification_type', NotificationType::PaymentLinkGenerated)
+        ->get()->map(fn (Notification $notification): array => [$notification->user_id, $notification->message])->all()))
+        ->toBe([[$booking->customer_id, 'Your payment link for the ₱199.00 balance of DUMA-2026-AAAAAA is ready.']]);
 });

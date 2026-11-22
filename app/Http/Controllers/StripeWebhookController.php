@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Subscriptions\RecordPlatformCheckoutAction;
 use App\Concerns\RecordsAuditEvents;
 use App\Enums\AuditAction;
 use App\Enums\RefundStatus;
@@ -16,6 +17,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
 /**
@@ -41,6 +43,7 @@ class StripeWebhookController extends Controller
         private PaymentService $payments,
         private RefundService $refunds,
         private StripeGateway $gateway,
+        private RecordPlatformCheckoutAction $recordPlatformCheckout,
     ) {}
 
     /**
@@ -51,6 +54,12 @@ class StripeWebhookController extends Controller
         $event = $request->json()->all();
         $type = is_string($event['type'] ?? null) ? $event['type'] : '';
         $object = is_array($event['data']['object'] ?? null) ? $event['data']['object'] : [];
+
+        // An agency paying the platform (TA-27): central billing, so it never
+        // enters the agency, though its metadata names one.
+        if ($type === 'checkout.session.completed' && str_starts_with((string) ($object['metadata']['purpose'] ?? ''), 'platform_')) {
+            return $this->platformCheckoutCompleted($event, $object);
+        }
 
         $tenant = $this->tenantOf($object);
 
@@ -101,6 +110,33 @@ class StripeWebhookController extends Controller
         }
 
         return response()->json(['status' => 'handled']);
+    }
+
+    /**
+     * An agency paid the platform through Checkout: record the plan or
+     * invoice it paid for, once. A plan withdrawn after it was paid for is
+     * refused by StartSubscriptionAction; that is logged for the super admin
+     * to settle by hand, since the money was taken.
+     *
+     * @param  array<string, mixed>  $event
+     * @param  array<string, mixed>  $session
+     */
+    private function platformCheckoutCompleted(array $event, array $session): JsonResponse
+    {
+        try {
+            $recorded = $this->recordPlatformCheckout->handle($session);
+        } catch (ValidationException $refused) {
+            Log::warning('Stripe checkout paid for a plan that could not be started: '.$refused->getMessage(), [
+                'event_id' => $event['id'] ?? null,
+                'session_id' => $session['id'] ?? null,
+            ]);
+
+            return response()->json(['status' => 'ignored']);
+        }
+
+        return $recorded
+            ? response()->json(['status' => 'handled'])
+            : $this->ignored($event, 'unpaid, already recorded, or not the platform\'s');
     }
 
     /**

@@ -13,7 +13,6 @@ use App\Services\Audit\AuditRecorder;
 use App\ValueObjects\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -53,8 +52,7 @@ class RecordSubscriptionPaymentAction
 
             $payment = $locked->payments()->create([
                 'tenant_id' => $locked->tenant_id,
-                // Counted with deleted payments too: they keep their references.
-                'reference' => 'PLATPAY-'.Str::after($locked->reference, 'PLAT-').'-'.($locked->payments()->withTrashed()->count() + 1),
+                'reference' => SubscriptionPayment::nextReferenceFor($locked),
                 'amount_minor' => $amount->minor,
                 'currency' => $amount->currency,
                 'method' => $method,

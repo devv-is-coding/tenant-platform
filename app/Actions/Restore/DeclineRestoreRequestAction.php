@@ -2,7 +2,9 @@
 
 namespace App\Actions\Restore;
 
+use App\Actions\Notifications\SendPlatformNoticeAction;
 use App\Enums\AuditAction;
+use App\Enums\PlatformNoticeType;
 use App\Enums\RestoreRequestStatus;
 use App\Models\RestoreRequest;
 use App\Models\User;
@@ -12,7 +14,10 @@ use Illuminate\Validation\ValidationException;
 
 class DeclineRestoreRequestAction
 {
-    public function __construct(private AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private AuditRecorder $auditRecorder,
+        private SendPlatformNoticeAction $sendNotice,
+    ) {}
 
     /**
      * Decline an agency admin's restore request, with a reason the admin can
@@ -47,6 +52,10 @@ class DeclineRestoreRequestAction
                 $locked->decision_reason,
                 subject: $locked,
             );
+
+            $this->sendNotice->handle($locked->tenant, PlatformNoticeType::RestoreRequestDeclined, __('Your restore request was declined. Reason: :reason', [
+                'reason' => $locked->decision_reason,
+            ]), $locked);
         });
 
         $request->refresh();

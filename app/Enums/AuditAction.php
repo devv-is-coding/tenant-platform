@@ -47,6 +47,8 @@ enum AuditAction: string
 
     case SubscriptionCreated = 'subscription.created';
     case SubscriptionPlanChanged = 'subscription.plan_changed';
+    case SubscriptionChangeScheduled = 'subscription.change_scheduled';
+    case SubscriptionChangeUnscheduled = 'subscription.change_unscheduled';
     case SubscriptionCancelled = 'subscription.cancelled';
     case SubscriptionDeleted = 'subscription.deleted';
     case SubscriptionRestored = 'subscription.restored';
@@ -101,6 +103,8 @@ enum AuditAction: string
     case BookingRejected = 'booking.rejected';
     case BookingCancelled = 'booking.cancelled';
     case BookingExpired = 'booking.expired';
+    case BookingCompleted = 'booking.completed';
+    case BookingMarkedNoShow = 'booking.no_show';
 
     case PaymentRecorded = 'payment.recorded';
     case PaymentLinkGenerated = 'payment.link_generated';
@@ -116,6 +120,8 @@ enum AuditAction: string
     case ReviewApproved = 'review.approved';
     case ReviewRejected = 'review.rejected';
     case ReviewFeatured = 'review.featured';
+    case ReviewUnfeatured = 'review.unfeatured';
+    case ReviewDeleted = 'review.deleted';
 
     case CheckInRecorded = 'checkin.recorded';
 
