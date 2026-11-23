@@ -2,7 +2,9 @@
 
 namespace App\Actions\Subscriptions;
 
+use App\Actions\Notifications\SendPlatformNoticeAction;
 use App\Enums\AuditAction;
+use App\Enums\PlatformNoticeType;
 use App\Enums\SubscriptionStatus;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
@@ -11,7 +13,10 @@ use Carbon\CarbonInterface;
 
 class BillSubscriptionAction
 {
-    public function __construct(private AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private AuditRecorder $auditRecorder,
+        private SendPlatformNoticeAction $sendNotice,
+    ) {}
 
     /**
      * Bring one subscription's billing up to date as of the given day.
@@ -82,7 +87,7 @@ class BillSubscriptionAction
 
         $invoice = $subscription->invoices()->create([
             'tenant_id' => $subscription->tenant_id,
-            'reference' => $this->nextReference($subscription->current_period_end_on),
+            'reference' => SubscriptionInvoice::nextReference($subscription->current_period_end_on),
             'period_start_on' => $periodStartOn,
             'period_end_on' => $subscription->current_period_end_on,
             'issued_on' => $today,
@@ -136,22 +141,10 @@ class BillSubscriptionAction
             subject: $subscription,
         );
 
+        $this->sendNotice->handle($subscription->tenant, PlatformNoticeType::SubscriptionPastDue, __('Your :plan subscription is past due. Pay the overdue invoice to keep the agency running.', [
+            'plan' => $subscription->plan_name,
+        ]), $subscription);
+
         return true;
-    }
-
-    /**
-     * Number invoices within the month their period ends in, e.g.
-     * PLAT-2026-11-0001 for a period ending in November 2026.
-     *
-     * Deleted invoices are counted too - they are only soft-deleted and keep
-     * their references - so the count only grows and a number is never
-     * reused. The unique reference column refuses any collision.
-     */
-    private function nextReference(CarbonInterface $periodEndOn): string
-    {
-        $prefix = 'PLAT-'.$periodEndOn->format('Y-m').'-';
-        $sequence = SubscriptionInvoice::query()->withTrashed()->where('reference', 'like', $prefix.'%')->count() + 1;
-
-        return $prefix.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
     }
 }

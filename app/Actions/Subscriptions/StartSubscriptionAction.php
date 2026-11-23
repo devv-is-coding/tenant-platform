@@ -32,9 +32,13 @@ class StartSubscriptionAction
      * rather than collide. Should a write still slip past the lock, the unique
      * key refuses it and the agency's plan is left exactly as it was.
      *
+     * The actor is whoever chose the plan: a super admin, or the agency's
+     * Admin buying it (TA-27); none when the billing run applies a change
+     * scheduled by someone since gone.
+     *
      * @param  array<string, mixed>  $input
      */
-    public function handle(User $actor, Tenant $tenant, array $input): Subscription
+    public function handle(?User $actor, Tenant $tenant, array $input): Subscription
     {
         $validated = Validator::make($input, $this->rules(), $this->messages())->validate();
 
@@ -70,7 +74,7 @@ class StartSubscriptionAction
                     'current_period_start_on' => $today,
                     'current_period_end_on' => $plan->interval->advance($today)->subDay(),
                     'next_billing_on' => $plan->interval->advance($today),
-                    'created_by' => $actor->id,
+                    'created_by' => $actor?->id,
                 ]);
             } catch (UniqueConstraintViolationException) {
                 throw ValidationException::withMessages([

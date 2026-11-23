@@ -2,6 +2,9 @@
 
 namespace Database\Factories;
 
+use App\Enums\BookingApprovalStatus;
+use App\Enums\BookingPaymentStatus;
+use App\Enums\FulfilmentStatus;
 use App\Enums\Role;
 use App\Models\Booking;
 use App\Models\User;
@@ -32,5 +35,48 @@ class BookingFactory extends Factory
             'subtotal_minor' => 49900,
             'total_minor' => 49900,
         ];
+    }
+
+    /**
+     * A booking the manager has approved.
+     */
+    public function approved(): static
+    {
+        return $this->state(fn (): array => [
+            'approval_status' => BookingApprovalStatus::Approved,
+            'approved_at' => now(),
+        ]);
+    }
+
+    /**
+     * A booking paid in full. Records no payment: pay through PaymentService
+     * for a ledger behind it.
+     */
+    public function paid(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'amount_paid_minor' => $attributes['total_minor'],
+            'payment_status' => BookingPaymentStatus::Paid,
+        ]);
+    }
+
+    /**
+     * A booking whose guest was served.
+     */
+    public function completed(): static
+    {
+        return $this->state(['fulfilment_status' => FulfilmentStatus::Completed]);
+    }
+
+    /**
+     * A booking that was cancelled after approval.
+     */
+    public function cancelled(): static
+    {
+        return $this->state(fn (): array => [
+            'approval_status' => BookingApprovalStatus::Cancelled,
+            'approved_at' => now(),
+            'cancelled_at' => now(),
+        ]);
     }
 }

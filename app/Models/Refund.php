@@ -120,15 +120,15 @@ class Refund extends Model
     }
 
     /**
-     * Scope the query to refunds still on their way: asked for, or approved
-     * and not yet processed. Their amounts are spoken for, so no new refund
-     * may count on them.
+     * Scope the query to refunds still on their way: asked for, approved and
+     * not yet processed, or failed at Stripe and so still owed. Their amounts
+     * are spoken for, so no new refund may count on them.
      *
      * @param  Builder<self>  $query
      */
     #[Scope]
     protected function outstanding(Builder $query): void
     {
-        $query->whereIn('status', [RefundStatus::Requested, RefundStatus::Approved]);
+        $query->whereIn('status', [RefundStatus::Requested, RefundStatus::Approved, RefundStatus::Failed]);
     }
 }

@@ -289,3 +289,133 @@ test('a refund of a card payment goes back through Stripe, processed once Stripe
     'still pending' => ['pending', RefundStatus::Approved, 0],
     'failed' => ['failed', RefundStatus::Failed, 0],
 ]);
+
+/**
+ * A ₱199.00 booking paid in full through Stripe, with its payment. Call
+ * inside the agency.
+ *
+ * @return array{0: Booking, 1: Payment}
+ */
+function bookingPaidByCard(): array
+{
+    $booking = Booking::factory()->create(['total' => Money::parse('199.00', 'PHP'), 'reference' => 'DGTE-2026-0002']);
+    $payment = Payment::factory()->viaStripe()->for($booking)->amount(Money::parse('199.00', 'PHP'))->create();
+    $booking->recomputeMoney();
+
+    return [$booking, $payment];
+}
+
+test('pressing Process again on a refund Stripe is still working on asks about it, never pays it out twice', function () {
+    $tenant = tenantOnDomain();
+    $manager = User::factory()->role(Role::Manager)->for($tenant)->create();
+    [$booking, $payment] = withinTenant($tenant, fn (): array => bookingPaidByCard());
+    $sent = fakeStripe([
+        'POST /v1/refunds' => ['id' => 're_1', 'object' => 'refund', 'status' => 'pending'],
+        'GET /v1/refunds/re_1' => ['id' => 're_1', 'object' => 'refund', 'status' => 'succeeded'],
+    ]);
+    $pending = refundInFull($tenant, $booking, '50.00', $manager, $payment);
+
+    $processed = withinTenant($tenant, fn (): Refund => app(RefundService::class)->process($pending));
+
+    expect($processed->status)->toBe(RefundStatus::Processed)
+        ->and(collect($sent->getArrayCopy())->pluck(0)->all())->toBe(['POST /v1/refunds', 'GET /v1/refunds/re_1'])
+        ->and(withinTenant($tenant, fn (): ?int => $booking->fresh()?->amount_refunded_minor))->toBe(5000);
+});
+
+test('a full refund Stripe fails stays owed, and a retry pays it out as a new Stripe refund', function () {
+    $tenant = tenantOnDomain();
+    $manager = User::factory()->role(Role::Manager)->for($tenant)->create();
+    [$booking, $payment] = withinTenant($tenant, fn (): array => bookingPaidByCard());
+    $attempt = 0;
+    $sent = fakeStripe(['POST /v1/refunds' => function () use (&$attempt): array {
+        $attempt++;
+
+        return $attempt === 1
+            ? ['id' => 're_1', 'object' => 'refund', 'status' => 'failed']
+            : ['id' => 're_2', 'object' => 'refund', 'status' => 'succeeded'];
+    }]);
+    $failed = refundInFull($tenant, $booking, '199.00', $manager, $payment);
+    $owed = withinTenant($tenant, fn (): int => app(RefundService::class)->refundableMinor($booking->fresh() ?? $booking));
+
+    $retried = withinTenant($tenant, fn (): Refund => app(RefundService::class)->process($failed));
+
+    expect([$failed->status, $failed->type, $owed])->toBe([RefundStatus::Failed, RefundType::Full, 0])
+        ->and([$retried->status, $retried->stripe_refund_id])->toBe([RefundStatus::Processed, 're_2'])
+        ->and(collect($sent->getArrayCopy())->pluck(3)->all())->toBe([
+            "refund:{$tenant->id}:{$failed->id}:first",
+            "refund:{$tenant->id}:{$failed->id}:re_1",
+        ])
+        ->and(withinTenant($tenant, fn (): array => [$booking->fresh()?->approval_status, $booking->fresh()?->amount_refunded_minor]))
+        ->toBe([BookingApprovalStatus::Cancelled, 19900]);
+});
+
+test('a refund Stripe cannot pay out can be recorded as handed back by hand', function () {
+    $tenant = tenantOnDomain();
+    $manager = User::factory()->role(Role::Manager)->for($tenant)->create();
+    [$booking, $payment] = withinTenant($tenant, fn (): array => bookingPaidByCard());
+    fakeStripe(['POST /v1/refunds' => ['id' => 're_1', 'object' => 'refund', 'status' => 'failed']]);
+    $failed = refundInFull($tenant, $booking, '50.00', $manager, $payment);
+
+    $handedBack = withinTenant($tenant, fn (): Refund => app(RefundService::class)->processByHand($failed));
+
+    expect($handedBack->status)->toBe(RefundStatus::Processed)
+        ->and(withinTenant($tenant, fn (): ?int => $booking->fresh()?->amount_refunded_minor))->toBe(5000);
+});
+
+test('approving one of two refunds still only asked for keeps the booking, as the other may be rejected', function () {
+    $tenant = tenantOnDomain();
+    $manager = User::factory()->role(Role::Manager)->for($tenant)->create();
+    $booking = withinTenant($tenant, fn (): Booking => Booking::factory()->create(['total' => Money::parse('100.00', 'PHP')]));
+    takeCash($tenant, $booking, '100.00', $manager);
+    [$first] = withinTenant($tenant, fn (): array => [
+        app(RefundService::class)->request($booking, Money::parse('50.00', 'PHP'), 'One night less.', $manager),
+        app(RefundService::class)->request($booking, Money::parse('50.00', 'PHP'), 'Another night less.', $manager),
+    ]);
+
+    $approved = withinTenant($tenant, fn (): Refund => app(RefundService::class)->approve($first, $manager));
+
+    expect($approved->type)->toBe(RefundType::Partial)
+        ->and(withinTenant($tenant, fn (): ?BookingApprovalStatus => $booking->fresh()?->approval_status))->toBe(BookingApprovalStatus::Pending);
+});
+
+test('a card refund on a payment Stripe holds no reference for is paid out by hand', function () {
+    $tenant = tenantOnDomain();
+    $manager = User::factory()->role(Role::Manager)->for($tenant)->create();
+    [$booking, $payment] = withinTenant($tenant, function (): array {
+        $booking = Booking::factory()->create(['total' => Money::parse('199.00', 'PHP')]);
+        $payment = Payment::factory()->for($booking)->amount(Money::parse('199.00', 'PHP'))->create(['method' => PaymentMethod::CreditCard]);
+        $booking->recomputeMoney();
+
+        return [$booking, $payment];
+    });
+    fakeStripe();
+
+    $refund = refundInFull($tenant, $booking, '50.00', $manager, $payment);
+
+    expect($refund->status)->toBe(RefundStatus::Processed)
+        ->and(withinTenant($tenant, fn (): ?int => $booking->fresh()?->amount_refunded_minor))->toBe(5000);
+});
+
+test('a refund Stripe fails after paying it out is owed again, and no longer counts on the booking or the payment', function () {
+    $tenant = tenantOnDomain();
+    $manager = User::factory()->role(Role::Manager)->for($tenant)->create();
+    [$booking, $payment] = withinTenant($tenant, fn (): array => bookingPaidByCard());
+    fakeStripe(['POST /v1/refunds' => ['id' => 're_1', 'object' => 'refund', 'status' => 'succeeded']]);
+    $processed = refundInFull($tenant, $booking, '50.00', $manager, $payment);
+
+    withinTenant($tenant, fn (): Refund => app(RefundService::class)->settle($processed, RefundStatus::Failed, 're_1'));
+
+    expect(withinTenant($tenant, fn (): array => [
+        $processed->fresh()?->status,
+        $booking->fresh()?->amount_refunded_minor,
+        $booking->fresh()?->payment_status,
+        $payment->fresh()?->status,
+        AuditEvent::query()->where('action', AuditAction::RefundFailed)->pluck('description')->all(),
+    ]))->toBe([
+        RefundStatus::Failed,
+        0,
+        BookingPaymentStatus::Paid,
+        PaymentRecordStatus::Succeeded,
+        ['₱50.00 refund on DGTE-2026-0002 failed at Stripe after it was paid out; it is owed again.'],
+    ]);
+});

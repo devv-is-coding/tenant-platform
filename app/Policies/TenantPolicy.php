@@ -130,6 +130,16 @@ class TenantPolicy
     }
 
     /**
+     * Determine whether the user can pay the agency's invoices and change its
+     * plan by card (TA-27): who sees the bill pays it. In any status, so a
+     * suspended or closed agency always has a way back onto a plan.
+     */
+    public function manageBilling(User $user, Tenant $tenant): bool
+    {
+        return $this->viewBilling($user, $tenant);
+    }
+
+    /**
      * Determine if the user is one of the agency's admins, managers or staff.
      */
     private function isStaffOf(User $user, Tenant $tenant): bool

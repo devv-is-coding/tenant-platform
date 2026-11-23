@@ -38,10 +38,13 @@ return [
         'secret' => env('STRIPE_WEBHOOK_SECRET'),
         'tolerance' => 300,
         'events' => [
+            'checkout.session.completed',
             'invoice.paid',
             'invoice.payment_failed',
             'refund.updated',
             'refund.failed',
+            'charge.refund.updated',
+            'payment_intent.succeeded',
         ],
     ],
 

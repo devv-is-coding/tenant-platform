@@ -4,7 +4,9 @@ namespace App\Models;
 
 use App\Enums\BillingInterval;
 use App\Enums\PlanTier;
+use App\Enums\SubscriptionInvoiceStatus;
 use App\Enums\SubscriptionStatus;
+use Carbon\CarbonInterface;
 use Database\Factories\SubscriptionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -37,6 +39,8 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property Carbon|null $cancelled_at
  * @property string|null $cancel_reason
  * @property Carbon|null $ends_on
+ * @property int|null $scheduled_plan_id
+ * @property int|null $scheduled_by
  * @property int|null $created_by
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -60,6 +64,8 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
     'cancelled_at',
     'cancel_reason',
     'ends_on',
+    'scheduled_plan_id',
+    'scheduled_by',
     'created_by',
 ])]
 class Subscription extends Model
@@ -91,6 +97,8 @@ class Subscription extends Model
             'trial_ends_on' => 'date',
             'cancelled_at' => 'datetime',
             'ends_on' => 'date',
+            'scheduled_plan_id' => 'integer',
+            'scheduled_by' => 'integer',
         ];
     }
 
@@ -112,5 +120,41 @@ class Subscription extends Model
     public function invoices(): HasMany
     {
         return $this->hasMany(SubscriptionInvoice::class);
+    }
+
+    /**
+     * Get the plan the agency moves to when the paid period ends, even one
+     * since withdrawn from the price list.
+     *
+     * @return BelongsTo<SubscriptionPlan, $this>
+     */
+    public function scheduledPlan(): BelongsTo
+    {
+        return $this->belongsTo(SubscriptionPlan::class, 'scheduled_plan_id')->withTrashed();
+    }
+
+    /**
+     * Get what the unused days of the current period are worth, from what
+     * was paid for it: the credit an upgrade today takes off the new plan's
+     * price. Today is unused, since the new plan starts today.
+     *
+     * Counted from money received, never from the price: an unpaid period
+     * gives no credit, and stays owed. Rounded down, to the minor unit.
+     */
+    public function unusedCreditMinor(CarbonInterface $today): int
+    {
+        $invoice = $this->invoices()
+            ->whereDate('period_start_on', $this->current_period_start_on)
+            ->where('status', '!=', SubscriptionInvoiceStatus::Void)
+            ->first();
+
+        if ($invoice === null || $today->gt($this->current_period_end_on)) {
+            return 0;
+        }
+
+        $periodDays = (int) $this->current_period_start_on->diffInDays($this->current_period_end_on) + 1;
+        $unusedDays = (int) $today->copy()->startOfDay()->diffInDays($this->current_period_end_on) + 1;
+
+        return intdiv(min($invoice->amount_paid_minor, $invoice->amount_minor) * min($unusedDays, $periodDays), $periodDays);
     }
 }

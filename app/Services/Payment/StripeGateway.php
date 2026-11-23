@@ -4,6 +4,7 @@ namespace App\Services\Payment;
 
 use App\Concerns\RecordsAuditEvents;
 use App\Enums\AuditAction;
+use App\Events\PaymentLinkGenerated;
 use App\Models\Booking;
 use App\Models\Payment;
 use App\Models\Refund;
@@ -51,6 +52,8 @@ class StripeGateway
      * An open invoice for the same balance is reused, so asking twice gives
      * the same page; one for an amount since changed (cash recorded meanwhile)
      * is voided and replaced, so the customer can never pay the old figure.
+     * Stripe's calls are keyed per booking and balance, so the same balance
+     * asked for twice is one invoice.
      *
      * @throws InvalidArgumentException when nothing is owed, or the booking no longer takes payments
      * @throws LogicException inside a database transaction
@@ -85,7 +88,6 @@ class StripeGateway
         }
 
         $metadata = ['tenant_id' => $this->tenantKey(), 'booking_reference' => $booking->reference];
-        // One key per booking and balance: the same balance asked for twice is one invoice.
         $key = "{$this->tenantKey()}:{$booking->reference}:{$booking->amount_paid_minor}";
 
         $customerId = $booking->stripe_customer_id ?? $stripe->customers->create([
@@ -127,6 +129,8 @@ class StripeGateway
             'reference' => $booking->reference,
         ]), context: ['stripe_invoice_id' => $finalized->id, 'amount_minor' => $balance->minor]);
 
+        PaymentLinkGenerated::dispatch($booking, $balance);
+
         return $url;
     }
 
@@ -155,8 +159,10 @@ class StripeGateway
     /**
      * Send an approved refund back through the card payment it reverses.
      *
-     * Keyed by the agency and the refund, so processing the same refund again
-     * gets Stripe's first answer back rather than a second refund.
+     * Keyed by the agency, the refund and its attempt: an attempt Stripe
+     * failed is retried under a new key, so the retry is a new refund rather
+     * than Stripe's cached failure. A refund Stripe is still working on is
+     * never sent again; RefundService asks about it (retrieveRefund()).
      *
      * @return array{id: string, status: string}
      *
@@ -181,7 +187,24 @@ class StripeGateway
                 'refund_id' => (string) $refund->id,
                 'payment_reference' => $payment->reference,
             ],
-        ], ['idempotency_key' => "refund:{$this->tenantKey()}:{$refund->id}"]);
+        ], ['idempotency_key' => "refund:{$this->tenantKey()}:{$refund->id}:".($refund->stripe_refund_id ?? 'first')]);
+
+        return ['id' => $stripeRefund->id, 'status' => (string) $stripeRefund->status];
+    }
+
+    /**
+     * Ask Stripe how a refund it is still working on stands.
+     *
+     * @return array{id: string, status: string}
+     *
+     * @throws LogicException inside a database transaction
+     * @throws ApiErrorException when Stripe refuses
+     */
+    public function retrieveRefund(string $stripeRefundId): array
+    {
+        $this->ensureNoOpenTransaction();
+
+        $stripeRefund = $this->stripe()->refunds->retrieve($stripeRefundId);
 
         return ['id' => $stripeRefund->id, 'status' => (string) $stripeRefund->status];
     }

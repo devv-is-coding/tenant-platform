@@ -38,6 +38,11 @@ use Stancl\Tenancy\Events;
  * @property string|null $status_reason
  * @property Carbon|null $status_changed_at
  * @property int|null $status_changed_by
+ * @property string|null $stripe_customer_id
+ * @property string|null $stripe_payment_method_id
+ * @property string|null $card_brand
+ * @property string|null $card_last4
+ * @property Carbon|null $auto_pay_since
  * @property Carbon|null $deleted_at
  * @property-read Subscription|null $latestSubscription
  * @property-read Subscription|null $liveSubscription
@@ -93,6 +98,11 @@ class Tenant extends BaseTenant implements TenantWithDatabase
             'status_reason',
             'status_changed_at',
             'status_changed_by',
+            'stripe_customer_id',
+            'stripe_payment_method_id',
+            'card_brand',
+            'card_last4',
+            'auto_pay_since',
             'created_at',
             'updated_at',
             'deleted_at',
@@ -109,7 +119,17 @@ class Tenant extends BaseTenant implements TenantWithDatabase
         return [
             'status' => TenantStatus::class,
             'status_changed_at' => 'datetime',
+            'auto_pay_since' => 'datetime',
         ];
+    }
+
+    /**
+     * Determine if the agency's invoices are charged to its saved card as
+     * they are issued (TA-33).
+     */
+    public function hasAutoPay(): bool
+    {
+        return $this->auto_pay_since !== null && $this->stripe_payment_method_id !== null;
     }
 
     /**

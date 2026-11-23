@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
@@ -70,6 +71,8 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, InventoryAllocation> $allocations
  * @property-read Collection<int, Payment> $payments
  * @property-read Collection<int, Refund> $refunds
+ * @property-read Collection<int, CheckIn> $checkIns
+ * @property-read Review|null $review
  * @property-read User|null $customer
  */
 #[Fillable([
@@ -178,6 +181,35 @@ class Booking extends Model
     public function refunds(): HasMany
     {
         return $this->hasMany(Refund::class)->orderBy('id');
+    }
+
+    /**
+     * Get the times the guest turned up: at the hotel, or at each tour stop.
+     *
+     * @return HasMany<CheckIn, $this>
+     */
+    public function checkIns(): HasMany
+    {
+        return $this->hasMany(CheckIn::class)->orderBy('checked_in_at');
+    }
+
+    /**
+     * Get the customer's review of the booking: at most one.
+     *
+     * @return HasOne<Review, $this>
+     */
+    public function review(): HasOne
+    {
+        return $this->hasOne(Review::class);
+    }
+
+    /**
+     * Determine if every unit of the total has been paid at some point.
+     * Money refunded later does not undo it.
+     */
+    public function isPaidInFull(): bool
+    {
+        return $this->amount_paid_minor >= $this->total_minor;
     }
 
     /**

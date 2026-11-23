@@ -3,17 +3,30 @@
 use App\Enums\AuditAction;
 use App\Enums\BookingPaymentStatus;
 use App\Enums\PaymentMethod;
+use App\Enums\PlanTier;
 use App\Enums\RefundStatus;
 use App\Enums\RefundType;
+use App\Enums\Role;
+use App\Enums\SubscriptionInvoiceStatus;
+use App\Enums\SubscriptionStatus;
 use App\Models\AuditEvent;
 use App\Models\Booking;
 use App\Models\Payment;
 use App\Models\Refund;
+use App\Models\Subscription;
+use App\Models\SubscriptionInvoice;
+use App\Models\SubscriptionPayment;
+use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
+use App\Models\User;
 use App\ValueObjects\Money;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
+use Stancl\Tenancy\Events\TenantCreated;
 
 use function Pest\Laravel\call;
+use function Pest\Laravel\travelTo;
 
 /**
  * Post the event to the webhook as Stripe would, signed with the secret.
@@ -160,4 +173,217 @@ test('the webhook is only on the platform\'s domain, not on an agency\'s', funct
     $tenant = tenantOnDomain();
 
     deliverStripeEvent(invoicePaidEvent($tenant, 'DUMA-2026-AAAAAA', 19900), host: "{$tenant->id}.localhost")->assertNotFound();
+});
+
+/**
+ * Stripe's checkout.session.completed event for an agency paying the platform.
+ *
+ * @param  array<string, string>  $metadata
+ * @return array<string, mixed>
+ */
+function platformCheckoutEvent(array $metadata, int $amountTotal, string $paymentStatus = 'paid'): array
+{
+    return [
+        'id' => 'evt_checkout_1',
+        'type' => 'checkout.session.completed',
+        'created' => 1796342400,
+        'data' => ['object' => [
+            'id' => 'cs_1',
+            'object' => 'checkout.session',
+            'amount_total' => $amountTotal,
+            'currency' => 'php',
+            'payment_status' => $paymentStatus,
+            'payment_intent' => 'pi_platform_1',
+            'metadata' => $metadata,
+        ]],
+    ];
+}
+
+/**
+ * The metadata of a Checkout session for moving the agency onto the plan.
+ *
+ * @return array<string, string>
+ */
+function planCheckoutMetadata(Tenant $tenant, SubscriptionPlan $plan, User $admin, int $amountMinor, int $creditMinor = 0): array
+{
+    return [
+        'purpose' => 'platform_plan',
+        'tenant_id' => $tenant->id,
+        'subscription_plan_id' => (string) $plan->id,
+        'amount_minor' => (string) $amountMinor,
+        'credit_minor' => (string) $creditMinor,
+        'admin_id' => (string) $admin->id,
+    ];
+}
+
+test('a paid plan checkout puts the agency on the plan, its first invoice issued with the credit and settled by the card', function () {
+    Event::fake([TenantCreated::class]);
+    travelTo('2026-11-21 10:00:00');
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->role(Role::Admin)->for($tenant)->create();
+    $basic = Subscription::factory()->for($tenant)->create();
+    $advanced = SubscriptionPlan::factory()->create(['tier' => PlanTier::Advanced, 'amount_minor' => 200000]);
+
+    deliverStripeEvent(platformCheckoutEvent(planCheckoutMetadata($tenant, $advanced, $admin, 166667, 33333), 166667))
+        ->assertOk()
+        ->assertJson(['status' => 'handled']);
+
+    $live = $tenant->liveSubscription()->sole();
+    $invoice = $live->invoices()->sole();
+    expect([$live->subscription_plan_id, $live->tier, $live->created_by])->toBe([$advanced->id, PlanTier::Advanced, $admin->id])
+        ->and($basic->fresh()?->status)->toBe(SubscriptionStatus::Cancelled)
+        ->and([$invoice->period_start_on->toDateString(), $invoice->amount_minor, $invoice->credit_minor, $invoice->amount_paid_minor, $invoice->status])
+        ->toBe(['2026-11-21', 166667, 33333, 166667, SubscriptionInvoiceStatus::Paid])
+        ->and($invoice->payments()->sole()->only(['amount_minor', 'method', 'idempotency_key', 'stripe_payment_intent_id']))
+        ->toBe(['amount_minor' => 166667, 'method' => PaymentMethod::Stripe, 'idempotency_key' => 'stripe:checkout:cs_1', 'stripe_payment_intent_id' => 'pi_platform_1']);
+});
+
+test('a checkout Stripe delivers twice puts the agency on the plan once, with one payment', function () {
+    Event::fake([TenantCreated::class]);
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->role(Role::Admin)->for($tenant)->create();
+    $plan = SubscriptionPlan::factory()->create(['tier' => PlanTier::Advanced, 'amount_minor' => 200000]);
+    $event = platformCheckoutEvent(planCheckoutMetadata($tenant, $plan, $admin, 200000), 200000);
+    deliverStripeEvent($event)->assertOk();
+
+    deliverStripeEvent($event)->assertOk()->assertJson(['status' => 'ignored']);
+
+    expect([Subscription::query()->where('tenant_id', $tenant->id)->count(), SubscriptionInvoice::count(), SubscriptionPayment::count()])->toBe([1, 1, 1]);
+});
+
+test('an unpaid checkout leaves the agency\'s plan as it was', function () {
+    Event::fake([TenantCreated::class]);
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->role(Role::Admin)->for($tenant)->create();
+    $plan = SubscriptionPlan::factory()->create(['tier' => PlanTier::Advanced]);
+
+    deliverStripeEvent(platformCheckoutEvent(planCheckoutMetadata($tenant, $plan, $admin, 200000), 200000, 'unpaid'))
+        ->assertOk()
+        ->assertJson(['status' => 'ignored']);
+
+    expect([Subscription::count(), SubscriptionPayment::count()])->toBe([0, 0]);
+});
+
+test('a checkout for a plan withdrawn after it was paid for changes nothing, and is logged for the super admin', function () {
+    Event::fake([TenantCreated::class]);
+    Log::spy();
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->role(Role::Admin)->for($tenant)->create();
+    $plan = SubscriptionPlan::factory()->create(['tier' => PlanTier::Advanced]);
+    $event = platformCheckoutEvent(planCheckoutMetadata($tenant, $plan, $admin, 200000), 200000);
+    $plan->delete();
+
+    deliverStripeEvent($event)->assertOk()->assertJson(['status' => 'ignored']);
+
+    expect([Subscription::count(), SubscriptionPayment::count()])->toBe([0, 0]);
+    Log::shouldHaveReceived('warning')->once();
+});
+
+test('a paid invoice checkout settles the invoice and brings a past-due subscription back', function () {
+    Event::fake([TenantCreated::class]);
+    $tenant = Tenant::factory()->create();
+    $subscription = Subscription::factory()->pastDue()->for($tenant)->create();
+    $invoice = SubscriptionInvoice::factory()->overdue()->for($subscription)->create(['amount_minor' => 100000]);
+
+    deliverStripeEvent(platformCheckoutEvent([
+        'purpose' => 'platform_invoice',
+        'tenant_id' => $tenant->id,
+        'subscription_invoice_id' => (string) $invoice->id,
+        'admin_id' => '0',
+    ], 100000))->assertOk()->assertJson(['status' => 'handled']);
+
+    expect([$invoice->fresh()?->status, $invoice->fresh()?->amount_paid_minor, $subscription->fresh()?->status])
+        ->toBe([SubscriptionInvoiceStatus::Paid, 100000, SubscriptionStatus::Active]);
+});
+
+/**
+ * A Stripe refund event about the agency's refund.
+ *
+ * @return array<string, mixed>
+ */
+function stripeRefundEvent(Tenant $tenant, Refund $refund, string $type, string $stripeRefundId, string $status): array
+{
+    return ['id' => 'evt_refund_1', 'type' => $type, 'data' => ['object' => [
+        'id' => $stripeRefundId, 'object' => 'refund', 'status' => $status, 'metadata' => ['tenant_id' => $tenant->id, 'refund_id' => (string) $refund->id],
+    ]]];
+}
+
+/**
+ * A ₱199.00 card booking with a ₱50.00 refund on it in the given state.
+ * Call inside the agency.
+ *
+ * @param  array<string, mixed>  $refund
+ * @return array{0: Booking, 1: Refund}
+ */
+function cardBookingWithRefund(array $refund): array
+{
+    $booking = Booking::factory()->create(['total' => Money::parse('199.00', 'PHP')]);
+    $payment = Payment::factory()->viaStripe()->for($booking)->amount(Money::parse('199.00', 'PHP'))->create();
+    $refund = Refund::factory()->for($booking)->for($payment)->create(['type' => RefundType::Partial, 'amount_minor' => 5000, ...$refund]);
+    $booking->recomputeMoney();
+
+    return [$booking, $refund];
+}
+
+test('a refund outcome Stripe reports as charge.refund.updated is settled too', function () {
+    $tenant = tenantOnDomain();
+    [$booking, $refund] = withinTenant($tenant, fn (): array => cardBookingWithRefund(['status' => RefundStatus::Approved, 'stripe_refund_id' => 're_1']));
+
+    deliverStripeEvent(stripeRefundEvent($tenant, $refund, 'charge.refund.updated', 're_1', 'succeeded'))
+        ->assertOk()
+        ->assertJson(['status' => 'handled']);
+
+    expect(withinTenant($tenant, fn (): array => [$refund->fresh()?->status, $booking->fresh()?->amount_refunded_minor]))
+        ->toBe([RefundStatus::Processed, 5000]);
+});
+
+test('a late failure of an earlier attempt does not undo the retry that paid the refund out', function () {
+    $tenant = tenantOnDomain();
+    [$booking, $refund] = withinTenant($tenant, fn (): array => cardBookingWithRefund([
+        'status' => RefundStatus::Processed, 'stripe_refund_id' => 're_2', 'processed_at' => now(),
+    ]));
+
+    deliverStripeEvent(stripeRefundEvent($tenant, $refund, 'refund.failed', 're_1', 'failed'))
+        ->assertOk()
+        ->assertJson(['status' => 'ignored']);
+
+    expect(withinTenant($tenant, fn (): array => [$refund->fresh()?->status, $booking->fresh()?->amount_refunded_minor]))
+        ->toBe([RefundStatus::Processed, 5000]);
+});
+
+test('a completed card setup saves the card, turns auto-pay on, and lets the old card go', function () {
+    Event::fake([TenantCreated::class]);
+    $tenant = Tenant::factory()->create();
+    $tenant->forceFill(['stripe_customer_id' => 'cus_1', 'stripe_payment_method_id' => 'pm_old'])->save();
+    $admin = User::factory()->role(Role::Admin)->for($tenant)->create();
+    $sent = fakeStripe([
+        'GET /v1/setup_intents/seti_1' => ['id' => 'seti_1', 'object' => 'setup_intent', 'payment_method' => [
+            'id' => 'pm_new', 'object' => 'payment_method', 'card' => ['brand' => 'visa', 'last4' => '4242'],
+        ]],
+        'POST /v1/payment_methods/pm_old/detach' => ['id' => 'pm_old', 'object' => 'payment_method'],
+    ]);
+
+    deliverStripeEvent(['id' => 'evt_card_1', 'type' => 'checkout.session.completed', 'data' => ['object' => [
+        'id' => 'cs_card_1', 'object' => 'checkout.session', 'mode' => 'setup', 'status' => 'complete', 'setup_intent' => 'seti_1',
+        'metadata' => ['purpose' => 'platform_card', 'tenant_id' => $tenant->id, 'admin_id' => (string) $admin->id],
+    ]]])->assertOk()->assertJson(['status' => 'handled']);
+
+    $tenant->refresh();
+    expect([$tenant->stripe_payment_method_id, $tenant->card_brand, $tenant->card_last4, $tenant->hasAutoPay()])->toBe(['pm_new', 'visa', '4242', true])
+        ->and(collect($sent->getArrayCopy())->pluck(0)->all())->toBe(['GET /v1/setup_intents/seti_1', 'POST /v1/payment_methods/pm_old/detach']);
+});
+
+test('an automatic charge Stripe confirms by webhook is recorded once, however often it arrives', function () {
+    Event::fake([TenantCreated::class]);
+    $tenant = Tenant::factory()->create();
+    $invoice = SubscriptionInvoice::factory()->for(Subscription::factory()->for($tenant))->create(['amount_minor' => 60000]);
+    $event = ['id' => 'evt_pi_1', 'type' => 'payment_intent.succeeded', 'data' => ['object' => [
+        'id' => 'pi_1', 'object' => 'payment_intent', 'amount_received' => 60000, 'currency' => 'php',
+        'metadata' => ['purpose' => 'platform_autopay', 'tenant_id' => $tenant->id, 'subscription_invoice_id' => (string) $invoice->id, 'attempt' => '1'],
+    ]]];
+    deliverStripeEvent($event)->assertOk()->assertJson(['status' => 'handled']);
+
+    deliverStripeEvent($event)->assertOk()->assertJson(['status' => 'ignored']);
+
+    expect([SubscriptionPayment::count(), $invoice->fresh()?->status])->toBe([1, SubscriptionInvoiceStatus::Paid]);
 });

@@ -2,7 +2,9 @@
 
 namespace App\Actions\Restore;
 
+use App\Actions\Notifications\SendPlatformNoticeAction;
 use App\Enums\AuditAction;
+use App\Enums\PlatformNoticeType;
 use App\Enums\RestoreRequestStatus;
 use App\Models\Domain;
 use App\Models\PlatformAuditEvent;
@@ -19,7 +21,10 @@ use Illuminate\Validation\ValidationException;
 
 class RestoreRecordAction
 {
-    public function __construct(private AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private AuditRecorder $auditRecorder,
+        private SendPlatformNoticeAction $sendNotice,
+    ) {}
 
     /**
      * Bring back one of an agency's deleted records - a user, subscription,
@@ -69,11 +74,18 @@ class RestoreRecordAction
                 context: array_filter(['restored' => $restored, 'restore_request_id' => $request?->id]),
             );
 
-            $request?->update([
-                'status' => RestoreRequestStatus::Restored,
-                'decided_by' => $actor->id,
-                'decided_at' => now(),
-            ]);
+            if ($request !== null) {
+                $request->update([
+                    'status' => RestoreRequestStatus::Restored,
+                    'decided_by' => $actor->id,
+                    'decided_at' => now(),
+                ]);
+
+                $this->sendNotice->handle($tenant, PlatformNoticeType::RestoreRequestGranted, __(':kind :record was restored, as you asked.', [
+                    'kind' => $this->kindFor($record),
+                    'record' => $this->labelFor($record),
+                ]), $request);
+            }
         });
     }
 

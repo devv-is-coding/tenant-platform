@@ -112,6 +112,17 @@ class Payment extends Model
     }
 
     /**
+     * Determine if Stripe knows the payment, by its PaymentIntent or charge,
+     * so it can reverse it. A card payment without either (one the legacy
+     * recorded, or whose invoice Stripe gave no PaymentIntent for) is
+     * refunded by hand instead.
+     */
+    public function hasStripeReference(): bool
+    {
+        return $this->stripe_payment_intent_id !== null || $this->stripe_charge_id !== null;
+    }
+
+    /**
      * Scope the query to payments that count toward the booking's paid amount.
      *
      * @param  Builder<self>  $query

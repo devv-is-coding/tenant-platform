@@ -13,6 +13,7 @@ use App\Models\PlanChangeRequest;
 use App\Models\PlanFeatureSetting;
 use App\Models\Refund;
 use App\Models\RestoreRequest;
+use App\Models\Review;
 use App\Models\Settings;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
@@ -112,6 +113,7 @@ class AppServiceProvider extends ServiceProvider
             'plan_feature' => PlanFeatureSetting::class,
             'refund' => Refund::class,
             'restore_request' => RestoreRequest::class,
+            'review' => Review::class,
             'settings' => Settings::class,
             'subscription' => Subscription::class,
             'subscription_invoice' => SubscriptionInvoice::class,

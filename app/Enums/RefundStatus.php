@@ -32,17 +32,6 @@ enum RefundStatus: int
     }
 
     /**
-     * Determine if the refund returns the booking's inventory to stock.
-     *
-     * Approval is what releases the slot; a rejected refund leaves both the
-     * money and the inventory untouched.
-     */
-    public function releasesInventory(): bool
-    {
-        return in_array($this, [self::Approved, self::Processed], true);
-    }
-
-    /**
      * Determine if the refund reduces the booking's refunded total.
      */
     public function countsAsRefunded(): bool

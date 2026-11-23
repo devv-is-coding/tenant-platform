@@ -6,6 +6,7 @@ use App\Enums\ItemStatus;
 use App\Enums\ItemType;
 use Database\Factories\ItemFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -38,12 +39,16 @@ use Illuminate\Support\Carbon;
  * @property int|null $approved_by
  * @property int|null $deleted_by
  * @property bool $is_active
+ * @property string|null $rating_avg
+ * @property int $reviews_count
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
  * @property-read TourProfile|null $tourProfile
  * @property-read VisaProfile|null $visaProfile
  * @property-read HotelProfile|null $hotelProfile
+ * @property-read Collection<int, Review> $reviews
+ * @property-read Collection<int, WishlistItem> $wishlistItems
  */
 #[Fillable([
     'item_type',
@@ -82,6 +87,8 @@ class Item extends Model
             'rejected_at' => 'datetime',
             'published_at' => 'datetime',
             'is_active' => 'boolean',
+            'rating_avg' => 'decimal:2',
+            'reviews_count' => 'integer',
         ];
     }
 
@@ -159,5 +166,43 @@ class Item extends Model
     public function featuredMedia(): HasOne
     {
         return $this->hasOne(Media::class, 'featured_for_item_id');
+    }
+
+    /**
+     * Get the item's reviews, hidden ones included, newest first.
+     *
+     * @return HasMany<Review, $this>
+     */
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(Review::class)->latest('id');
+    }
+
+    /**
+     * Get the customers' saves of the item.
+     *
+     * @return HasMany<WishlistItem, $this>
+     */
+    public function wishlistItems(): HasMany
+    {
+        return $this->hasMany(WishlistItem::class);
+    }
+
+    /**
+     * Recompute the rating from the approved reviews, then save it.
+     *
+     * Called inside the transaction that writes, hides, approves or deletes a
+     * review, with the item's row locked. Counted from source every time,
+     * never incremented, as a booking's money is.
+     */
+    public function recomputeRating(): void
+    {
+        $approved = Review::query()->whereBelongsTo($this)->approved();
+        $count = $approved->count();
+
+        $this->forceFill([
+            'rating_avg' => $count > 0 ? round((float) $approved->avg('rating'), 2) : null,
+            'reviews_count' => $count,
+        ])->save();
     }
 }

@@ -52,9 +52,20 @@ return new class extends Migration
             $table->date('issued_on');
             $table->date('due_on')->index();
 
+            // What is owed: the plan's price, less `credit_minor`.
             $table->unsignedBigInteger('amount_minor');
             $table->char('currency', 3);
             $table->unsignedBigInteger('amount_paid_minor')->default(0);
+
+            // The unused, already paid days of the plan an upgrade replaced,
+            // taken off this period's price (TA-27). Shown, never re-applied:
+            // `amount_minor` is already the reduced figure.
+            $table->unsignedBigInteger('credit_minor')->default(0);
+
+            // Auto-pay (TA-33): how often the saved card was charged for this
+            // invoice, and the day the one retry is due after a first failure.
+            $table->unsignedTinyInteger('auto_charge_attempts')->default(0);
+            $table->date('auto_charge_retry_on')->nullable();
 
             // Defaults to Open (1). Derived from the amounts, never assigned.
             $table->unsignedTinyInteger('status')->default(1);

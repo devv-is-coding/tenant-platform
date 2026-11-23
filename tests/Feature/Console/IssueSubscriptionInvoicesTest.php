@@ -1,14 +1,21 @@
 <?php
 
+use App\Actions\Subscriptions\SchedulePlanChangeAction;
 use App\Enums\AuditAction;
 use App\Enums\BillingInterval;
+use App\Enums\PlanTier;
+use App\Enums\PlatformNoticeType;
+use App\Enums\Role;
 use App\Enums\SubscriptionInvoiceStatus;
 use App\Enums\SubscriptionStatus;
 use App\Enums\TenantStatus;
 use App\Models\PlatformAuditEvent;
+use App\Models\PlatformNotice;
 use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
+use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Support\Facades\Event;
 use Stancl\Tenancy\Events\TenantCreated;
 
@@ -179,3 +186,42 @@ test('a subscription stays active while its invoices are paid or not yet due', f
     'paid, past its due date' => ['2026-10-25 06:00:00', fn (SubscriptionInvoice $invoice) => $invoice->update(['status' => SubscriptionInvoiceStatus::Paid, 'amount_paid_minor' => 250000])],
     'void, past its due date' => ['2026-10-25 06:00:00', fn (SubscriptionInvoice $invoice) => $invoice->update(['status' => SubscriptionInvoiceStatus::Void])],
 ]);
+
+test('a subscription marked past due tells the agency\'s admin, once', function () {
+    travelTo('2026-10-10 06:00:00');
+    $subscription = monthlySubscriptionFrom('2026-10-10', ['plan_name' => 'Agency Basic Monthly']);
+    artisan('subscriptions:issue-invoices')->assertSuccessful();
+    travelTo('2026-10-21 06:00:00');
+    artisan('subscriptions:issue-invoices')->assertSuccessful();
+
+    artisan('subscriptions:issue-invoices')->assertSuccessful();
+
+    expect(PlatformNotice::query()->get()->map(fn (PlatformNotice $notice): array => [
+        $notice->tenant_id, $notice->notice_type, $notice->message, $notice->subject_type, $notice->subject_id,
+    ])->all())->toBe([[
+        $subscription->tenant_id, PlatformNoticeType::SubscriptionPastDue, 'Your Agency Basic Monthly subscription is past due. Pay the overdue invoice to keep the agency running.', 'subscription', $subscription->id,
+    ]]);
+});
+
+test('a move down the admin scheduled takes effect the day the paid period ends, billed at the new price', function () {
+    travelTo('2026-10-10 06:00:00');
+    $subscription = monthlySubscriptionFrom('2026-10-10', ['tier' => PlanTier::Advanced]);
+    artisan('subscriptions:issue-invoices')->assertSuccessful();
+    $basic = SubscriptionPlan::factory()->create(['name' => 'Agency Basic Monthly', 'tier' => PlanTier::Basic, 'amount_minor' => 99900]);
+    $admin = User::factory()->role(Role::Admin)->for($subscription->tenant)->create();
+    app(SchedulePlanChangeAction::class)->schedule($admin, $subscription->tenant, $basic);
+    travelTo('2026-11-09 06:00:00');
+    artisan('subscriptions:issue-invoices')->assertSuccessful();
+    $stillAdvanced = $subscription->tenant->liveSubscription()->sole()->id;
+
+    travelTo('2026-11-10 06:00:00');
+    artisan('subscriptions:issue-invoices')->assertSuccessful();
+
+    $live = $subscription->tenant->liveSubscription()->sole();
+    expect($stillAdvanced)->toBe($subscription->id)
+        ->and([$live->subscription_plan_id, $live->tier, $live->starts_on->toDateString(), $live->created_by])
+        ->toBe([$basic->id, PlanTier::Basic, '2026-11-10', $admin->id])
+        ->and($subscription->fresh()?->status)->toBe(SubscriptionStatus::Cancelled)
+        ->and($live->invoices()->sole()->only(['amount_minor', 'period_start_on']))->toMatchArray(['amount_minor' => 99900])
+        ->and($subscription->invoices()->count())->toBe(1);
+});

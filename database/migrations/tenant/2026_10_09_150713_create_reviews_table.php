@@ -17,7 +17,8 @@ return new class extends Migration
      * `is_approved` defaults to true, faithful to the legacy, with moderation
      * available after the fact rather than before.
      *
-     * An item's rating is read from its approved reviews, which the
+     * An item's rating is kept on the item (`rating_avg`, `reviews_count`)
+     * and recomputed from its approved reviews on every change, which the
      * (item_id, is_approved, rating) index below serves.
      */
     public function up(): void
