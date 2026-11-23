@@ -131,5 +131,71 @@ test('coming back from Stripe says whether the payment went through', function (
     cardBillingPage($tenant, ['checkout' => $checkout])->assertSee($message);
 })->with([
     'paid' => ['paid', 'Payment received.'],
+    'card saved' => ['card', 'Card saved.'],
     'cancelled' => ['cancelled', 'Payment cancelled. Nothing was charged.'],
 ]);
+
+/**
+ * Give the agency a saved Visa ending 4242, with auto-pay on or off.
+ */
+function withSavedCard(Tenant $tenant, bool $autoPay): Tenant
+{
+    $tenant->forceFill([
+        'stripe_customer_id' => 'cus_1',
+        'stripe_payment_method_id' => 'pm_1',
+        'card_brand' => 'visa',
+        'card_last4' => '4242',
+        'auto_pay_since' => $autoPay ? now() : null,
+    ])->save();
+
+    return $tenant;
+}
+
+test('saving a card for auto-pay goes to Stripe, which charges nothing', function () {
+    $tenant = tenantOnDomain();
+    $sent = fakeStripe([
+        'POST /v1/customers' => ['id' => 'cus_platform', 'object' => 'customer'],
+        'POST /v1/checkout/sessions' => ['id' => 'cs_card', 'object' => 'checkout.session', 'url' => 'https://checkout.stripe.com/c/setup/cs_card'],
+    ]);
+
+    cardBillingPage($tenant)
+        ->assertSeeHtml('data-test="save-card-button"')
+        ->call('saveCard')
+        ->assertRedirect('https://checkout.stripe.com/c/setup/cs_card');
+
+    expect(collect($sent->getArrayCopy())->keyBy(0)['POST /v1/checkout/sessions'][2])
+        ->toMatchArray(['mode' => 'setup', 'customer' => 'cus_platform', 'payment_method_types' => ['card']]);
+});
+
+test('the admin turns auto-pay off, and back on, keeping the saved card', function () {
+    $tenant = withSavedCard(tenantOnDomain(), autoPay: true);
+    $page = cardBillingPage($tenant)->assertSee('Saved card: Visa ending 4242');
+
+    $page->call('turnOffAutoPay');
+    $off = $tenant->fresh()?->hasAutoPay();
+    $page->call('turnOnAutoPay');
+
+    expect([$off, $tenant->fresh()?->hasAutoPay(), $tenant->fresh()?->stripe_payment_method_id])->toBe([false, true, 'pm_1']);
+});
+
+test('removing the card turns auto-pay off and lets Stripe let it go', function () {
+    $tenant = withSavedCard(tenantOnDomain(), autoPay: true);
+    $sent = fakeStripe(['POST /v1/payment_methods/pm_1/detach' => ['id' => 'pm_1', 'object' => 'payment_method']]);
+
+    cardBillingPage($tenant)
+        ->call('removeCard')
+        ->assertSeeHtml('data-test="save-card-button"')
+        ->assertDontSee('Saved card:');
+
+    expect([$tenant->fresh()?->stripe_payment_method_id, $tenant->fresh()?->hasAutoPay(), $sent->count()])->toBe([null, false, 1]);
+});
+
+test('auto-pay cannot be turned on before a card is saved', function () {
+    $tenant = tenantOnDomain();
+
+    cardBillingPage($tenant)
+        ->call('turnOnAutoPay')
+        ->assertHasErrors(['auto_pay' => 'Save a card first. Auto-pay charges the saved card.']);
+
+    expect($tenant->fresh()?->auto_pay_since)->toBeNull();
+});

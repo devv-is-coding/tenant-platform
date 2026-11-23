@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Subscriptions\ManageAutoPayAction;
 use App\Actions\Subscriptions\RequestPlanChangeAction;
 use App\Actions\Subscriptions\SchedulePlanChangeAction;
 use App\Enums\PlanFeature;
@@ -35,6 +36,8 @@ use Stripe\Exception\ApiErrorException;
 | Checkout, less the unused days already paid, and starts once Stripe
 | confirms it (the webhook); any other move waits for the paid period's end
 | (SchedulePlanChangeAction). An open invoice is paid by card the same way.
+| With a card saved and auto-pay on, new invoices are charged to it the day
+| they are issued, one retry three days later (TA-33, ManageAutoPayAction).
 | Anything off the price list's terms is still asked for: a super admin
 | approves or declines (RequestPlanChangeAction). One request waits at a
 | time, and the Admin can withdraw it. The outcome of each shows here.
@@ -404,6 +407,64 @@ new #[Title('Plan & billing')] class extends Component {
     }
 
     /**
+     * Describe the agency's saved card, e.g. "Visa ending 4242", if it has one.
+     */
+    #[Computed]
+    public function savedCard(): ?string
+    {
+        return $this->agency->stripe_payment_method_id === null
+            ? null
+            : app(ManageAutoPayAction::class)->describeCard($this->agency->card_brand, $this->agency->card_last4);
+    }
+
+    /**
+     * Save a card for auto-pay on Stripe's page, or replace the saved one.
+     */
+    public function saveCard(PlatformCheckout $checkout): void
+    {
+        $this->authorize('manageBilling', $this->agency);
+
+        $this->redirectToStripe(fn (): string => $checkout->cardUrl($this->agency, Auth::user()));
+    }
+
+    /**
+     * Have new invoices charged to the saved card.
+     */
+    public function turnOnAutoPay(ManageAutoPayAction $manageAutoPay): void
+    {
+        $this->authorize('manageBilling', $this->agency);
+
+        $manageAutoPay->turnOn(Auth::user(), $this->agency);
+
+        Flux::toast(variant: 'success', text: __('Auto-pay is on: each new invoice is charged to :card the day it is issued.', ['card' => $this->savedCard]));
+    }
+
+    /**
+     * Stop charging the saved card; invoices are paid by hand again.
+     */
+    public function turnOffAutoPay(ManageAutoPayAction $manageAutoPay): void
+    {
+        $this->authorize('manageBilling', $this->agency);
+
+        $manageAutoPay->turnOff(Auth::user(), $this->agency);
+
+        Flux::toast(variant: 'success', text: __('Auto-pay is off. Pay new invoices from this page.'));
+    }
+
+    /**
+     * Forget the saved card, which turns auto-pay off.
+     */
+    public function removeCard(ManageAutoPayAction $manageAutoPay): void
+    {
+        $this->authorize('manageBilling', $this->agency);
+
+        $manageAutoPay->removeCard(Auth::user(), $this->agency);
+
+        unset($this->savedCard);
+        Flux::toast(variant: 'success', text: __('The card is removed, and auto-pay is off.'));
+    }
+
+    /**
      * Send the Admin to Stripe's payment page, or say Stripe could not open it.
      *
      * @param  \Closure(): string  $url
@@ -454,6 +515,14 @@ new #[Title('Plan & billing')] class extends Component {
     @if ($checkout === 'paid')
         <flux:callout variant="success" icon="check-circle" :heading="__('Payment received.')" data-test="checkout-paid">
             <flux:callout.text>{{ __('Your plan and invoices update here as soon as Stripe confirms it, usually within a minute.') }}</flux:callout.text>
+
+            <x-slot name="controls">
+                <flux:button size="sm" variant="ghost" icon="x-mark" wire:click="$set('checkout', '')" :aria-label="__('Dismiss')" />
+            </x-slot>
+        </flux:callout>
+    @elseif ($checkout === 'card')
+        <flux:callout variant="success" icon="credit-card" :heading="__('Card saved.')" data-test="checkout-card">
+            <flux:callout.text>{{ __('Auto-pay turns on as soon as Stripe confirms the card, usually within a minute.') }}</flux:callout.text>
 
             <x-slot name="controls">
                 <flux:button size="sm" variant="ghost" icon="x-mark" wire:click="$set('checkout', '')" :aria-label="__('Dismiss')" />
@@ -622,6 +691,43 @@ new #[Title('Plan & billing')] class extends Component {
             </flux:table>
         </section>
     @endif
+
+    {{-- Auto-pay: the saved card, and whether new invoices are charged to it --}}
+    <flux:card class="flex flex-col gap-4" data-test="auto-pay-card">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+                <flux:heading size="lg" level="2">{{ __('Auto-pay') }}</flux:heading>
+                <flux:text class="mt-1">{{ __('Each new invoice is charged to the saved card the day it is issued, tried once more three days later if that fails. You can always pay by hand.') }}</flux:text>
+            </div>
+
+            <flux:badge :color="$this->agency->hasAutoPay() ? 'green' : 'zinc'" size="sm" data-test="auto-pay-status">
+                {{ $this->agency->hasAutoPay() ? __('On') : __('Off') }}
+            </flux:badge>
+        </div>
+
+        @if ($this->savedCard)
+            <flux:text>{{ __('Saved card: :card', ['card' => $this->savedCard]) }}</flux:text>
+        @endif
+
+        <flux:error name="auto_pay" />
+
+        @can('manageBilling', $this->agency)
+            <div class="flex flex-wrap gap-2">
+                @if ($this->savedCard === null)
+                    <flux:button size="sm" variant="primary" icon="credit-card" wire:click="saveCard" data-test="save-card-button">{{ __('Save a card') }}</flux:button>
+                @else
+                    @if ($this->agency->hasAutoPay())
+                        <flux:button size="sm" wire:click="turnOffAutoPay" data-test="auto-pay-off-button">{{ __('Turn off auto-pay') }}</flux:button>
+                    @else
+                        <flux:button size="sm" variant="primary" wire:click="turnOnAutoPay" data-test="auto-pay-on-button">{{ __('Turn on auto-pay') }}</flux:button>
+                    @endif
+
+                    <flux:button size="sm" variant="ghost" icon="credit-card" wire:click="saveCard" data-test="replace-card-button">{{ __('Replace card') }}</flux:button>
+                    <flux:button size="sm" variant="ghost" wire:click="removeCard" data-test="remove-card-button">{{ __('Remove card') }}</flux:button>
+                @endif
+            </div>
+        @endcan
+    </flux:card>
 
     <section class="flex flex-col gap-4">
         <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">

@@ -32,6 +32,8 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property string $currency
  * @property int $amount_paid_minor
  * @property int $credit_minor
+ * @property int $auto_charge_attempts
+ * @property Carbon|null $auto_charge_retry_on
  * @property SubscriptionInvoiceStatus $status
  * @property Carbon|null $voided_at
  * @property string|null $void_reason
@@ -51,6 +53,8 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
     'currency',
     'amount_paid_minor',
     'credit_minor',
+    'auto_charge_attempts',
+    'auto_charge_retry_on',
     'status',
     'voided_at',
     'void_reason',
@@ -88,6 +92,8 @@ class SubscriptionInvoice extends Model
             'amount_minor' => 'integer',
             'amount_paid_minor' => 'integer',
             'credit_minor' => 'integer',
+            'auto_charge_attempts' => 'integer',
+            'auto_charge_retry_on' => 'date',
             'period_start_on' => 'date',
             'period_end_on' => 'date',
             'issued_on' => 'date',

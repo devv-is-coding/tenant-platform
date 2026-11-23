@@ -139,7 +139,7 @@ test('a refund goes back through the payment it reverses, keyed so a retry canno
 
     expect($answer)->toBe(['id' => 're_1', 'status' => 'succeeded'])
         ->and($sent[0][2])->toMatchArray(['payment_intent' => 'pi_1', 'amount' => 5000, 'metadata' => ['tenant_id' => $tenant->id, 'refund_id' => (string) $refund->id, 'payment_reference' => $payment->reference]])
-        ->and($sent[0][3])->toBe("refund:{$tenant->id}:{$refund->id}");
+        ->and($sent[0][3])->toBe("refund:{$tenant->id}:{$refund->id}:first");
 });
 
 test('a payment link tells the customer the balance it charges', function () {

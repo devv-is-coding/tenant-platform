@@ -46,6 +46,11 @@ class PlatformCheckout
     public const PURPOSE_INVOICE = 'platform_invoice';
 
     /**
+     * The metadata purpose of a card saved for auto-pay (TA-33).
+     */
+    public const PURPOSE_CARD = 'platform_card';
+
+    /**
      * Determine if moving the agency from its live plan to this one is a move
      * up, paid for and started at once.
      */
@@ -136,6 +141,35 @@ class PlatformCheckout
             'subscription_invoice_id' => (string) $invoice->id,
             'admin_id' => (string) $admin->id,
         ], "invoice:{$invoice->id}:{$invoice->amount_paid_minor}");
+    }
+
+    /**
+     * Get a Stripe Checkout page where the Admin saves a card for auto-pay
+     * (TA-33), charging nothing. The webhook keeps the card and turns
+     * auto-pay on (ManageAutoPayAction::saveCard()). Keyed per agency and
+     * minute, so a double click is one page.
+     *
+     * @throws LogicException inside a database transaction
+     * @throws ApiErrorException when Stripe refuses
+     */
+    public function cardUrl(Tenant $tenant, User $admin): string
+    {
+        $this->ensureNoOpenTransaction();
+
+        $metadata = ['purpose' => self::PURPOSE_CARD, 'tenant_id' => $tenant->id, 'admin_id' => (string) $admin->id];
+
+        $session = $this->stripe()->checkout->sessions->create([
+            'mode' => 'setup',
+            'customer' => $this->customerFor($tenant, $admin),
+            'client_reference_id' => $tenant->id,
+            'payment_method_types' => ['card'],
+            'metadata' => $metadata,
+            'setup_intent_data' => ['metadata' => $metadata],
+            'success_url' => route('tenant.billing', ['checkout' => 'card']),
+            'cancel_url' => route('tenant.billing', ['checkout' => 'cancelled']),
+        ], ['idempotency_key' => "checkout:card:{$tenant->id}:".now()->format('YmdHi')]);
+
+        return $session->url ?? throw new LogicException("Stripe returned no page for checkout session {$session->id}.");
     }
 
     /**

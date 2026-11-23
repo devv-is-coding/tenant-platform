@@ -49,6 +49,11 @@ enum AuditAction: string
     case SubscriptionPlanChanged = 'subscription.plan_changed';
     case SubscriptionChangeScheduled = 'subscription.change_scheduled';
     case SubscriptionChangeUnscheduled = 'subscription.change_unscheduled';
+    case SubscriptionCardSaved = 'subscription.card_saved';
+    case SubscriptionCardRemoved = 'subscription.card_removed';
+    case SubscriptionAutoPayOn = 'subscription.auto_pay_on';
+    case SubscriptionAutoPayOff = 'subscription.auto_pay_off';
+    case SubscriptionAutoPayFailed = 'subscription.auto_pay_failed';
     case SubscriptionCancelled = 'subscription.cancelled';
     case SubscriptionDeleted = 'subscription.deleted';
     case SubscriptionRestored = 'subscription.restored';
@@ -115,6 +120,7 @@ enum AuditAction: string
     case RefundApproved = 'refund.approved';
     case RefundRejected = 'refund.rejected';
     case RefundProcessed = 'refund.processed';
+    case RefundFailed = 'refund.failed';
 
     case ReviewCreated = 'review.created';
     case ReviewApproved = 'review.approved';

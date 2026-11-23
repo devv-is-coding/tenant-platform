@@ -33,10 +33,18 @@ use Stripe\Exception\ApiErrorException;
  * refunds asked for at once cannot together exceed what was paid.
  *
  * **A full refund ends the booking.** Approving one that returns everything
- * still paid cancels the booking and hard-deletes its held units, free to
- * sell again at once (a soft-deleted unit would still hold its slot). A
- * partial refund (a goodwill credit, a dropped extra) leaves the booking and
- * its units as they are. A rejected refund changes nothing but itself.
+ * still paid, after the other *approved* refunds (a mere request may still
+ * be rejected, so it never makes another refund full), cancels the booking
+ * and hard-deletes its held units, free to sell again at once (a soft-deleted
+ * unit would still hold its slot). A partial refund (a goodwill credit, a
+ * dropped extra) leaves the booking and its units as they are. A rejected
+ * refund changes nothing but itself.
+ *
+ * **Every approved refund is paid out in the end.** Stripe can fail one, at
+ * once or days after it succeeded: it is then Failed, still owed and still
+ * counted against what can be refunded, and can be processed again through
+ * Stripe or paid out by hand. A refund Stripe is still working on is asked
+ * about, never created a second time.
  *
  * Who may decide is for the manager's page and its policy (TM-3); this
  * service keeps the money true whoever calls it.
@@ -90,6 +98,9 @@ class RefundService
      * Approve a requested refund, for what was asked or less. A full refund
      * (everything still paid) cancels the booking and frees its units.
      *
+     * The ledger may have moved since the request, so the amount is checked
+     * against it as it is now.
+     *
      * @throws ValidationException for a refund no longer awaiting a decision, or an amount it cannot take
      */
     public function approve(Refund $refund, User $decidedBy, ?Money $amount = null): Refund
@@ -107,7 +118,6 @@ class RefundService
                 ]);
             }
 
-            // The ledger may have moved since the request: check it as it is now.
             $refundable = $this->refundableMinor($booking, except: $locked);
 
             if ($approved->minor > $refundable) {
@@ -177,26 +187,35 @@ class RefundService
     }
 
     /**
-     * Pay an approved refund out. Cash (or no named payment) is handed back
-     * by hand and recorded here; a card payment goes back through Stripe, and
-     * is processed once Stripe says it succeeded, now or by webhook later.
+     * Pay an approved refund out, or try again one Stripe failed. Cash (or no
+     * named payment, or a card payment with no Stripe reference to reverse) is
+     * handed back by hand and recorded here; a Stripe payment goes back
+     * through Stripe, and is processed once Stripe says it succeeded, now or
+     * by webhook later.
      *
-     * Stripe is called with no transaction open, then the outcome is written
-     * under the locks; a refund settled meanwhile is left as it is.
+     * An approved refund Stripe is already working on (it answered `pending`)
+     * is asked about rather than created again, so pressing Process twice can
+     * never pay it out twice. Stripe is called with no transaction open, then
+     * the outcome is written under the locks.
      *
-     * @throws ValidationException for a refund that is not approved
+     * @throws ValidationException for a refund that is neither approved nor failed
      * @throws ApiErrorException when Stripe refuses
      */
     public function process(Refund $refund): Refund
     {
-        $this->ensureStatus($refund, RefundStatus::Approved);
+        if ($refund->status !== RefundStatus::Failed) {
+            $this->ensureStatus($refund, RefundStatus::Approved);
+        }
+
         $payment = $refund->payment;
 
-        if ($payment === null || ! $payment->isGatewaySettled()) {
+        if ($payment === null || ! $payment->isGatewaySettled() || ! $payment->hasStripeReference()) {
             return $this->settle($refund, RefundStatus::Processed);
         }
 
-        $stripeRefund = $this->gateway->refund($refund, $payment);
+        $stripeRefund = $refund->status === RefundStatus::Approved && $refund->stripe_refund_id !== null
+            ? $this->gateway->retrieveRefund($refund->stripe_refund_id)
+            : $this->gateway->refund($refund, $payment);
 
         return $this->settle($refund, match ($stripeRefund['status']) {
             'succeeded' => RefundStatus::Processed,
@@ -206,17 +225,43 @@ class RefundService
     }
 
     /**
+     * Record an approved or failed refund as handed back another way (cash, a
+     * bank transfer), for one Stripe cannot pay out, such as to a closed card.
+     *
+     * @throws ValidationException for a refund that is neither approved nor failed
+     */
+    public function processByHand(Refund $refund): Refund
+    {
+        if ($refund->status !== RefundStatus::Failed) {
+            $this->ensureStatus($refund, RefundStatus::Approved);
+        }
+
+        return $this->settle($refund, RefundStatus::Processed);
+    }
+
+    /**
      * Write a refund's outcome: Processed counts its money as returned (and
      * marks the payment it reverses), Failed leaves the money where it was,
-     * Approved means Stripe is still working on it. Only an approved refund
-     * moves; a second delivery of the same outcome changes nothing.
+     * still owed, Approved means Stripe is still working on it. An approved
+     * or failed refund moves; a processed one moves only back to Failed, when
+     * Stripe fails it after all, and its money then counts as not returned.
+     * A second delivery of the same outcome changes nothing.
      */
     public function settle(Refund $refund, RefundStatus $outcome, ?string $stripeRefundId = null): Refund
     {
         return DB::transaction(function () use ($refund, $outcome, $stripeRefundId): Refund {
             [$booking, $locked] = $this->lockBoth($refund);
 
-            if ($locked->status !== RefundStatus::Approved) {
+            if ($locked->status === RefundStatus::Processed && $outcome === RefundStatus::Failed) {
+                return $this->reverse($booking, $locked);
+            }
+
+            if (! in_array($locked->status, [RefundStatus::Approved, RefundStatus::Failed], true)) {
+                return $locked;
+            }
+
+            // Still the same outcome of the same Stripe refund: a replay.
+            if ($locked->status === $outcome && ($stripeRefundId === null || $stripeRefundId === $locked->stripe_refund_id)) {
                 return $locked;
             }
 
@@ -225,6 +270,13 @@ class RefundService
                 'stripe_refund_id' => $stripeRefundId ?? $locked->stripe_refund_id,
                 'processed_at' => $outcome === RefundStatus::Processed ? now() : null,
             ])->save();
+
+            if ($outcome === RefundStatus::Failed) {
+                $this->recordAuditEvent(AuditAction::RefundFailed, $booking, __(':amount refund on :reference failed at Stripe; it is still owed.', [
+                    'amount' => $locked->amount->format(),
+                    'reference' => $booking->reference,
+                ]), context: ['refund_id' => $locked->id, 'stripe_refund_id' => $locked->stripe_refund_id]);
+            }
 
             if ($outcome !== RefundStatus::Processed) {
                 return $locked;
@@ -254,11 +306,13 @@ class RefundService
      */
     public function refundableMinor(Booking $booking, ?Refund $except = null): int
     {
-        $spokenFor = (int) $booking->refunds()->outstanding()
-            ->when($except !== null, fn ($query) => $query->whereKeyNot($except?->id))
-            ->sum('amount_minor');
+        $spokenFor = $booking->refunds()->outstanding();
 
-        return max(0, $booking->amount_paid_minor - $booking->amount_refunded_minor - $spokenFor);
+        if ($except !== null) {
+            $spokenFor->whereKeyNot($except->id);
+        }
+
+        return max(0, $booking->amount_paid_minor - $booking->amount_refunded_minor - (int) $spokenFor->sum('amount_minor'));
     }
 
     /**
@@ -278,7 +332,8 @@ class RefundService
 
     /**
      * Mark the payment a processed refund reverses: Refunded once all of it
-     * has gone back, PartiallyRefunded before. It still counts as paid; the
+     * has gone back, PartiallyRefunded before, and Succeeded again should a
+     * reversed refund leave nothing gone back. It still counts as paid; the
      * refund is what is subtracted.
      */
     private function markPaymentRefunded(?Payment $payment): void
@@ -290,20 +345,63 @@ class RefundService
         $refundedMinor = (int) $payment->refunds()->countingAsRefunded()->sum('amount_minor');
 
         $payment->forceFill([
-            'status' => $refundedMinor >= $payment->amount_minor ? PaymentRecordStatus::Refunded : PaymentRecordStatus::PartiallyRefunded,
+            'status' => match (true) {
+                $refundedMinor <= 0 => PaymentRecordStatus::Succeeded,
+                $refundedMinor >= $payment->amount_minor => PaymentRecordStatus::Refunded,
+                default => PaymentRecordStatus::PartiallyRefunded,
+            },
         ])->save();
     }
 
     /**
-     * Full when the amount is everything still refundable, so nothing paid
-     * would be left with the agency; partial otherwise.
+     * Full when the amount is everything paid that is not already returned or
+     * promised back by another approved (or failed, so still owed) refund, so
+     * nothing paid would be left with the agency; partial otherwise. Other
+     * requests are not counted: one may still be rejected.
      */
     private function typeFor(Booking $booking, int $amountMinor, ?Refund $except = null): RefundType
     {
-        return $amountMinor >= $this->refundableMinor($booking, $except) ? RefundType::Full : RefundType::Partial;
+        $committed = $booking->refunds()->whereIn('status', [RefundStatus::Approved, RefundStatus::Failed]);
+
+        if ($except !== null) {
+            $committed->whereKeyNot($except->id);
+        }
+
+        $leftMinor = max(0, $booking->amount_paid_minor - $booking->amount_refunded_minor - (int) $committed->sum('amount_minor'));
+
+        return $amountMinor >= $leftMinor ? RefundType::Full : RefundType::Partial;
     }
 
     /**
+     * Undo a processed refund Stripe failed after all: it is Failed, still
+     * owed, and its money counts as not returned, on the booking and on the
+     * payment it was to reverse.
+     */
+    private function reverse(Booking $booking, Refund $refund): Refund
+    {
+        $refund->forceFill(['status' => RefundStatus::Failed, 'processed_at' => null])->save();
+
+        $before = ['amount_refunded_minor' => $booking->amount_refunded_minor, 'payment_status' => $booking->payment_status->value];
+        $booking->recomputeMoney();
+        $this->markPaymentRefunded($refund->payment);
+
+        $this->recordAuditEvent(AuditAction::RefundFailed, $booking, __(':amount refund on :reference failed at Stripe after it was paid out; it is owed again.', [
+            'amount' => $refund->amount->format(),
+            'reference' => $booking->reference,
+        ]), [
+            'amount_refunded_minor' => ['old' => $before['amount_refunded_minor'], 'new' => $booking->amount_refunded_minor],
+            'payment_status' => ['old' => $before['payment_status'], 'new' => $booking->payment_status->value],
+        ], ['refund_id' => $refund->id, 'stripe_refund_id' => $refund->stripe_refund_id]);
+
+        return $refund;
+    }
+
+    /**
+     * Refuse an amount beyond what the booking can still refund, or, for a
+     * named payment, beyond what is left of that payment once what has gone
+     * back from it, or is on its way (asked for, approved, or failed and still
+     * owed), is taken off.
+     *
      * @throws ValidationException
      */
     private function ensureRefundable(Booking $booking, int $amountMinor, ?Payment $payment): void
@@ -326,9 +424,8 @@ class RefundService
             throw ValidationException::withMessages(['payment' => __('That payment was not received for :reference.', ['reference' => $booking->reference])]);
         }
 
-        // What has gone back from this payment, or is on its way.
         $leftOnPayment = $payment->amount_minor - (int) $payment->refunds()
-            ->whereIn('status', [RefundStatus::Requested, RefundStatus::Approved, RefundStatus::Processed])
+            ->whereIn('status', [RefundStatus::Requested, RefundStatus::Approved, RefundStatus::Failed, RefundStatus::Processed])
             ->sum('amount_minor');
 
         if ($amountMinor > $leftOnPayment) {

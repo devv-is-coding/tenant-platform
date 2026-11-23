@@ -34,6 +34,15 @@ class CreateTenantsTable extends Migration
             // first card payment.
             $table->string('stripe_customer_id')->nullable();
 
+            // The card the agency's Admin saved for auto-pay (TA-33): Stripe's
+            // id to charge it by, and only what the billing page shows of it.
+            // `auto_pay_since` is when auto-pay was turned on, NULL while off:
+            // only invoices issued from then on are charged automatically.
+            $table->string('stripe_payment_method_id')->nullable();
+            $table->string('card_brand', 32)->nullable();
+            $table->char('card_last4', 4)->nullable();
+            $table->timestamp('auto_pay_since')->nullable();
+
             $table->timestamps();
             $table->softDeletes();
             $table->json('data')->nullable();

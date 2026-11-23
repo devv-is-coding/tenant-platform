@@ -13,6 +13,7 @@ enum PlatformNoticeType: int
     case PlanChangeApproved = 3;
     case PlanChangeDeclined = 4;
     case SubscriptionPastDue = 5;
+    case AutoPayFailed = 6;
 
     /**
      * Get the human-readable label for the type, used as the notice's title.
@@ -25,6 +26,7 @@ enum PlatformNoticeType: int
             self::PlanChangeApproved => __('Plan change approved'),
             self::PlanChangeDeclined => __('Plan change declined'),
             self::SubscriptionPastDue => __('Subscription past due'),
+            self::AutoPayFailed => __('Automatic payment failed'),
         };
     }
 }

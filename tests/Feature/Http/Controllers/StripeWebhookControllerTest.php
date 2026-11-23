@@ -295,3 +295,95 @@ test('a paid invoice checkout settles the invoice and brings a past-due subscrip
     expect([$invoice->fresh()?->status, $invoice->fresh()?->amount_paid_minor, $subscription->fresh()?->status])
         ->toBe([SubscriptionInvoiceStatus::Paid, 100000, SubscriptionStatus::Active]);
 });
+
+/**
+ * A Stripe refund event about the agency's refund.
+ *
+ * @return array<string, mixed>
+ */
+function stripeRefundEvent(Tenant $tenant, Refund $refund, string $type, string $stripeRefundId, string $status): array
+{
+    return ['id' => 'evt_refund_1', 'type' => $type, 'data' => ['object' => [
+        'id' => $stripeRefundId, 'object' => 'refund', 'status' => $status, 'metadata' => ['tenant_id' => $tenant->id, 'refund_id' => (string) $refund->id],
+    ]]];
+}
+
+/**
+ * A ₱199.00 card booking with a ₱50.00 refund on it in the given state.
+ * Call inside the agency.
+ *
+ * @param  array<string, mixed>  $refund
+ * @return array{0: Booking, 1: Refund}
+ */
+function cardBookingWithRefund(array $refund): array
+{
+    $booking = Booking::factory()->create(['total' => Money::parse('199.00', 'PHP')]);
+    $payment = Payment::factory()->viaStripe()->for($booking)->amount(Money::parse('199.00', 'PHP'))->create();
+    $refund = Refund::factory()->for($booking)->for($payment)->create(['type' => RefundType::Partial, 'amount_minor' => 5000, ...$refund]);
+    $booking->recomputeMoney();
+
+    return [$booking, $refund];
+}
+
+test('a refund outcome Stripe reports as charge.refund.updated is settled too', function () {
+    $tenant = tenantOnDomain();
+    [$booking, $refund] = withinTenant($tenant, fn (): array => cardBookingWithRefund(['status' => RefundStatus::Approved, 'stripe_refund_id' => 're_1']));
+
+    deliverStripeEvent(stripeRefundEvent($tenant, $refund, 'charge.refund.updated', 're_1', 'succeeded'))
+        ->assertOk()
+        ->assertJson(['status' => 'handled']);
+
+    expect(withinTenant($tenant, fn (): array => [$refund->fresh()?->status, $booking->fresh()?->amount_refunded_minor]))
+        ->toBe([RefundStatus::Processed, 5000]);
+});
+
+test('a late failure of an earlier attempt does not undo the retry that paid the refund out', function () {
+    $tenant = tenantOnDomain();
+    [$booking, $refund] = withinTenant($tenant, fn (): array => cardBookingWithRefund([
+        'status' => RefundStatus::Processed, 'stripe_refund_id' => 're_2', 'processed_at' => now(),
+    ]));
+
+    deliverStripeEvent(stripeRefundEvent($tenant, $refund, 'refund.failed', 're_1', 'failed'))
+        ->assertOk()
+        ->assertJson(['status' => 'ignored']);
+
+    expect(withinTenant($tenant, fn (): array => [$refund->fresh()?->status, $booking->fresh()?->amount_refunded_minor]))
+        ->toBe([RefundStatus::Processed, 5000]);
+});
+
+test('a completed card setup saves the card, turns auto-pay on, and lets the old card go', function () {
+    Event::fake([TenantCreated::class]);
+    $tenant = Tenant::factory()->create();
+    $tenant->forceFill(['stripe_customer_id' => 'cus_1', 'stripe_payment_method_id' => 'pm_old'])->save();
+    $admin = User::factory()->role(Role::Admin)->for($tenant)->create();
+    $sent = fakeStripe([
+        'GET /v1/setup_intents/seti_1' => ['id' => 'seti_1', 'object' => 'setup_intent', 'payment_method' => [
+            'id' => 'pm_new', 'object' => 'payment_method', 'card' => ['brand' => 'visa', 'last4' => '4242'],
+        ]],
+        'POST /v1/payment_methods/pm_old/detach' => ['id' => 'pm_old', 'object' => 'payment_method'],
+    ]);
+
+    deliverStripeEvent(['id' => 'evt_card_1', 'type' => 'checkout.session.completed', 'data' => ['object' => [
+        'id' => 'cs_card_1', 'object' => 'checkout.session', 'mode' => 'setup', 'status' => 'complete', 'setup_intent' => 'seti_1',
+        'metadata' => ['purpose' => 'platform_card', 'tenant_id' => $tenant->id, 'admin_id' => (string) $admin->id],
+    ]]])->assertOk()->assertJson(['status' => 'handled']);
+
+    $tenant->refresh();
+    expect([$tenant->stripe_payment_method_id, $tenant->card_brand, $tenant->card_last4, $tenant->hasAutoPay()])->toBe(['pm_new', 'visa', '4242', true])
+        ->and(collect($sent->getArrayCopy())->pluck(0)->all())->toBe(['GET /v1/setup_intents/seti_1', 'POST /v1/payment_methods/pm_old/detach']);
+});
+
+test('an automatic charge Stripe confirms by webhook is recorded once, however often it arrives', function () {
+    Event::fake([TenantCreated::class]);
+    $tenant = Tenant::factory()->create();
+    $invoice = SubscriptionInvoice::factory()->for(Subscription::factory()->for($tenant))->create(['amount_minor' => 60000]);
+    $event = ['id' => 'evt_pi_1', 'type' => 'payment_intent.succeeded', 'data' => ['object' => [
+        'id' => 'pi_1', 'object' => 'payment_intent', 'amount_received' => 60000, 'currency' => 'php',
+        'metadata' => ['purpose' => 'platform_autopay', 'tenant_id' => $tenant->id, 'subscription_invoice_id' => (string) $invoice->id, 'attempt' => '1'],
+    ]]];
+    deliverStripeEvent($event)->assertOk()->assertJson(['status' => 'handled']);
+
+    deliverStripeEvent($event)->assertOk()->assertJson(['status' => 'ignored']);
+
+    expect([SubscriptionPayment::count(), $invoice->fresh()?->status])->toBe([1, SubscriptionInvoiceStatus::Paid]);
+});

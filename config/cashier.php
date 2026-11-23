@@ -43,6 +43,8 @@ return [
             'invoice.payment_failed',
             'refund.updated',
             'refund.failed',
+            'charge.refund.updated',
+            'payment_intent.succeeded',
         ],
     ],
 

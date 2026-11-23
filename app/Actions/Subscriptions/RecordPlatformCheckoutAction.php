@@ -3,9 +3,6 @@
 namespace App\Actions\Subscriptions;
 
 use App\Enums\AuditAction;
-use App\Enums\PaymentMethod;
-use App\Enums\PaymentRecordStatus;
-use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPayment;
 use App\Models\SubscriptionPlan;
@@ -22,7 +19,7 @@ class RecordPlatformCheckoutAction
     public function __construct(
         private AuditRecorder $auditRecorder,
         private StartSubscriptionAction $startSubscription,
-        private ClearPastDueAction $clearPastDue,
+        private RecordStripeSubscriptionPaymentAction $recordPayment,
     ) {}
 
     /**
@@ -123,7 +120,7 @@ class RecordPlatformCheckoutAction
                 context: ['credit_minor' => $creditMinor],
             );
 
-            $this->recordPayment($tenant, $invoice, $paid, $key, $paymentIntentId);
+            $this->recordPayment->handle($invoice, $paid, $key, $paymentIntentId);
 
             return true;
         });
@@ -139,54 +136,6 @@ class RecordPlatformCheckoutAction
         $invoiceId = is_numeric($metadata['subscription_invoice_id'] ?? null) ? (int) $metadata['subscription_invoice_id'] : null;
         $invoice = $invoiceId === null ? null : SubscriptionInvoice::query()->whereKey($invoiceId)->where('tenant_id', $tenant->id)->first();
 
-        if ($invoice === null) {
-            return false;
-        }
-
-        return $invoice->getConnection()->transaction(function () use ($tenant, $invoice, $paid, $key, $paymentIntentId): bool {
-            // Subscription first, then invoice, as billing locks them.
-            $subscription = Subscription::query()->whereKey($invoice->subscription_id)->lockForUpdate()->firstOrFail();
-            $locked = SubscriptionInvoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
-
-            $this->recordPayment($tenant, $locked, $paid, $key, $paymentIntentId);
-            $this->clearPastDue->handle(null, $subscription);
-
-            return true;
-        });
-    }
-
-    /**
-     * Write the payment, then recompute the invoice from its payments. The
-     * money is recorded as it came in, even should it now pay more than is
-     * owed: Stripe has taken it.
-     */
-    private function recordPayment(Tenant $tenant, SubscriptionInvoice $invoice, Money $paid, string $key, ?string $paymentIntentId): void
-    {
-        $payment = $invoice->payments()->create([
-            'tenant_id' => $tenant->id,
-            'reference' => SubscriptionPayment::nextReferenceFor($invoice),
-            'amount_minor' => $paid->minor,
-            'currency' => $paid->currency,
-            'method' => PaymentMethod::Stripe,
-            'status' => PaymentRecordStatus::Succeeded,
-            'paid_at' => now(),
-            'idempotency_key' => $key,
-            'stripe_payment_intent_id' => $paymentIntentId,
-        ]);
-
-        $before = ['amount_paid_minor' => $invoice->amount_paid_minor, 'status' => $invoice->status->value];
-        $invoice->recomputeAmountPaid();
-
-        $this->auditRecorder->recordPlatformEvent(
-            AuditAction::SubscriptionPaymentRecorded,
-            null,
-            $tenant,
-            changes: [
-                'amount_paid_minor' => ['old' => $before['amount_paid_minor'], 'new' => $invoice->amount_paid_minor],
-                'status' => ['old' => $before['status'], 'new' => $invoice->status->value],
-            ],
-            subject: $payment,
-            context: ['stripe_payment_intent_id' => $paymentIntentId],
-        );
+        return $invoice !== null && $this->recordPayment->handle($invoice, $paid, $key, $paymentIntentId);
     }
 }

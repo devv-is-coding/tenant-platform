@@ -2,13 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Subscriptions\ManageAutoPayAction;
 use App\Actions\Subscriptions\RecordPlatformCheckoutAction;
+use App\Actions\Subscriptions\RecordStripeSubscriptionPaymentAction;
 use App\Concerns\RecordsAuditEvents;
 use App\Enums\AuditAction;
 use App\Enums\RefundStatus;
 use App\Models\Booking;
 use App\Models\Refund;
+use App\Models\SubscriptionInvoice;
 use App\Models\Tenant;
+use App\Services\Billing\AutoPayGateway;
+use App\Services\Billing\PlatformCheckout;
 use App\Services\Payment\PaymentService;
 use App\Services\Payment\RefundService;
 use App\Services\Payment\StripeGateway;
@@ -44,6 +49,8 @@ class StripeWebhookController extends Controller
         private RefundService $refunds,
         private StripeGateway $gateway,
         private RecordPlatformCheckoutAction $recordPlatformCheckout,
+        private ManageAutoPayAction $manageAutoPay,
+        private RecordStripeSubscriptionPaymentAction $recordSubscriptionPayment,
     ) {}
 
     /**
@@ -61,9 +68,13 @@ class StripeWebhookController extends Controller
             return $this->platformCheckoutCompleted($event, $object);
         }
 
+        if ($type === 'payment_intent.succeeded' && ($object['metadata']['purpose'] ?? null) === AutoPayGateway::PURPOSE) {
+            return $this->autoPaySucceeded($event, $object);
+        }
+
         $tenant = $this->tenantOf($object);
 
-        if ($tenant === null || ! in_array($type, ['invoice.paid', 'invoice.payment_failed', 'refund.updated', 'refund.failed'], true)) {
+        if ($tenant === null || ! in_array($type, ['invoice.paid', 'invoice.payment_failed', 'refund.updated', 'refund.failed', 'charge.refund.updated'], true)) {
             return $this->ignored($event, 'not an event for an agency');
         }
 
@@ -123,6 +134,12 @@ class StripeWebhookController extends Controller
      */
     private function platformCheckoutCompleted(array $event, array $session): JsonResponse
     {
+        if (($session['metadata']['purpose'] ?? null) === PlatformCheckout::PURPOSE_CARD) {
+            return $this->manageAutoPay->saveCard($session)
+                ? response()->json(['status' => 'handled'])
+                : $this->ignored($event, 'not a completed card setup, or the card is already saved');
+        }
+
         try {
             $recorded = $this->recordPlatformCheckout->handle($session);
         } catch (ValidationException $refused) {
@@ -137,6 +154,37 @@ class StripeWebhookController extends Controller
         return $recorded
             ? response()->json(['status' => 'handled'])
             : $this->ignored($event, 'unpaid, already recorded, or not the platform\'s');
+    }
+
+    /**
+     * Stripe confirmed an automatic charge of an agency's saved card (TA-33):
+     * record it once, by its PaymentIntent, whether or not the charge's own
+     * answer already did.
+     *
+     * @param  array<string, mixed>  $event
+     * @param  array<string, mixed>  $intent
+     */
+    private function autoPaySucceeded(array $event, array $intent): JsonResponse
+    {
+        $invoiceId = $intent['metadata']['subscription_invoice_id'] ?? null;
+        $tenantId = $intent['metadata']['tenant_id'] ?? null;
+        $invoice = is_numeric($invoiceId) && is_string($tenantId)
+            ? SubscriptionInvoice::query()->whereKey((int) $invoiceId)->where('tenant_id', $tenantId)->first()
+            : null;
+        $received = $intent['amount_received'] ?? null;
+
+        if ($invoice === null || ! is_string($intent['id'] ?? null) || ! is_int($received) || $received <= 0 || ! is_string($intent['currency'] ?? null)) {
+            return $this->ignored($event, 'no invoice, or nothing received');
+        }
+
+        $recorded = $this->recordSubscriptionPayment->handle(
+            $invoice,
+            Money::ofMinor($received, strtoupper($intent['currency'])),
+            'stripe:payment_intent:'.$intent['id'],
+            $intent['id'],
+        );
+
+        return $recorded ? response()->json(['status' => 'handled']) : $this->ignored($event, 'already recorded');
     }
 
     /**
@@ -162,7 +210,11 @@ class StripeWebhookController extends Controller
     }
 
     /**
-     * Stripe finished a refund it had pending: settle it.
+     * Stripe finished a refund it had pending, or failed one it had paid out:
+     * settle it. Stripe reports card refunds through charge.refund.updated as
+     * well as refund.updated / refund.failed, and the same outcome twice
+     * changes nothing. An event about an earlier attempt, since retried under
+     * a new Stripe refund, is ignored, so a stale failure cannot undo the retry.
      *
      * @param  array<string, mixed>  $event
      * @param  array<string, mixed>  $stripeRefund
@@ -182,7 +234,13 @@ class StripeWebhookController extends Controller
             return $this->ignored($event, 'no refund, or not finished');
         }
 
-        $this->refunds->settle($refund, $outcome, is_string($stripeRefund['id'] ?? null) ? $stripeRefund['id'] : null);
+        $stripeRefundId = is_string($stripeRefund['id'] ?? null) ? $stripeRefund['id'] : null;
+
+        if ($refund->stripe_refund_id !== null && $stripeRefundId !== $refund->stripe_refund_id) {
+            return $this->ignored($event, 'an earlier attempt at this refund, since retried');
+        }
+
+        $this->refunds->settle($refund, $outcome, $stripeRefundId);
 
         return response()->json(['status' => 'handled']);
     }

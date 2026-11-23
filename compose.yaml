@@ -84,6 +84,30 @@ services:
       timeout: 5s
       retries: 5
 
+  # Forwards Stripe's test-mode events to the webhook, so card payments
+  # complete locally without a public URL (TA-19, TA-27). It signs in with
+  # STRIPE_SECRET, and its signing secret (`docker compose run --rm stripe
+  # listen --print-secret`) is STRIPE_WEBHOOK_SECRET. Off unless the `stripe`
+  # profile is on (COMPOSE_PROFILES=stripe in .env), since it needs the key.
+  # It shares the proxy's network: the webhook answers only on `localhost`
+  # (APP_URL's host), and here `localhost` is the proxy, which keeps the Host.
+  stripe:
+    image: stripe/stripe-cli:v1.55.14
+    profiles: ["stripe"]
+    restart: unless-stopped
+    network_mode: "service:proxy"
+    depends_on:
+      proxy:
+        condition: service_healthy
+    environment:
+      STRIPE_API_KEY: "${STRIPE_SECRET:-}"
+    command:
+      - listen
+      - --forward-to
+      - http://localhost/api/stripe/webhook
+      - --events
+      - checkout.session.completed,invoice.paid,invoice.payment_failed,refund.updated,refund.failed,charge.refund.updated,payment_intent.succeeded
+
   # The web nodes: two by default, as on two servers; more with
   # `docker compose up --scale app=N`. They share everything that must be
   # shared - database, sessions (in the database), cache and locks (Redis),
