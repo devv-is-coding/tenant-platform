@@ -8,8 +8,11 @@ use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Support\Facades\Exceptions;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
+use Stripe\Exception\AuthenticationException;
+use Stripe\Exception\InvalidArgumentException as StripeConfigurationException;
 
 use function Pest\Laravel\travelTo;
 
@@ -115,6 +118,36 @@ test('an invoice still owed is paid on Stripe, and one already paid offers no pa
         ->assertDontSeeHtml("data-test=\"pay-invoice-{$paid->id}\"")
         ->call('payInvoice', $owed->id)
         ->assertRedirect('https://checkout.stripe.com/c/pay/cs_new');
+});
+
+test('paying by card without a Stripe key says card payments are not set up, and reports it', function (?string $secret, string $reported) {
+    $tenant = tenantOnDomain();
+    $owed = SubscriptionInvoice::factory()->for(Subscription::factory()->for($tenant))->create(['status' => SubscriptionInvoiceStatus::Open]);
+    config(['cashier.secret' => $secret]);
+    Exceptions::fake();
+
+    cardBillingPage($tenant)
+        ->call('payInvoice', $owed->id)
+        ->assertNoRedirect()
+        ->assertDispatched('toast-show', fn (string $event, array $params): bool => $params['slots']['text'] === 'Card payments are not set up on the platform yet. Contact the platform to pay another way.'
+            && $params['dataset']['variant'] === 'danger');
+
+    Exceptions::assertReported($reported);
+    expect($tenant->fresh()?->stripe_customer_id)->toBeNull();
+})->with([
+    'an empty key' => ['', StripeConfigurationException::class],
+    'no key' => [null, AuthenticationException::class],
+]);
+
+test('removing the card without a Stripe key still forgets it', function () {
+    $tenant = withSavedCard(tenantOnDomain(), autoPay: true);
+    config(['cashier.secret' => '']);
+
+    cardBillingPage($tenant)
+        ->call('removeCard')
+        ->assertSeeHtml('data-test="save-card-button"');
+
+    expect([$tenant->fresh()?->stripe_payment_method_id, $tenant->fresh()?->hasAutoPay()])->toBe([null, false]);
 });
 
 test('another agency\'s invoice cannot be paid from this agency\'s page', function () {

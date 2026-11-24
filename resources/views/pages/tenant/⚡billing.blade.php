@@ -25,6 +25,8 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Stripe\Exception\ApiErrorException;
+use Stripe\Exception\AuthenticationException;
+use Stripe\Exception\InvalidArgumentException as StripeConfigurationException;
 
 /*
 | The agency's plan and what it owes the platform: its live plan with the
@@ -465,7 +467,9 @@ new #[Title('Plan & billing')] class extends Component {
     }
 
     /**
-     * Send the Admin to Stripe's payment page, or say Stripe could not open it.
+     * Send the Admin to Stripe's payment page, or say why it cannot open: the
+     * platform has no working Stripe key (empty, missing or refused), which is
+     * reported for the platform to fix, or Stripe could not answer just now.
      *
      * @param  \Closure(): string  $url
      */
@@ -473,6 +477,9 @@ new #[Title('Plan & billing')] class extends Component {
     {
         try {
             $this->redirect($url());
+        } catch (AuthenticationException|StripeConfigurationException $unconfigured) {
+            report($unconfigured);
+            Flux::toast(variant: 'danger', text: __('Card payments are not set up on the platform yet. Contact the platform to pay another way.'));
         } catch (ApiErrorException) {
             Flux::toast(variant: 'danger', text: __('Stripe could not open the payment page. Try again in a moment.'));
         }
