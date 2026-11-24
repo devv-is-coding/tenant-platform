@@ -173,6 +173,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - The ones never to miss:
   - Commit only when the user explicitly asks or the task requires it, as Conventional Commits: `<type>(<scope>): <short description>`, lowercase, imperative, under 72 characters.
   - Never commit directly to `main` unless the user or the established workflow explicitly permits it.
+  - Push all the work in hand on one sub-branch off `main` (never `main` itself), one commit per piece of work (a fix, a feature, dependency updates, CI…); never split it across several branches.
   - Never switch branches over uncommitted user changes, discard user changes, or run destructive Git operations without explicit authorization.
 
 ## Before Starting Work
