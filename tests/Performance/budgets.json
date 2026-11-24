@@ -1,0 +1,28 @@
+{
+    "$comment": "Performance budgets CI holds the app to (TA-35). Raise one only on purpose, in the same pull request as the change that needs it, and say why there.",
+    "bundle": {
+        "$comment": "Gzipped bytes of each Vite entry in public/build/manifest.json, and of all of them together. Measured 2026-11-24: app.css 42,571, passkeys.js 3,895, app.js 20.",
+        "entries": {
+            "resources/css/app.css": 55000,
+            "resources/js/app.js": 10000,
+            "resources/js/passkeys.js": 6000
+        },
+        "total": 70000
+    },
+    "load": {
+        "$comment": "k6 against the full Docker stack (proxy, two production-like app nodes), 25 virtual users (TA-31's load test used 25 concurrent) for 30 s per scenario. Each scenario must stay under its p95_ms, average at least its rps over its 30 s, and fail no request. Measured 2026-11-24 on Docker Desktop (Windows): central homepage 161 req/s p95 202 ms, agency homepage 152 req/s p95 215 ms, signed-in dashboard 119 req/s p95 279 ms. A run also fails when a scenario is more than regression_margin worse than main's last run.",
+        "virtual_users": 25,
+        "duration": "30s",
+        "regression_margin": 0.2,
+        "scenarios": {
+            "central_homepage": { "p95_ms": 300, "rps": 150 },
+            "agency_homepage": { "p95_ms": 300, "rps": 150 },
+            "agency_dashboard": { "p95_ms": 400, "rps": 100 }
+        }
+    },
+    "lighthouse": {
+        "$comment": "Lowest category scores, 0 to 1, on every page lighthouserc.json lists.",
+        "performance": 0.8,
+        "accessibility": 0.9
+    }
+}

@@ -1,0 +1,204 @@
+name: stack
+
+# The app as it really runs (TA-34, TA-35): the Docker images build, the
+# compose stack (proxy, two app nodes, worker, scheduler, MariaDB, Redis,
+# SeaweedFS) comes up, migrations run both ways, the tests that need those
+# services pass, and the app stays within its performance budgets.
+#
+# Each push to main uploads its performance results, which pull requests
+# compare themselves with.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PHP_VERSION: '8.4'
+  NODE_VERSION: '22'
+  K6_IMAGE: grafana/k6:2.4.0@sha256:d41bb79cd8de5a7ad619b53570e3712633e8bff0937010a5c6c57a4747e7a276
+  LHCI_VERSION: 0.15.1
+
+jobs:
+  integration:
+    name: Docker stack, migrations & service tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # public/ is mounted into the app nodes, so its assets are built here.
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Build front-end assets
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress --no-scripts
+          npm ci
+          npm run build
+
+      - name: Prepare the stack's environment
+        run: |
+          cp docker/ci/ci.env .env
+          echo "APP_KEY=base64:$(openssl rand -base64 32)" >> .env
+
+      - name: Check the compose file
+        run: docker compose config --quiet
+
+      # The dev target is built on the production one, so both must build.
+      - name: Build the images
+        run: docker compose build
+
+      - name: Start the stack
+        run: |
+          docker compose up -d
+          bash .github/scripts/wait-for-app.sh
+
+      # Skipped elsewhere: they need MariaDB (row locks), Redis (tagged cache)
+      # or S3, so here a skip is a failure.
+      - name: Run the tests that need the stack's services
+        run: |
+          docker compose exec -T app php artisan test --testsuite=Concurrency --fail-on-skipped
+          docker compose exec -T app php artisan test --fail-on-skipped \
+            tests/Feature/TenancyTest.php \
+            tests/Feature/Actions/StoreItemMediaActionTest.php \
+            tests/Feature/Providers/TenancyServiceProviderTest.php
+
+      - name: Migrate and seed from scratch
+        run: docker compose exec -T app php artisan migrate:fresh --seed --force
+
+      # Agencies first: their migrations are listed in the central database.
+      - name: Roll every migration back, then forward again
+        run: |
+          docker compose exec -T app php artisan tenants:rollback --force
+          docker compose exec -T app php artisan migrate:rollback --force
+          docker compose exec -T app php artisan migrate --force
+          docker compose exec -T app php artisan tenants:migrate --force
+
+      - name: Show the stack's logs
+        if: failure()
+        run: docker compose logs --no-color --tail=200
+
+  performance:
+    name: Performance (k6, Lighthouse)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Build front-end assets
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress --no-scripts
+          npm ci
+          npm run build
+
+      - name: Prepare the stack's environment
+        run: |
+          cp docker/ci/ci.env .env
+          echo "APP_KEY=base64:$(openssl rand -base64 32)" >> .env
+
+      # Production-like web nodes: docker/ci/compose.performance.yaml.
+      - name: Start the stack
+        run: |
+          docker compose -f compose.yaml -f docker/ci/compose.performance.yaml up -d --build
+          bash .github/scripts/wait-for-app.sh
+
+      # The database is freshly migrated; production refuses migrate:fresh.
+      - name: Seed the demo agencies and their staff
+        run: docker compose exec -T app php artisan db:seed --force
+
+      - name: Load test (k6)
+        id: load
+        continue-on-error: true
+        run: |
+          mkdir -p tests/Performance/results
+          docker run --rm --network host --user "$(id -u):$(id -g)" \
+            -v "$PWD/tests/Performance:/scripts" -e RESULTS=/scripts/results \
+            "$K6_IMAGE" run /scripts/load-test.js
+
+      - name: Lighthouse
+        id: lighthouse
+        continue-on-error: true
+        run: npx --yes "@lhci/cli@$LHCI_VERSION" autorun --config=tests/Performance/lighthouserc.cjs
+
+      - name: Fetch main's last results
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow stack.yml --branch main --event push \
+            --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$run_id" ]; then
+            gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name performance-results --dir baseline \
+              || echo "Run $run_id has no performance results."
+          else
+            echo "No successful run on main yet."
+          fi
+
+      - name: Compare with main
+        id: compare
+        if: ${{ !cancelled() && hashFiles('tests/Performance/results/summary.json') != '' }}
+        continue-on-error: true
+        run: node tests/Performance/compare-with-main.mjs tests/Performance/results baseline
+
+      - name: Keep the results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: performance-results
+          path: tests/Performance/results
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Show the stack's logs
+        if: failure() || steps.load.outcome == 'failure'
+        run: docker compose logs --no-color --tail=200
+
+      # Every check above ran and reported; any one that failed fails the job.
+      - name: Hold the budgets
+        if: ${{ !cancelled() }}
+        env:
+          LOAD: ${{ steps.load.outcome }}
+          LIGHTHOUSE: ${{ steps.lighthouse.outcome }}
+          COMPARE: ${{ steps.compare.outcome }}
+        run: |
+          echo "load test: $LOAD, Lighthouse: $LIGHTHOUSE, compared with main: $COMPARE"
+          [ "$LOAD" = success ] && [ "$LIGHTHOUSE" = success ] && [ "$COMPARE" != failure ]

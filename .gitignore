@@ -27,3 +27,10 @@ yarn-error.log
 /progress.txt
 /scenario_story.md
 /TODO.md
+
+# Agency SQLite databases the tests create in database/ (not database/seeders/tenant/)
+/database/tenant*
+
+# Performance runs (TA-35): Lighthouse CI's working folder and the results
+/.lighthouseci
+/tests/Performance/results

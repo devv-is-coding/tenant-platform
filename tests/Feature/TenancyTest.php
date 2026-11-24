@@ -19,7 +19,8 @@ uses(RefreshDatabase::class);
 test('creating a tenant provisions and migrates a separate database', function () {
     $tenant = Tenant::factory()->create();
 
-    expect($tenant->database()->getName())->toBe("tenant{$tenant->id}");
+    // Under --parallel each worker adds its own suffix (Tests\TestCase).
+    expect($tenant->database()->getName())->toBe("tenant{$tenant->id}".config('tenancy.database.suffix'));
 
     tenancy()->initialize($tenant);
 

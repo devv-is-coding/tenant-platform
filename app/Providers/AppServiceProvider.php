@@ -25,6 +25,7 @@ use App\Services\Plans\PlanFeatureMatrix;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Filesystem\FilesystemManager;
 use Illuminate\Support\Facades\Blade;
@@ -141,6 +142,10 @@ class AppServiceProvider extends ServiceProvider
     protected function configureDefaults(): void
     {
         Date::use(CarbonImmutable::class);
+
+        // An N+1 query fails in development and in the tests (TA-35), where
+        // it can still be fixed with an eager load; production only loads.
+        Model::preventLazyLoading(! app()->isProduction());
 
         DB::prohibitDestructiveCommands(
             app()->isProduction(),
