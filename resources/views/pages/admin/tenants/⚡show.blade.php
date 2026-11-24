@@ -9,6 +9,7 @@ use App\Actions\Subscriptions\RecordSubscriptionPaymentAction;
 use App\Actions\Subscriptions\StartSubscriptionAction;
 use App\Actions\Tenants\AssignAgencyAdminAction;
 use App\Actions\Tenants\ChangeTenantStatusAction;
+use App\Actions\Tenants\RetryAgencyProvisioningAction;
 use App\Actions\Tenants\DeleteAgencyUserAction;
 use App\Actions\Tenants\DeleteTenantAction;
 use App\Actions\Tenants\RevokeAgencyAdminAction;
@@ -164,6 +165,20 @@ new class extends Component {
             'name' => $this->tenant->name ?? $this->tenant->id,
             'status' => mb_strtolower($this->tenant->status->label()),
         ]));
+    }
+
+    /**
+     * Run the agency's failed database setup again.
+     * RetryAgencyProvisioningAction authorizes itself as well.
+     */
+    public function retryProvisioning(RetryAgencyProvisioningAction $retryProvisioning): void
+    {
+        $this->authorize('retryProvisioning', $this->tenant);
+
+        $retryProvisioning->handle(Auth::user(), $this->tenant);
+
+        unset($this->recentActivity);
+        Flux::toast(variant: 'success', text: __('Setting up :name again.', ['name' => $this->tenant->name ?? $this->tenant->id]));
     }
 
     /**
@@ -881,6 +896,22 @@ new class extends Component {
                     </div>
                 </form>
             </flux:modal>
+        @elseif (! $tenant->status->isProvisioned() && $tenant->status_reason)
+            <flux:callout variant="danger" icon="exclamation-triangle" class="mt-4" :heading="__('The agency\'s setup failed')" data-test="provisioning-failed">
+                <flux:callout.text>{{ $tenant->status_reason }}</flux:callout.text>
+
+                <flux:error name="provisioning" />
+
+                @can('retryProvisioning', $tenant)
+                    <x-slot name="actions">
+                        <flux:button size="sm" wire:click="retryProvisioning">{{ __('Retry setup') }}</flux:button>
+                    </x-slot>
+                @endcan
+            </flux:callout>
+        @elseif (! $tenant->status->isProvisioned())
+            <flux:callout icon="arrow-path" class="mt-4" :heading="__('Setting up the agency\'s database')" data-test="provisioning">
+                <flux:callout.text>{{ __('This usually takes under a minute. Until then its address says it is being set up, and it cannot be activated. Reload this page to see when it is ready.') }}</flux:callout.text>
+            </flux:callout>
         @elseif ($tenant->status_reason)
             <flux:callout icon="information-circle" class="mt-4" :heading="__(':status: :reason', ['status' => $tenant->status->label(), 'reason' => $tenant->status_reason])" />
         @endif

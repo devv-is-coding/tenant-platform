@@ -28,11 +28,13 @@ use App\ValueObjects\DateRange;
 use App\ValueObjects\Money;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Fortify\Features;
+use Stancl\Tenancy\Events\TenantCreated;
 use Stripe\StripeClient;
 use Stripe\StripeObject;
 use Stripe\Util\RequestOptions;
@@ -178,6 +180,23 @@ function tenantOnDomain(TenantStatus $status = TenantStatus::Active, ?PlanTier $
 
     if ($tier !== null) {
         Subscription::factory()->for($tenant)->create(['tier' => $tier]);
+    }
+
+    return $tenant;
+}
+
+/**
+ * An agency on its own domain whose database setup has not run, so it is
+ * Provisioning with no database: TenantCreated is faked only while it is
+ * made, so later jobs and events in the test run for real. With an error, its
+ * setup failed with that error.
+ */
+function agencyBeingSetUp(?string $error = null): Tenant
+{
+    $tenant = Event::fakeFor(fn (): Tenant => tenantOnDomain(TenantStatus::Provisioning), [TenantCreated::class]);
+
+    if ($error !== null) {
+        $tenant->forceFill(['status_reason' => $error])->save();
     }
 
     return $tenant;

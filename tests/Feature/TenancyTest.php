@@ -168,6 +168,19 @@ test('tenant routes are unreachable from a central domain', function () {
     get("http://{$central}/")->assertNotFound();
 });
 
+test('an agency still being set up says so on its domain instead of entering a database it does not have yet', function (string $path) {
+    $tenant = agencyBeingSetUp();
+
+    get("http://{$tenant->id}.localhost{$path}")
+        ->assertServiceUnavailable()
+        ->assertSee('This agency is still being set up. Try again in a few minutes.');
+
+    expect(tenancy()->initialized)->toBeFalse();
+})->with([
+    'its homepage (the tenant route group)' => '/',
+    'its sign-in (the routes shared with the console)' => '/login',
+]);
+
 test('tenant routes resolve the tenant from its domain', function () {
     $tenant = tenantOnDomain();
 

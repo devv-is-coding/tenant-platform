@@ -35,6 +35,9 @@ enum AuditAction: string
     case UserReactivated = 'user.reactivated';
 
     case TenantCreated = 'tenant.created';
+    case TenantProvisioned = 'tenant.provisioned';
+    case TenantProvisioningFailed = 'tenant.provisioning_failed';
+    case TenantProvisioningRetried = 'tenant.provisioning_retried';
     case TenantActivated = 'tenant.activated';
     case TenantPaused = 'tenant.paused';
     case TenantSuspended = 'tenant.suspended';

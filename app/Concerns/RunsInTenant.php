@@ -2,6 +2,7 @@
 
 namespace App\Concerns;
 
+use App\Enums\TenantStatus;
 use App\Models\Tenant;
 use Closure;
 
@@ -16,7 +17,8 @@ use Closure;
 trait RunsInTenant
 {
     /**
-     * Run the callback inside each agency in turn. Deleted agencies are skipped.
+     * Run the callback inside each agency in turn. Deleted agencies are skipped,
+     * and so are agencies still being set up, which have no database yet.
      *
      * @param  Closure(Tenant): mixed  $callback
      */
@@ -24,7 +26,7 @@ trait RunsInTenant
     {
         // Iterated on the builder: the stancl base model's TenantCollection is
         // not generic, so a fetched collection would lose the Tenant type.
-        Tenant::query()->each(function (Tenant $tenant) use ($callback): void {
+        Tenant::query()->whereNot('status', TenantStatus::Provisioning)->each(function (Tenant $tenant) use ($callback): void {
             $this->runInTenant($tenant, $callback);
         });
     }

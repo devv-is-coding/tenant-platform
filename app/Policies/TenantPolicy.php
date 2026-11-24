@@ -42,6 +42,15 @@ class TenantPolicy
     }
 
     /**
+     * Determine whether the user can run an agency's database setup again,
+     * which only an agency still being set up has.
+     */
+    public function retryProvisioning(User $user, Tenant $tenant): bool
+    {
+        return $user->isSuperAdmin() && ! $tenant->trashed() && ! $tenant->status->isProvisioned();
+    }
+
+    /**
      * Determine whether the user can put an agency on a subscription plan or
      * move it to a different one.
      */

@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Role;
+use App\Enums\TenantStatus;
 use App\Models\PlanFeatureSetting;
 use App\Models\PlatformAuditEvent;
 use App\Models\RestoreRequest;
@@ -44,6 +45,23 @@ test('only super admins may activate, suspend or reactivate an agency, even its 
 
     expect($user->can('changeStatus', $tenant))->toBe($allowed);
 })->with($superAdminsOnly);
+
+test('only super admins may retry an agency\'s database setup, even its own admin may not', function (Role $role, bool $allowed) {
+    $tenant = Tenant::factory()->make(['id' => 'dumaguete', 'status' => TenantStatus::Provisioning]);
+    $user = User::factory()->role($role)->make(['tenant_id' => $role->isTenantRole() ? 'dumaguete' : null]);
+
+    expect($user->can('retryProvisioning', $tenant))->toBe($allowed);
+})->with($superAdminsOnly);
+
+test('only an agency still being set up has a setup to retry', function (TenantStatus $status, bool $allowed) {
+    $tenant = Tenant::factory()->make(['status' => $status]);
+
+    expect(User::factory()->superAdmin()->make()->can('retryProvisioning', $tenant))->toBe($allowed);
+})->with([
+    'setting up' => [TenantStatus::Provisioning, true],
+    'pending' => [TenantStatus::Pending, false],
+    'active' => [TenantStatus::Active, false],
+]);
 
 test('only super admins may put an agency on a plan, even its own admin may not', function (Role $role, bool $allowed) {
     $tenant = Tenant::factory()->make(['id' => 'dumaguete']);

@@ -3,12 +3,14 @@
 use App\Enums\AuditAction;
 use App\Enums\Role;
 use App\Enums\TenantStatus;
+use App\Jobs\ProvisionAgencyDatabase;
 use App\Models\PlatformAuditEvent;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Audit\AuditRecorder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
@@ -50,7 +52,8 @@ function tenantDatabaseExists(Tenant $tenant): bool
     return $tenant->database()->manager()->databaseExists($tenant->database()->getName());
 }
 
-test('onboarding provisions a pending agency with its domain, settings, first admin and audit row', function () {
+test('onboarding creates the agency with its domain, first admin and audit row, and queues its database setup', function () {
+    Queue::fake([ProvisionAgencyDatabase::class]);
     $superAdmin = User::factory()->superAdmin()->create(['first_name' => 'Marisol', 'middle_name' => null, 'last_name' => 'Vega']);
 
     onboardingForm($superAdmin)
@@ -58,13 +61,13 @@ test('onboarding provisions a pending agency with its domain, settings, first ad
         ->assertHasNoErrors();
 
     $tenant = Tenant::findOrFail('valencia');
-    expect($tenant->status)->toBe(TenantStatus::Pending)
+    expect($tenant->status)->toBe(TenantStatus::Provisioning)
         ->and($tenant->name)->toBe('Valencia City Travel & Tours')
         ->and($tenant->getAttribute('locality'))->toBe('Valencia City')
         ->and($tenant->getAttribute('currency'))->toBe('PHP')
         ->and($tenant->domains()->pluck('domain')->all())->toBe(['valencia.localhost'])
-        ->and(tenantDatabaseExists($tenant))->toBeTrue()
-        ->and($tenant->run(fn () => DB::table('settings')->count()))->toBe(1);
+        ->and(tenantDatabaseExists($tenant))->toBeFalse();
+    Queue::assertPushed(ProvisionAgencyDatabase::class, fn (ProvisionAgencyDatabase $job): bool => $job->tenant->is($tenant) && ! $job->resuming);
     $admin = User::where('username', 'ignacio')->sole();
     expect($admin->role)->toBe(Role::Admin)
         ->and($admin->tenant_id)->toBe('valencia')
@@ -77,6 +80,18 @@ test('onboarding provisions a pending agency with its domain, settings, first ad
         ->and($event->actor_id)->toBe($superAdmin->id)
         ->and($event->actor_role)->toBe(Role::SuperAdmin)
         ->and($event->actor_label)->toBe('Marisol Vega (Super admin)');
+});
+
+test('once its setup has run, an onboarded agency has its database and settings and waits for activation', function () {
+    onboardingForm(User::factory()->superAdmin()->create())
+        ->call('onboard')
+        ->assertHasNoErrors();
+
+    $tenant = Tenant::findOrFail('valencia');
+    expect($tenant->status)->toBe(TenantStatus::Pending)
+        ->and(tenantDatabaseExists($tenant))->toBeTrue()
+        ->and($tenant->run(fn () => DB::table('settings')->count()))->toBe(1)
+        ->and(PlatformAuditEvent::query()->orderBy('id')->pluck('action')->all())->toBe([AuditAction::TenantCreated, AuditAction::TenantProvisioned]);
 });
 
 test('a subdomain whose domain another tenant already owns is rejected', function () {
@@ -190,7 +205,7 @@ test('going back returns to the previous step without losing its answers', funct
         ->assertSet('subdomain', 'valencia');
 });
 
-test('a failure after the tenant is created removes the tenant and its database', function () {
+test('a failure after the tenant is created leaves no agency, domain, admin or database behind', function () {
     mock(AuditRecorder::class)
         ->shouldReceive('recordPlatformEvent')
         ->andThrow(new RuntimeException('Audit write failed.'));

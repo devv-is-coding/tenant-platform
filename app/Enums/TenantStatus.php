@@ -14,7 +14,14 @@ namespace App\Enums;
  * status rather than a DELETE, so the agency's records survive the retention
  * window.
  *
+ * Provisioning comes before all of them: the agency exists centrally (its
+ * domain, first admin and platform audit row) while its own database is still
+ * being created, migrated and seeded on the queue (ProvisionAgencyDatabase).
+ * Nobody may enter it until then, and only that job moves it on, to Pending.
+ * While it waits after a failure, status_reason holds what went wrong.
+ *
  * There is no case 0, so a coerced empty value cannot land on a valid status.
+ * Values are stored, so a new case takes the next number, never a reordering.
  */
 enum TenantStatus: int
 {
@@ -23,6 +30,7 @@ enum TenantStatus: int
     case Paused = 3;
     case Suspended = 4;
     case Closed = 5;
+    case Provisioning = 6;
 
     /**
      * Get the human-readable label for the status.
@@ -35,6 +43,7 @@ enum TenantStatus: int
             self::Paused => __('Paused'),
             self::Suspended => __('Suspended'),
             self::Closed => __('Closed'),
+            self::Provisioning => __('Setting up'),
         };
     }
 
@@ -45,6 +54,8 @@ enum TenantStatus: int
      * Nothing returns to Pending: going live is one-way. A closed agency comes
      * back only to Active, and only once it is on a plan again - which the
      * status change itself checks, since that is not a fact about statuses.
+     * A provisioning agency goes nowhere by hand: its setup job moves it to
+     * Pending once its database is ready.
      */
     public function canTransitionTo(self $status): bool
     {
@@ -53,6 +64,7 @@ enum TenantStatus: int
             self::Active => in_array($status, [self::Paused, self::Suspended, self::Closed], true),
             self::Paused => in_array($status, [self::Active, self::Suspended, self::Closed], true),
             self::Suspended => in_array($status, [self::Active, self::Closed], true),
+            self::Provisioning => false,
         };
     }
 
@@ -67,11 +79,20 @@ enum TenantStatus: int
 
     /**
      * Determine if the agency's staff may sign in at all. A pending agency is
-     * not live yet, so nobody can.
+     * not live yet, and a provisioning one has no database yet, so nobody can.
      */
     public function allowsStaffSignIn(): bool
     {
-        return $this !== self::Pending;
+        return ! in_array($this, [self::Pending, self::Provisioning], true);
+    }
+
+    /**
+     * Determine if the agency's own database is ready to be entered: by its
+     * domain, a scheduled command, or the platform's lifecycle notices.
+     */
+    public function isProvisioned(): bool
+    {
+        return $this !== self::Provisioning;
     }
 
     /**
@@ -123,6 +144,7 @@ enum TenantStatus: int
             self::Paused => 'sky',
             self::Suspended => 'red',
             self::Closed => 'zinc',
+            self::Provisioning => 'indigo',
         };
     }
 }

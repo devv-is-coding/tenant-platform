@@ -96,6 +96,25 @@ new #[Title('Dashboard')] class extends Component {
     }
 
     /**
+     * Get the newest agencies whose database setup failed and waits for a
+     * retry, with what went wrong. One still being set up has no error yet.
+     *
+     * @return Collection<int, Tenant>
+     */
+    #[Computed]
+    public function failedSetups(): Collection
+    {
+        $this->authorize('viewAny', Tenant::class);
+
+        return Tenant::query()
+            ->where('status', TenantStatus::Provisioning)
+            ->whereNotNull('status_reason')
+            ->latest('created_at')
+            ->limit(self::LIST_LIMIT)
+            ->get();
+    }
+
+    /**
      * Get the most recently suspended agencies, with their reason.
      *
      * @return Collection<int, Tenant>
@@ -540,8 +559,9 @@ new #[Title('Dashboard')] class extends Component {
 
                 @php($pending = $this->pendingAgencies)
                 @php($suspended = $this->suspendedAgencies)
+                @php($failedSetups = $this->failedSetups)
 
-                @if ($pending->isEmpty() && $suspended->isEmpty() && $this->pastDueSubscriptions->isEmpty() && $this->agenciesWithoutAdmin->isEmpty() && $this->pendingRestoreRequests === 0 && $this->pendingPlanRequests === 0)
+                @if ($pending->isEmpty() && $suspended->isEmpty() && $failedSetups->isEmpty() && $this->pastDueSubscriptions->isEmpty() && $this->agenciesWithoutAdmin->isEmpty() && $this->pendingRestoreRequests === 0 && $this->pendingPlanRequests === 0)
                     <flux:text>{{ __('Nothing needs a decision right now.') }}</flux:text>
                 @endif
 
@@ -560,6 +580,18 @@ new #[Title('Dashboard')] class extends Component {
                         <flux:link :href="route('admin.restore-requests.index')" class="block py-1" wire:navigate>
                             {{ trans_choice(':count request waiting|:count requests waiting', $this->pendingRestoreRequests) }}
                         </flux:link>
+                    </div>
+                @endif
+
+                @if ($failedSetups->isNotEmpty())
+                    <div>
+                        <flux:text size="sm" class="mb-1">{{ __('Setup failed') }}</flux:text>
+                        @foreach ($failedSetups as $agency)
+                            <div class="py-1">
+                                <flux:link :href="route('admin.tenants.show', $agency)" wire:navigate>{{ $agency->name ?? $agency->id }}</flux:link>
+                                <flux:text size="sm">{{ $agency->status_reason }}</flux:text>
+                            </div>
+                        @endforeach
                     </div>
                 @endif
 
