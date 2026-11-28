@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Role;
+use App\Models\Booking;
 use App\Models\Item;
 use App\Models\PlanChangeRequest;
 use App\Models\RestoreRequest;
@@ -159,6 +160,21 @@ test('inside an agency, its managers and admin get the approvals, with how many 
     'admin' => [Role::Admin, true],
     'manager' => [Role::Manager, true],
     'staff' => [Role::Staff, false],
+]);
+
+test('inside an agency, all staff get the bookings; managers and the admin also see how many wait for a decision', function (Role $role, ?int $count) {
+    $tenant = tenantOnDomain();
+    tenancy()->initialize($tenant);
+    Booking::factory()->count(2)->create();
+    Booking::factory()->approved()->create();
+
+    $bookings = collect(navigationFor(User::factory()->role($role)->for($tenant)->create(), tenantContext: true))->firstWhere('label', 'Bookings');
+
+    expect([$bookings['href'], $bookings['count']])->toBe([route('tenant.bookings'), $count]);
+})->with([
+    'admin' => [Role::Admin, 2],
+    'manager' => [Role::Manager, 2],
+    'staff' => [Role::Staff, null],
 ]);
 
 test('tenant context never exposes a central link', function (Role $role) {

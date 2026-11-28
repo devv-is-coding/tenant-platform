@@ -3,7 +3,6 @@
 namespace App\Policies;
 
 use App\Enums\PlanFeature;
-use App\Enums\Role;
 use App\Models\Item;
 use App\Models\User;
 
@@ -77,26 +76,5 @@ class ItemPolicy extends AgencyPolicy
     public function publish(User $user, Item $item): bool
     {
         return $this->isDeciderOfCurrentAgency($user);
-    }
-
-    /**
-     * Determine if the user is an Admin, Manager or Staff member of the
-     * agency of the current request.
-     */
-    private function isStaffOfCurrentAgency(User $user): bool
-    {
-        return $user->role->isTenantRole()
-            && tenancy()->initialized
-            && $user->tenant_id === tenant('id');
-    }
-
-    /**
-     * Determine if the user is an Admin or Manager of the agency of the
-     * current request.
-     */
-    private function isDeciderOfCurrentAgency(User $user): bool
-    {
-        return in_array($user->role, [Role::Admin, Role::Manager], true)
-            && $this->isStaffOfCurrentAgency($user);
     }
 }

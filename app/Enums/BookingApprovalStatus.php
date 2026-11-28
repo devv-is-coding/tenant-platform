@@ -33,6 +33,19 @@ enum BookingApprovalStatus: int
     }
 
     /**
+     * Get the Flux badge color the status is shown in.
+     */
+    public function color(): string
+    {
+        return match ($this) {
+            self::Pending => 'amber',
+            self::Approved => 'green',
+            self::Rejected => 'red',
+            self::Cancelled, self::Expired => 'zinc',
+        };
+    }
+
+    /**
      * Determine if the booking should release the inventory it is holding.
      *
      * Rejecting releases inventory; approving does not. Release hard-deletes the

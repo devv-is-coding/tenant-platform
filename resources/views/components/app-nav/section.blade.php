@@ -12,6 +12,12 @@
         wire:navigate
     >
         {{ $section['label'] }}
+
+        @if ($section['count'])
+            <span data-nav-count class="ms-1.5 rounded-full px-1.5 text-xs font-bold tabular-nums">
+                {{ $section['count'] }}<span class="sr-only"> {{ __('waiting') }}</span>
+            </span>
+        @endif
     </flux:navbar.item>
 @else
     {{--

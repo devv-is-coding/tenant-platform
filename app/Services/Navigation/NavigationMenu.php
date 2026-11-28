@@ -2,10 +2,12 @@
 
 namespace App\Services\Navigation;
 
+use App\Enums\BookingApprovalStatus;
 use App\Enums\ItemStatus;
 use App\Enums\PlanChangeRequestStatus;
 use App\Enums\RestoreRequestStatus;
 use App\Models\AuditEvent;
+use App\Models\Booking;
 use App\Models\Item;
 use App\Models\PlanChangeRequest;
 use App\Models\RestoreRequest;
@@ -136,8 +138,15 @@ class NavigationMenu
 
         $approvals = $this->approvalLinks($user);
 
+        // Every member of staff sees the bookings; the count is the decisions
+        // waiting on those who take them.
+        $bookings = $user->can('viewAny', Booking::class)
+            ? [$this->section(__('Bookings'), 'ticket', route('tenant.bookings'), 'tenant.bookings', $this->bookingsAwaitingDecision($user))]
+            : [];
+
         return [
             $this->section(__('Dashboard'), 'squares-2x2', route('tenant.dashboard'), 'tenant.dashboard'),
+            ...$bookings,
             ...($approvals === [] ? [] : [$this->dropdown(__('Approvals'), 'check-badge', [$this->group(null, $approvals)], count: $this->waitingDecisionCount($user))]),
             ...($groups === [] ? [] : [$this->dropdown(__('Agency'), 'building-office', $groups)]),
         ];
@@ -164,6 +173,21 @@ class NavigationMenu
         }
 
         return $links;
+    }
+
+    /**
+     * Count the bookings waiting for the user's decision, shown beside
+     * Bookings; none for staff, who do not decide them.
+     */
+    private function bookingsAwaitingDecision(User $user): ?int
+    {
+        $booking = new Booking;
+
+        if (! $user->can('decide', $booking) && ! $user->can('cancel', $booking)) {
+            return null;
+        }
+
+        return Booking::query()->where('approval_status', BookingApprovalStatus::Pending)->count();
     }
 
     /**
@@ -317,7 +341,7 @@ class NavigationMenu
      *
      * @return NavSection
      */
-    private function section(string $label, string $icon, string $href, string $routePattern): array
+    private function section(string $label, string $icon, string $href, string $routePattern, ?int $count = null): array
     {
         return [
             'label' => $label,
@@ -325,7 +349,7 @@ class NavigationMenu
             'href' => $href,
             'current' => request()->routeIs($routePattern),
             'groups' => [],
-            'count' => null,
+            'count' => $count,
         ];
     }
 
