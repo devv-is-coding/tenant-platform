@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Enums\PlanFeature;
+use App\Enums\Role;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Plans\PlanFeatureMatrix;
@@ -65,6 +66,27 @@ abstract class AgencyPolicy
     protected function securityAbilities(): array
     {
         return [];
+    }
+
+    /**
+     * Determine if the user is one of the staff (Admin, Manager or Staff) of
+     * the agency of the current request.
+     */
+    protected function isStaffOfCurrentAgency(User $user): bool
+    {
+        return $user->role->isTenantRole()
+            && tenancy()->initialized
+            && $user->tenant_id === tenant('id');
+    }
+
+    /**
+     * Determine if the user takes the agency's decisions (TM): one of its
+     * Managers, or its Admin, who can do everything a manager can.
+     */
+    protected function isDeciderOfCurrentAgency(User $user): bool
+    {
+        return in_array($user->role, [Role::Admin, Role::Manager], true)
+            && $this->isStaffOfCurrentAgency($user);
     }
 
     /**

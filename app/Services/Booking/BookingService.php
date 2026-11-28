@@ -10,7 +10,9 @@ use App\Enums\BookingPaymentStatus;
 use App\Enums\ItemStatus;
 use App\Enums\ItemType;
 use App\Enums\Role;
+use App\Events\BookingApproved;
 use App\Events\BookingCreated;
+use App\Events\BookingRejected;
 use App\Exceptions\OptionUnavailableException;
 use App\Models\Booking;
 use App\Models\Option;
@@ -23,6 +25,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use LogicException;
 
@@ -131,6 +134,117 @@ class BookingService
             );
 
             return true;
+        });
+    }
+
+    /**
+     * Confirm a booking waiting for the manager (TM-2). Its units stay held,
+     * now with no time limit: an approved booking never expires. The money
+     * is another axis and is left as it is.
+     *
+     * A hold whose time ran out unpaid is refused: the release job frees its
+     * units, and the customer books again.
+     *
+     * @throws ValidationException for a booking no longer waiting, or a hold that ran out
+     */
+    public function approve(Booking $booking, User $decidedBy): Booking
+    {
+        return DB::transaction(function () use ($booking, $decidedBy): Booking {
+            $locked = $this->lockAwaiting($booking, [BookingApprovalStatus::Pending], __('approved'));
+
+            if ($this->isLapsedHold($locked)) {
+                throw ValidationException::withMessages([
+                    'approval' => __('The hold on :reference ran out before it was approved, so its units are being released. The customer can book again.', ['reference' => $locked->reference]),
+                ]);
+            }
+
+            $locked->forceFill([
+                'approval_status' => BookingApprovalStatus::Approved,
+                'approved_at' => now(),
+                'approved_by' => $decidedBy->id,
+            ])->save();
+
+            $this->recordAuditEvent(
+                AuditAction::BookingApproved,
+                $locked,
+                __(':reference approved.', ['reference' => $locked->reference]),
+                ['approval_status' => ['old' => BookingApprovalStatus::Pending->value, 'new' => BookingApprovalStatus::Approved->value]],
+            );
+
+            BookingApproved::dispatch($locked);
+
+            return $locked;
+        });
+    }
+
+    /**
+     * Decline a booking waiting for the manager, with the reason the
+     * customer is given, and hard-delete its units so they sell again at
+     * once. The payment status is left as it is: a rejected booking nobody
+     * paid stays Unpaid, and money already taken is returned as a refund.
+     *
+     * @throws ValidationException for no reason, or a booking no longer waiting
+     */
+    public function reject(Booking $booking, User $decidedBy, string $reason): Booking
+    {
+        if (trim($reason) === '') {
+            throw ValidationException::withMessages(['rejection_reason' => __('Tell the customer why the booking is declined.')]);
+        }
+
+        return DB::transaction(function () use ($booking, $decidedBy, $reason): Booking {
+            $locked = $this->lockAwaiting($booking, [BookingApprovalStatus::Pending], __('rejected'));
+
+            $locked->forceFill([
+                'approval_status' => BookingApprovalStatus::Rejected,
+                'rejection_reason' => trim($reason),
+                'rejected_at' => now(),
+                'approved_by' => $decidedBy->id,
+            ])->save();
+            $released = $locked->allocations()->delete();
+
+            $this->recordAuditEvent(
+                AuditAction::BookingRejected,
+                $locked,
+                __(':reference rejected; :units held units released. Reason: :reason', ['reference' => $locked->reference, 'units' => $released, 'reason' => $locked->rejection_reason]),
+                ['approval_status' => ['old' => BookingApprovalStatus::Pending->value, 'new' => BookingApprovalStatus::Rejected->value]],
+                ['released_units' => $released],
+            );
+
+            BookingRejected::dispatch($locked);
+
+            return $locked;
+        });
+    }
+
+    /**
+     * Call off a booking still live, waiting or approved, and hard-delete its
+     * units so they sell again at once. Money already paid stays recorded
+     * until it is refunded.
+     *
+     * @throws ValidationException for a booking already closed
+     */
+    public function cancel(Booking $booking, ?string $reason = null): Booking
+    {
+        return DB::transaction(function () use ($booking, $reason): Booking {
+            $locked = $this->lockAwaiting($booking, [BookingApprovalStatus::Pending, BookingApprovalStatus::Approved], __('cancelled'));
+            $before = $locked->approval_status;
+
+            $locked->forceFill(['approval_status' => BookingApprovalStatus::Cancelled, 'cancelled_at' => now()])->save();
+            $released = $locked->allocations()->delete();
+
+            $reason = $reason === null ? '' : trim($reason);
+
+            $this->recordAuditEvent(
+                AuditAction::BookingCancelled,
+                $locked,
+                $reason === ''
+                    ? __(':reference cancelled; :units held units released.', ['reference' => $locked->reference, 'units' => $released])
+                    : __(':reference cancelled; :units held units released. Reason: :reason', ['reference' => $locked->reference, 'units' => $released, 'reason' => $reason]),
+                ['approval_status' => ['old' => $before->value, 'new' => BookingApprovalStatus::Cancelled->value]],
+                ['released_units' => $released],
+            );
+
+            return $locked;
         });
     }
 
@@ -293,6 +407,31 @@ class BookingService
         }
 
         return [$stay->startsOn, $stay->endsOn, [$stay->startsOn], $stay];
+    }
+
+    /**
+     * Lock the booking's row and refuse a step its approval status does not
+     * allow, so two managers deciding at once cannot both move it.
+     *
+     * @param  list<BookingApprovalStatus>  $from
+     *
+     * @throws ValidationException
+     */
+    private function lockAwaiting(Booking $booking, array $from, string $verb): Booking
+    {
+        $locked = Booking::query()->whereKey($booking->id)->lockForUpdate()->firstOrFail();
+
+        if (! in_array($locked->approval_status, $from, true)) {
+            throw ValidationException::withMessages([
+                'approval' => __(':reference is :status, so it cannot be :verb.', [
+                    'reference' => $locked->reference,
+                    'status' => mb_strtolower($locked->approval_status->label()),
+                    'verb' => $verb,
+                ]),
+            ]);
+        }
+
+        return $locked;
     }
 
     /**

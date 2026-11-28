@@ -1,7 +1,11 @@
 <?php
 
+use App\Enums\RefundStatus;
 use App\Enums\Role;
+use App\Models\Booking;
+use App\Models\Item;
 use App\Models\PlanChangeRequest;
+use App\Models\Refund;
 use App\Models\RestoreRequest;
 use App\Models\Tenant;
 use App\Models\User;
@@ -142,6 +146,39 @@ test('inside an agency, its admin also gets the team, settings, branding, billin
     'admin' => [Role::Admin, true],
     'manager' => [Role::Manager, false],
     'staff' => [Role::Staff, false],
+]);
+
+test('inside an agency, its managers and admin get the approvals, with how many decisions wait on them; staff do not', function (Role $role, bool $decides) {
+    $tenant = tenantOnDomain();
+    tenancy()->initialize($tenant);
+    Item::factory()->pending()->count(2)->create();
+    Item::factory()->approved()->create();
+    Refund::factory()->create();
+    Refund::factory()->create(['status' => RefundStatus::Approved]);
+
+    $approvals = collect(navigationFor(User::factory()->role($role)->for($tenant)->create(), tenantContext: true))->firstWhere('label', 'Approvals');
+
+    expect($approvals === null ? null : [navigationHrefs([$approvals]), $approvals['count']])
+        ->toBe($decides ? [[route('tenant.listing-approvals'), route('tenant.refunds')], 3] : null);
+})->with([
+    'admin' => [Role::Admin, true],
+    'manager' => [Role::Manager, true],
+    'staff' => [Role::Staff, false],
+]);
+
+test('inside an agency, all staff get the bookings; managers and the admin also see how many wait for a decision', function (Role $role, ?int $count) {
+    $tenant = tenantOnDomain();
+    tenancy()->initialize($tenant);
+    Booking::factory()->count(2)->create();
+    Booking::factory()->approved()->create();
+
+    $bookings = collect(navigationFor(User::factory()->role($role)->for($tenant)->create(), tenantContext: true))->firstWhere('label', 'Bookings');
+
+    expect([$bookings['href'], $bookings['count']])->toBe([route('tenant.bookings'), $count]);
+})->with([
+    'admin' => [Role::Admin, 2],
+    'manager' => [Role::Manager, 2],
+    'staff' => [Role::Staff, null],
 ]);
 
 test('tenant context never exposes a central link', function (Role $role) {

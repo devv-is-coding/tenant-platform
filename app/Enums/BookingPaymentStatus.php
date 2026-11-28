@@ -59,6 +59,19 @@ enum BookingPaymentStatus: int
     }
 
     /**
+     * Get the Flux badge color the status is shown in.
+     */
+    public function color(): string
+    {
+        return match ($this) {
+            self::Unpaid => 'zinc',
+            self::PartiallyPaid => 'amber',
+            self::Paid => 'green',
+            self::Refunded, self::PartiallyRefunded => 'blue',
+        };
+    }
+
+    /**
      * Determine if any money has been received against the booking.
      */
     public function hasPayments(): bool

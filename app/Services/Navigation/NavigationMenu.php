@@ -2,10 +2,16 @@
 
 namespace App\Services\Navigation;
 
+use App\Enums\BookingApprovalStatus;
+use App\Enums\ItemStatus;
 use App\Enums\PlanChangeRequestStatus;
+use App\Enums\RefundStatus;
 use App\Enums\RestoreRequestStatus;
 use App\Models\AuditEvent;
+use App\Models\Booking;
+use App\Models\Item;
 use App\Models\PlanChangeRequest;
+use App\Models\Refund;
 use App\Models\RestoreRequest;
 use App\Models\Settings;
 use App\Models\Tenant;
@@ -57,7 +63,8 @@ class NavigationMenu
 
     /**
      * Get the sections for a staff member on their agency's own domain: the
-     * dashboard, and for its Admin an Agency menu with how the agency runs
+     * dashboard; for its Managers and Admin an Approvals menu with the
+     * decisions waiting on them; and for its Admin an Agency menu with how the agency runs
      * (team, settings, app branding) and its records with the platform
      * (plan and billing, audit log, restore requests).
      *
@@ -131,10 +138,87 @@ class NavigationMenu
             $records === [] ? null : $this->group(__('Records'), $records),
         ]));
 
+        $approvals = $this->approvalLinks($user);
+
+        // Every member of staff sees the bookings; the count is the decisions
+        // waiting on those who take them.
+        $bookings = $user->can('viewAny', Booking::class)
+            ? [$this->section(__('Bookings'), 'ticket', route('tenant.bookings'), 'tenant.bookings', $this->bookingsAwaitingDecision($user))]
+            : [];
+
         return [
             $this->section(__('Dashboard'), 'squares-2x2', route('tenant.dashboard'), 'tenant.dashboard'),
+            ...$bookings,
+            ...($approvals === [] ? [] : [$this->dropdown(__('Approvals'), 'check-badge', [$this->group(null, $approvals)], count: $this->waitingDecisionCount($user))]),
             ...($groups === [] ? [] : [$this->dropdown(__('Agency'), 'building-office', $groups)]),
         ];
+    }
+
+    /**
+     * Get the queues of decisions the user takes for the agency (TM): for
+     * its Managers and its Admin.
+     *
+     * @return list<NavLink>
+     */
+    private function approvalLinks(User $user): array
+    {
+        $links = [];
+
+        if ($user->can('viewApprovalQueue', Item::class)) {
+            $links[] = $this->link(
+                __('Listing approvals'),
+                __('Listings staff sent for approval, and approved ones to publish.'),
+                route('tenant.listing-approvals'),
+                'clipboard-document-check',
+                'tenant.listing-approvals',
+            );
+        }
+
+        if ($user->can('viewAny', Refund::class)) {
+            $links[] = $this->link(
+                __('Refunds'),
+                __('Money customers asked to have back, and approved refunds to pay out.'),
+                route('tenant.refunds'),
+                'receipt-refund',
+                'tenant.refunds',
+            );
+        }
+
+        return $links;
+    }
+
+    /**
+     * Count the bookings waiting for the user's decision, shown beside
+     * Bookings; none for staff, who do not decide them.
+     */
+    private function bookingsAwaitingDecision(User $user): ?int
+    {
+        $booking = new Booking;
+
+        if (! $user->can('decide', $booking) && ! $user->can('cancel', $booking)) {
+            return null;
+        }
+
+        return Booking::query()->where('approval_status', BookingApprovalStatus::Pending)->count();
+    }
+
+    /**
+     * Count the decisions waiting on the user, shown beside Approvals: the
+     * listings sent for approval and the refunds asked for.
+     */
+    private function waitingDecisionCount(User $user): int
+    {
+        $count = 0;
+
+        if ($user->can('viewApprovalQueue', Item::class)) {
+            $count += Item::query()->where('item_status', ItemStatus::Pending)->count();
+        }
+
+        if ($user->can('viewAny', Refund::class)) {
+            $count += Refund::query()->where('status', RefundStatus::Requested)->count();
+        }
+
+        return $count;
     }
 
     /**
@@ -273,7 +357,7 @@ class NavigationMenu
      *
      * @return NavSection
      */
-    private function section(string $label, string $icon, string $href, string $routePattern): array
+    private function section(string $label, string $icon, string $href, string $routePattern, ?int $count = null): array
     {
         return [
             'label' => $label,
@@ -281,7 +365,7 @@ class NavigationMenu
             'href' => $href,
             'current' => request()->routeIs($routePattern),
             'groups' => [],
-            'count' => null,
+            'count' => $count,
         ];
     }
 

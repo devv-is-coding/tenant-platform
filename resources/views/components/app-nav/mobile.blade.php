@@ -35,7 +35,7 @@
                         :aria-current="$section['current'] ? 'page' : null"
                         wire:navigate
                     >
-                        {{ $section['label'] }}
+                        {{ $section['count'] ? __(':label (:count waiting)', ['label' => $section['label'], 'count' => $section['count']]) : $section['label'] }}
                     </flux:navlist.item>
                 @else
                     <flux:navlist.group

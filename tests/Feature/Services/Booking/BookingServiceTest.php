@@ -6,6 +6,8 @@ use App\Enums\BookingPaymentStatus;
 use App\Enums\ItemStatus;
 use App\Enums\ItemType;
 use App\Enums\Role;
+use App\Events\BookingApproved;
+use App\Events\BookingRejected;
 use App\Exceptions\OptionUnavailableException;
 use App\Models\AuditEvent;
 use App\Models\Booking;
@@ -21,6 +23,8 @@ use App\ValueObjects\Money;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Validation\ValidationException;
 
 use function Pest\Laravel\actingAs;
 use function Pest\Laravel\travelTo;
@@ -317,4 +321,165 @@ test('a booking holds its units for the agency\'s hold time', function () {
     });
 
     expect($expiresAt)->toBe('2026-11-03 11:30:00');
+});
+
+/**
+ * A manager of the agency, signed in, so the audit log names them.
+ */
+function signedInManagerOf(Tenant $tenant): User
+{
+    $manager = User::factory()->role(Role::Manager)->for($tenant)->create();
+    actingAs($manager);
+
+    return $manager;
+}
+
+test('approving confirms the booking, keeps its units held, and leaves its money alone', function () {
+    $tenant = tenantOnDomain();
+    $customer = User::factory()->role(Role::Customer)->for($tenant)->create();
+    $manager = signedInManagerOf($tenant);
+    Event::fake([BookingApproved::class]);
+
+    $after = withinTenant($tenant, function () use ($customer, $manager): array {
+        $booking = bookFor($customer, [new BookingDraftLine(bookableRoom()->id, stay: stay('2026-12-05', '2026-12-07'))]);
+        app(BookingService::class)->approve($booking, $manager);
+        $booking->refresh();
+
+        return [
+            'booking' => [$booking->approval_status, $booking->payment_status, $booking->approved_by, $booking->approved_at !== null],
+            'held' => InventoryAllocation::query()->count(),
+            'logged' => AuditEvent::query()->where('action', AuditAction::BookingApproved)->sole()->only(['actor_id', 'description']),
+            'reference' => $booking->reference,
+        ];
+    });
+
+    expect($after)->toBe([
+        'booking' => [BookingApprovalStatus::Approved, BookingPaymentStatus::Unpaid, $manager->id, true],
+        'held' => 2,
+        'logged' => ['actor_id' => $manager->id, 'description' => "{$after['reference']} approved."],
+        'reference' => $after['reference'],
+    ]);
+    Event::assertDispatched(BookingApproved::class);
+});
+
+test('rejecting keeps the booking unpaid, records the reason, and frees its units at once', function () {
+    $tenant = tenantOnDomain();
+    $customer = User::factory()->role(Role::Customer)->for($tenant)->create();
+    $manager = signedInManagerOf($tenant);
+    Event::fake([BookingRejected::class]);
+
+    $after = withinTenant($tenant, function () use ($customer, $manager): array {
+        $booking = bookFor($customer, [new BookingDraftLine(bookableRoom()->id, stay: stay('2026-12-05', '2026-12-07'))]);
+        app(BookingService::class)->reject($booking, $manager, ' Fully booked for a wedding. ');
+        $booking->refresh();
+
+        return [
+            'booking' => [$booking->approval_status, $booking->payment_status, $booking->rejection_reason, $booking->rejected_at !== null],
+            'held' => InventoryAllocation::query()->count(),
+            'released' => AuditEvent::query()->where('action', AuditAction::BookingRejected)->sole()->context,
+        ];
+    });
+
+    expect($after)->toBe([
+        'booking' => [BookingApprovalStatus::Rejected, BookingPaymentStatus::Unpaid, 'Fully booked for a wedding.', true],
+        'held' => 0,
+        'released' => ['released_units' => 2],
+    ]);
+    Event::assertDispatched(BookingRejected::class);
+});
+
+test('the unit a rejected booking held goes to the next booking, under the same unit number', function () {
+    $tenant = tenantOnDomain();
+    $customer = User::factory()->role(Role::Customer)->for($tenant)->create();
+    $manager = signedInManagerOf($tenant);
+
+    [$units, $secondId] = withinTenant($tenant, function () use ($customer, $manager): array {
+        $room = bookableRoom(1);
+        $first = bookFor($customer, [new BookingDraftLine($room->id, stay: stay('2026-12-05', '2026-12-06'))]);
+        app(BookingService::class)->reject($first, $manager, 'Room closed for repairs.');
+        $second = bookFor($customer, [new BookingDraftLine($room->id, stay: stay('2026-12-05', '2026-12-06'))]);
+
+        return [InventoryAllocation::query()->get()->map(fn (InventoryAllocation $row): array => [$row->booking_id, $row->unit_index])->all(), $second->id];
+    });
+
+    expect($units)->toBe([[$secondId, 0]]);
+});
+
+test('cancelling an approved, paid booking frees its units and keeps what was paid until it is refunded', function () {
+    $tenant = tenantOnDomain();
+    $customer = User::factory()->role(Role::Customer)->for($tenant)->create();
+    $manager = signedInManagerOf($tenant);
+
+    $after = withinTenant($tenant, function () use ($tenant, $customer, $manager): array {
+        $booking = bookFor($customer, [new BookingDraftLine(seatOnTour()->id, quantity: 2)]);
+        app(BookingService::class)->approve($booking, $manager);
+        takeCash($tenant, $booking, '998.00', $manager);
+        app(BookingService::class)->cancel($booking, 'Customer fell ill.');
+        $booking->refresh();
+
+        return [
+            'booking' => [$booking->approval_status, $booking->payment_status, $booking->amount_paid->format(), $booking->cancelled_at !== null],
+            'held' => InventoryAllocation::query()->count(),
+            'logged' => AuditEvent::query()->where('action', AuditAction::BookingCancelled)->sole()->description,
+            'reference' => $booking->reference,
+        ];
+    });
+
+    expect($after)->toBe([
+        'booking' => [BookingApprovalStatus::Cancelled, BookingPaymentStatus::Paid, '₱998.00', true],
+        'held' => 0,
+        'logged' => "{$after['reference']} cancelled; 2 held units released. Reason: Customer fell ill.",
+        'reference' => $after['reference'],
+    ]);
+});
+
+test('a step the booking\'s status does not allow is refused, and nothing changes', function (array $state, string $step, string $message) {
+    $tenant = tenantOnDomain();
+    $manager = signedInManagerOf($tenant);
+
+    withinTenant($tenant, function () use ($state, $step, $message, $manager): void {
+        $booking = Booking::factory()->create(['reference' => 'DGTE-2026-0001', ...$state]);
+        $service = app(BookingService::class);
+
+        expect(fn () => match ($step) {
+            'approve' => $service->approve($booking, $manager),
+            'reject' => $service->reject($booking, $manager, 'No.'),
+            'cancel' => $service->cancel($booking),
+        })->toThrow(ValidationException::class, $message);
+
+        expect([$booking->fresh()?->approval_status, AuditEvent::query()->count()])->toBe([$booking->approval_status, 0]);
+    });
+})->with([
+    'approving a rejected booking' => [['approval_status' => BookingApprovalStatus::Rejected], 'approve', 'DGTE-2026-0001 is rejected, so it cannot be approved.'],
+    'rejecting an approved booking' => [['approval_status' => BookingApprovalStatus::Approved], 'reject', 'DGTE-2026-0001 is approved, so it cannot be rejected.'],
+    'cancelling an expired booking' => [['approval_status' => BookingApprovalStatus::Expired], 'cancel', 'DGTE-2026-0001 is expired, so it cannot be cancelled.'],
+    'cancelling a cancelled booking' => [['approval_status' => BookingApprovalStatus::Cancelled], 'cancel', 'DGTE-2026-0001 is cancelled, so it cannot be cancelled.'],
+]);
+
+test('a rejection needs a reason the customer can be given', function () {
+    $tenant = tenantOnDomain();
+    $manager = signedInManagerOf($tenant);
+
+    withinTenant($tenant, function () use ($manager): void {
+        $booking = Booking::factory()->create();
+
+        expect(fn () => app(BookingService::class)->reject($booking, $manager, '  '))
+            ->toThrow(ValidationException::class, 'Tell the customer why the booking is declined.');
+
+        expect($booking->fresh()?->approval_status)->toBe(BookingApprovalStatus::Pending);
+    });
+});
+
+test('a hold that ran out unpaid cannot be approved', function () {
+    $tenant = tenantOnDomain();
+    $manager = signedInManagerOf($tenant);
+
+    withinTenant($tenant, function () use ($manager): void {
+        $booking = Booking::factory()->create(['reference' => 'DGTE-2026-0001', 'expires_at' => now()->subMinute()]);
+
+        expect(fn () => app(BookingService::class)->approve($booking, $manager))
+            ->toThrow(ValidationException::class, 'The hold on DGTE-2026-0001 ran out before it was approved, so its units are being released. The customer can book again.');
+
+        expect($booking->fresh()?->approval_status)->toBe(BookingApprovalStatus::Pending);
+    });
 });
