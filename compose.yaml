@@ -16,6 +16,11 @@ x-app: &app
   environment:
     # Not app config: tells FrankenPHP to serve plain HTTP on :80 inside the container.
     SERVER_NAME: ":80"
+    # The Stripe CLI's current webhook secret, which the `stripe` service writes
+    # on every start (config/cashier.php reads it in place of
+    # STRIPE_WEBHOOK_SECRET while the file exists), so a secret the CLI changes
+    # never leaves the app refusing every event.
+    STRIPE_WEBHOOK_SECRET_FILE: /run/stripe-cli/webhook-secret
   # The source is NOT bind-mounted. On Windows a bind mount of the repo is a 9p
   # share of the C: drive, roughly 15x slower per file than the container's own
   # disk, and Laravel touches ~1,100 files per request - that alone made every
@@ -34,6 +39,8 @@ x-app: &app
     - ./storage/logs:/app/storage/logs
     # So uploaded files survive the container being recreated.
     - ./storage/app:/app/storage/app
+    # The Stripe CLI's webhook secret (read-only here; the `stripe` service writes it).
+    - stripe-cli:/run/stripe-cli:ro
   depends_on:
     mariadb:
       condition: service_healthy
@@ -101,12 +108,20 @@ services:
         condition: service_healthy
     environment:
       STRIPE_API_KEY: "${STRIPE_SECRET:-}"
+    # The CLI's signing secret is set by Stripe for the account and can change
+    # (it did, 2026-11-28, leaving every event refused with 403). So on each
+    # start the secret is saved first to the shared volume, where the app
+    # reads it (STRIPE_WEBHOOK_SECRET_FILE), and only then does forwarding begin.
+    volumes:
+      - stripe-cli:/run/stripe-cli
+    entrypoint: ["/bin/sh", "-c"]
     command:
-      - listen
-      - --forward-to
-      - http://localhost/api/stripe/webhook
-      - --events
-      - checkout.session.completed,invoice.paid,invoice.payment_failed,refund.updated,refund.failed,charge.refund.updated,payment_intent.succeeded
+      - >-
+        stripe listen --print-secret > /run/stripe-cli/webhook-secret.tmp
+        && mv /run/stripe-cli/webhook-secret.tmp /run/stripe-cli/webhook-secret
+        && exec stripe listen
+        --forward-to http://localhost/api/stripe/webhook
+        --events checkout.session.completed,invoice.paid,invoice.payment_failed,refund.updated,refund.failed,charge.refund.updated,payment_intent.succeeded
 
   # The web nodes: two by default, as on two servers; more with
   # `docker compose up --scale app=N`. They share everything that must be
@@ -247,3 +262,5 @@ services:
 volumes:
   mariadb-data:
   seaweedfs-data:
+  # Holds the Stripe CLI's current webhook secret (see the stripe service).
+  stripe-cli:

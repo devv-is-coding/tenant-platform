@@ -57,6 +57,8 @@
         <server name="MAIL_MAILER" value="array" force="true"/>
         <server name="QUEUE_CONNECTION" value="sync" force="true"/>
         <server name="TRUSTED_PROXIES" value="" force="true"/>
+        <!-- Empty, so a test run inside a container never reads the Stripe CLI's live secret. -->
+        <server name="STRIPE_WEBHOOK_SECRET_FILE" value="" force="true"/>
         <server name="SESSION_DRIVER" value="array" force="true"/>
         <server name="PULSE_ENABLED" value="false" force="true"/>
         <server name="TELESCOPE_ENABLED" value="false" force="true"/>
