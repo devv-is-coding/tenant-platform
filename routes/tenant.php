@@ -38,5 +38,6 @@ Route::middleware('tenant')->group(function () {
         Route::livewire('audit', 'pages::tenant.audit')->name('tenant.audit');
         Route::livewire('restore-requests', 'pages::tenant.restore-requests')->name('tenant.restore-requests');
         Route::livewire('billing', 'pages::tenant.billing')->name('tenant.billing');
+        Route::livewire('listing-approvals', 'pages::tenant.listing-approvals')->name('tenant.listing-approvals');
     });
 });

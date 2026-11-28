@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Role;
+use App\Models\Item;
 use App\Models\PlanChangeRequest;
 use App\Models\RestoreRequest;
 use App\Models\Tenant;
@@ -141,6 +142,22 @@ test('inside an agency, its admin also gets the team, settings, branding, billin
 })->with([
     'admin' => [Role::Admin, true],
     'manager' => [Role::Manager, false],
+    'staff' => [Role::Staff, false],
+]);
+
+test('inside an agency, its managers and admin get the approvals, with how many decisions wait on them; staff do not', function (Role $role, bool $decides) {
+    $tenant = tenantOnDomain();
+    tenancy()->initialize($tenant);
+    Item::factory()->pending()->count(2)->create();
+    Item::factory()->approved()->create();
+
+    $approvals = collect(navigationFor(User::factory()->role($role)->for($tenant)->create(), tenantContext: true))->firstWhere('label', 'Approvals');
+
+    expect($approvals === null ? null : [navigationHrefs([$approvals]), $approvals['count']])
+        ->toBe($decides ? [[route('tenant.listing-approvals')], 2] : null);
+})->with([
+    'admin' => [Role::Admin, true],
+    'manager' => [Role::Manager, true],
     'staff' => [Role::Staff, false],
 ]);
 

@@ -48,6 +48,42 @@ class ItemFactory extends Factory
     }
 
     /**
+     * Indicate that staff sent the item for approval and it is waiting.
+     */
+    public function pending(): static
+    {
+        return $this->state(fn () => [
+            'item_status' => ItemStatus::Pending,
+            'submitted_at' => now()->subDay(),
+        ]);
+    }
+
+    /**
+     * Indicate that a manager approved the item, not yet published.
+     */
+    public function approved(): static
+    {
+        return $this->state(fn () => [
+            'item_status' => ItemStatus::Approved,
+            'submitted_at' => now()->subDays(2),
+            'approved_at' => now()->subDay(),
+        ]);
+    }
+
+    /**
+     * Indicate that a manager sent the item back with a reason.
+     */
+    public function rejected(): static
+    {
+        return $this->state(fn () => [
+            'item_status' => ItemStatus::Rejected,
+            'submitted_at' => now()->subDays(2),
+            'rejected_at' => now()->subDay(),
+            'rejection_reason' => 'Add the pickup time.',
+        ]);
+    }
+
+    /**
      * Indicate that a manager approved the item and it is published.
      */
     public function published(): static

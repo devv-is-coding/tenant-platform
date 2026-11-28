@@ -34,6 +34,20 @@ enum ItemStatus: int
     }
 
     /**
+     * Get the Flux badge color the status is shown in.
+     */
+    public function color(): string
+    {
+        return match ($this) {
+            self::Draft => 'zinc',
+            self::Pending => 'amber',
+            self::Approved => 'blue',
+            self::Rejected => 'red',
+            self::Published => 'green',
+        };
+    }
+
+    /**
      * Determine if customers may see a listing in this status.
      *
      * Only published listings are visible. Every customer-facing query must
