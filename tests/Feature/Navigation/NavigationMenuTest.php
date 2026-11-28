@@ -1,6 +1,9 @@
 <?php
 
 use App\Enums\Role;
+use App\Models\PlanChangeRequest;
+use App\Models\RestoreRequest;
+use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Navigation\NavigationMenu;
 
@@ -37,15 +40,32 @@ function navigationFor(?User $user, bool $tenantContext = false): array
     return app(NavigationMenu::class)->for($user, $tenantContext);
 }
 
-test('super admins open on their dashboard, a top-level link ahead of the platform menu, with no console link left', function () {
+test('super admins get every daily destination on the top bar: dashboard, agencies, billing, requests and the audit log', function () {
     $sections = navigationFor(User::factory()->superAdmin()->create());
 
-    expect($sections[0]['label'])->toBe('Dashboard')
+    expect(collect($sections)->pluck('label')->all())->toBe(['Dashboard', 'Agencies', 'Billing', 'Requests', 'Audit log', 'Settings'])
         ->and($sections[0]['href'])->toBe(route('admin.dashboard'))
-        ->and($sections[0]['groups'])->toBe([])
-        ->and(collect($sections)->flatMap(fn (array $section): array => $section['groups'])->flatMap(fn (array $group): array => $group['links'])->pluck('label')->all())
-        ->toContain('Audit log')
-        ->not->toContain('Console');
+        ->and($sections[4]['href'])->toBe(route('admin.audit.index'));
+});
+
+test('requests show how many plan and restore requests are waiting, and no count when none are', function () {
+    $superAdmin = User::factory()->superAdmin()->create();
+    $requestsCount = fn (): ?int => collect(navigationFor($superAdmin))->firstWhere('label', 'Requests')['count'];
+    $none = $requestsCount();
+    PlanChangeRequest::factory()->create();
+    RestoreRequest::factory()->count(2)->create();
+    RestoreRequest::factory()->declined()->create();
+
+    expect([$none, $requestsCount()])->toBe([0, 3]);
+});
+
+test('agencies stay marked current on an agency\'s own page, which no link points at', function () {
+    $tenant = Tenant::factory()->create();
+    get(route('admin.tenants.show', $tenant));
+
+    $agencies = collect(navigationFor(User::factory()->superAdmin()->create()))->firstWhere('label', 'Agencies');
+
+    expect($agencies['current'])->toBeTrue();
 });
 
 test('super admins get the dashboard, audit log, agency directory, onboarding, restore and plan requests, plans and overdue invoices, not the customer dashboard', function () {

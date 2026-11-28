@@ -8,23 +8,37 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+The passport identity (2026-11-28, DESIGN.md): the platform reads like a travel
+document an inspector trusts. Passport-cover maroon owns the top bar, a
+guilloche security band sits under it, titles are navy serif over a workhorse
+sans with tabular figures, and every agency's standing is an entry stamp.
+*/
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-serif: 'Source Serif 4', ui-serif, Georgia, serif;
 
-    --color-zinc-50: #fafafa;
-    --color-zinc-100: #f5f5f5;
-    --color-zinc-200: #e5e5e5;
-    --color-zinc-300: #d4d4d4;
-    --color-zinc-400: #a3a3a3;
-    --color-zinc-500: #737373;
-    --color-zinc-600: #525252;
-    --color-zinc-700: #404040;
-    --color-zinc-800: #262626;
-    --color-zinc-900: #171717;
-    --color-zinc-950: #0a0a0a;
+    /*
+    Neutrals tinted toward the passport's navy, so every Flux component that
+    reaches for zinc wears the identity without a per-page change.
+    */
+    --color-zinc-50: #f7f8fa;
+    --color-zinc-100: #eef0f4;
+    --color-zinc-200: #dde1e8;
+    --color-zinc-300: #c4cad5;
+    --color-zinc-400: #959caf;
+    --color-zinc-500: #646b80;
+    --color-zinc-600: #4b5165;
+    --color-zinc-700: #353b4f;
+    --color-zinc-800: #222939;
+    --color-zinc-900: #161c2b;
+    --color-zinc-950: #0d1220;
 
-    --color-accent: var(--color-neutral-800);
-    --color-accent-content: var(--color-neutral-800);
+    /* One step darker than Tailwind's, so amber badge text passes AA (4.5:1) on its own tint. */
+    --color-amber-700: #9a4100;
+
+    --color-accent: var(--color-ink);
+    --color-accent-content: var(--color-ink);
     --color-accent-foreground: var(--color-white);
 
     /*
@@ -47,30 +61,70 @@
     --container-layout: 115rem;
 
     /*
-    The typography scale. Heading line heights tighten as the size grows, which
-    the scale does not specify but large type needs to stay readable.
+    The working console's type scale (replacing the 56/48/32 px marketing
+    scale). Titles are serif, read at a desk for long stretches; body copy is
+    15px at 1.6.
     */
-    --text-body: 1.0625rem; /* 17px */
-    --text-body--line-height: 2; /* loose */
+    --text-body: 0.9375rem; /* 15px */
+    --text-body--line-height: 1.6;
 
-    --text-h1: 3.5rem; /* 56px */
-    --text-h1--line-height: 1.1;
+    --text-h1: 1.875rem; /* 30px */
+    --text-h1--line-height: 1.2;
 
-    --text-h2: 3rem; /* 48px */
-    --text-h2--line-height: 1.15;
+    --text-h2: 1.125rem; /* 18px */
+    --text-h2--line-height: 1.35;
 
-    --text-h3: 2rem; /* 32px */
-    --text-h3--line-height: 1.25;
+    --text-h3: 1rem; /* 16px */
+    --text-h3--line-height: 1.4;
 
-    --text-h4: 1.25rem; /* 20px */
-    --text-h4--line-height: 1.4;
+    --text-h4: 0.9375rem; /* 15px */
+    --text-h4--line-height: 1.45;
+}
+
+/*
+The document's own colours. Static, because several are only read through
+var() (the stamp inks, the band's mint and peach), and Tailwind leaves out any
+theme variable no utility class uses.
+*/
+@theme static {
+    --color-passport: #5b1626;
+    --color-passport-deep: #44101c;
+    --color-ink: #1d2b4f;
+    --color-ground: #fbfbf9;
+    --color-mint: #e3f1e8;
+    --color-peach: #f7e4da;
+
+    /* The logo tile's paper and seal: the same in both themes. */
+    --color-paper: #fbfbf9;
+    --color-seal: #5b1626;
+
+    /* Stamp inks: one per agency status, used for status and nothing else. */
+    --color-stamp-active: #1f7a4d;
+    --color-stamp-pending: #9a5b00;
+    --color-stamp-paused: #1d5b94;
+    --color-stamp-suspended: #b3261e;
+    --color-stamp-closed: #5d6377;
+    --color-stamp-setting-up: #4b3a8c;
 }
 
 @layer theme {
     .dark {
-        --color-accent: var(--color-white);
-        --color-accent-content: var(--color-white);
-        --color-accent-foreground: var(--color-neutral-800);
+        --color-ground: #0f1424;
+        --color-mint: #16302a;
+        --color-peach: #35201f;
+        --color-passport: #4a1220;
+        --color-passport-deep: #380d18;
+
+        --color-stamp-active: #5fc492;
+        --color-stamp-pending: #e3a64a;
+        --color-stamp-paused: #78aee6;
+        --color-stamp-suspended: #f07b70;
+        --color-stamp-closed: #a3a9bb;
+        --color-stamp-setting-up: #b3a5ee;
+
+        --color-accent: #dfe5f5;
+        --color-accent-content: #dfe5f5;
+        --color-accent-foreground: var(--color-ink);
     }
 }
 
@@ -96,13 +150,25 @@ Only a flux:heading with a level renders a real h1-h4; without one it renders
 a div and keeps Flux's own size.
 */
 h1 {
+    font-family: var(--font-serif);
+    font-weight: 600;
     font-size: var(--text-h1);
     line-height: var(--text-h1--line-height);
+    letter-spacing: -0.01em;
+    text-wrap: balance;
 }
 
 h2 {
+    font-family: var(--font-serif);
+    font-weight: 600;
     font-size: var(--text-h2);
     line-height: var(--text-h2--line-height);
+    text-wrap: balance;
+}
+
+/* Navy titles on paper; the dark theme keeps Flux's own light heading. */
+:where(html:not(.dark)) :is(h1, h2)[data-flux-heading] {
+    color: var(--color-ink);
 }
 
 h3 {
@@ -125,6 +191,147 @@ Flux's bracketed default.
 p:not(.text-xs):not(.text-sm):not(.text-base):not(.text-lg):not(.text-xl) {
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
+    text-wrap: pretty;
+}
+
+/*
+Browser surfaces carry the identity too: figures line up everywhere, and the
+selection, caret, form accents, placeholders and scrollbars take the palette
+instead of the browser's defaults.
+*/
+body {
+    font-variant-numeric: tabular-nums;
+    caret-color: var(--color-ink);
+    accent-color: var(--color-ink);
+    scrollbar-color: var(--color-zinc-300) transparent;
+}
+
+.dark body {
+    caret-color: var(--color-accent);
+    accent-color: var(--color-accent);
+    scrollbar-color: var(--color-zinc-600) transparent;
+}
+
+::selection {
+    background-color: var(--color-mint);
+    color: var(--color-ink);
+}
+
+.dark ::selection {
+    color: var(--color-white);
+}
+
+/* Flux's placeholder grey falls under AA; one step darker passes 4.5:1. */
+[data-flux-control]::placeholder {
+    color: var(--color-zinc-500);
+}
+
+.dark [data-flux-control]::placeholder {
+    color: var(--color-zinc-400);
+}
+
+/*
+The security band under the top bar: fine interference rings, as printed on a
+passport's visa pages, over a mint-to-peach ground, captioned with whose
+document this is (data-band on x-app-chrome). It is drawn inside the bar's own
+box, a strip its bottom padding reserves, so it stays with the sticky bar and
+never overlaps a page's content, in the app shell's Flux grid or on a public
+page alike. Its left edge follows the page content's.
+*/
+/* Flux makes the bar sticky from Alpine; relative anchors the band until then. */
+[data-passport-bar] {
+    position: relative;
+    padding-bottom: 1.75rem;
+}
+
+[data-passport-bar]::after {
+    content: attr(data-band);
+    position: absolute;
+    inset: auto 0 0;
+    height: 1.75rem;
+    display: flex;
+    align-items: center;
+    padding-inline: max(var(--spacing-gutter), calc((100% - var(--container-layout)) / 2 + var(--spacing-gutter)));
+    border-bottom: 1px solid var(--color-zinc-200);
+    color: var(--color-ink);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+@media (width >= 64rem) {
+    [data-passport-bar]::after {
+        padding-inline: max(var(--spacing-gutter-lg), calc((100% - var(--container-layout)) / 2 + var(--spacing-gutter-lg)));
+    }
+}
+
+.dark [data-passport-bar]::after {
+    border-bottom-color: var(--color-zinc-700);
+    color: var(--color-zinc-200);
+}
+
+.dark [data-passport-bar]::after {
+    border-bottom-color: var(--color-zinc-700);
+}
+
+[data-passport-bar]::after,
+.passport-band {
+    background-image:
+        repeating-radial-gradient(circle at 18% 140%, transparent 0 7px, rgb(29 43 79 / 0.09) 7px 8px),
+        repeating-radial-gradient(circle at 82% -40%, transparent 0 9px, rgb(91 22 38 / 0.08) 9px 10px),
+        linear-gradient(90deg, var(--color-mint), var(--color-peach));
+}
+
+.dark [data-passport-bar]::after,
+.dark .passport-band {
+    background-image:
+        repeating-radial-gradient(circle at 18% 140%, transparent 0 7px, rgb(223 229 245 / 0.07) 7px 8px),
+        repeating-radial-gradient(circle at 82% -40%, transparent 0 9px, rgb(240 123 112 / 0.06) 9px 10px),
+        linear-gradient(90deg, var(--color-mint), var(--color-peach));
+}
+
+/*
+The entry stamp: an agency's standing, inked like an immigration stamp. Double
+rule, a slight turn, the status in capitals and the date beneath. Colour comes
+from the status's own ink (x-entry-stamp sets it).
+*/
+.entry-stamp {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.0625rem;
+    padding: 0.125rem 0.5rem;
+    border: 3px double currentColor;
+    border-radius: 0.375rem;
+    color: var(--stamp-ink, var(--color-stamp-closed));
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    line-height: 1.2;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transform: rotate(-3deg);
+}
+
+.entry-stamp small {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .entry-stamp {
+        transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    tr:hover .entry-stamp {
+        transform: rotate(-1deg);
+    }
 }
 
 [data-flux-field]:not(ui-radio, ui-checkbox) {
@@ -217,6 +424,46 @@ content beneath it.
 /* flux:navbar.item ships no focus style, leaving keyboard users without one. */
 [data-flux-navbar-items]:focus-visible {
     @apply outline-2 outline-offset-2 outline-accent-content;
+}
+
+/*
+The passport cover (x-app-chrome): Flux's header parts are written for a light
+or dark neutral bar, so on maroon they are re-inked here, unlayered so they win
+over Flux's utilities. Only the bar's own row is touched; its dropdown panels
+open in the top layer and keep their normal colours.
+*/
+[data-passport-bar] [data-flux-brand] > div:last-child,
+[data-passport-bar] [data-flux-profile],
+[data-passport-bar] [data-flux-profile] > span {
+    color: var(--color-white);
+}
+
+[data-passport-bar] [data-flux-navbar-items],
+[data-passport-bar] [data-flux-sidebar-toggle],
+[data-passport-bar] [data-flux-profile] [data-flux-icon] {
+    color: rgb(255 255 255 / 0.78);
+}
+
+[data-passport-bar] [data-flux-navbar-items]:hover,
+[data-passport-bar] [data-flux-navbar-items][data-current],
+[data-passport-bar] [data-flux-navbar-items][data-open],
+[data-passport-bar] [data-flux-profile]:hover {
+    color: var(--color-white);
+    background-color: rgb(255 255 255 / 0.1);
+}
+
+[data-passport-bar] [data-flux-navbar-items][data-current]::after {
+    background-color: var(--color-white);
+}
+
+[data-passport-bar] [data-flux-navbar-items]:focus-visible {
+    outline-color: var(--color-white);
+}
+
+/* The count beside a navigation link: a white pill on the maroon cover. */
+[data-passport-bar] [data-nav-count] {
+    background-color: var(--color-white);
+    color: var(--color-passport);
 }
 
 /* \[:where(&)\]:size-4 {

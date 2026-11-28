@@ -40,7 +40,7 @@ test('panel rows render a description beneath the label', function () {
         ->get(route('admin.dashboard'))
         ->assertOk()
         ->assertSee(__('Onboard an agency'))
-        ->assertSee(__('Create a tenant and its first admin.'));
+        ->assertSee(__('Create an agency and its first admin.'));
 });
 
 test('the active page is marked for assistive technology, not only visually', function () {

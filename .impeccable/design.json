@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-28T00:00:00Z",
+  "title": "Design System: DevvStack",
+  "extensions": {
+    "colorMeta": {
+      "passport": { "role": "primary", "displayName": "Passport Maroon", "canonical": "#5b1626", "tonalRamp": ["#2a0a12", "#44101c", "#5b1626", "#7a2a3c", "#9c4d5e", "#c08390", "#dfb9c1", "#f4e3e7"] },
+      "ink": { "role": "primary", "displayName": "Intaglio Navy", "canonical": "#1d2b4f", "tonalRamp": ["#0d1220", "#161c2b", "#1d2b4f", "#34446d", "#57668d", "#8692b0", "#b8c0d4", "#e3e7f0"] },
+      "mint": { "role": "secondary", "displayName": "Security Mint", "canonical": "#e3f1e8", "tonalRamp": ["#16302a", "#25493f", "#3d6b5c", "#5e917f", "#8db8a6", "#b9d8ca", "#e3f1e8", "#f3faf6"] },
+      "peach": { "role": "secondary", "displayName": "Security Peach", "canonical": "#f7e4da", "tonalRamp": ["#35201f", "#563530", "#7a5146", "#a17565", "#c69d8b", "#e3c4b5", "#f7e4da", "#fdf4ef"] },
+      "stamp-active": { "role": "tertiary", "displayName": "Active Ink", "canonical": "#1f7a4d" },
+      "stamp-pending": { "role": "tertiary", "displayName": "Pending Ink", "canonical": "#9a5b00" },
+      "stamp-paused": { "role": "tertiary", "displayName": "Paused Ink", "canonical": "#1d5b94" },
+      "stamp-suspended": { "role": "tertiary", "displayName": "Suspended Ink", "canonical": "#b3261e" },
+      "stamp-closed": { "role": "tertiary", "displayName": "Closed Ink", "canonical": "#5d6377" },
+      "stamp-setting-up": { "role": "tertiary", "displayName": "Setting-up Ink", "canonical": "#4b3a8c" },
+      "ground": { "role": "neutral", "displayName": "Paper", "canonical": "#fbfbf9" }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Page titles (h1), navy serif." },
+      "title": { "displayName": "Title", "purpose": "Section and card headings (h2)." },
+      "figure": { "displayName": "Figure", "purpose": "Dashboard headline figures." },
+      "body": { "displayName": "Body", "purpose": "Paragraphs and table text, tabular figures." },
+      "label": { "displayName": "Label", "purpose": "Figure labels and queue group labels, uppercase." },
+      "stamp": { "displayName": "Stamp", "purpose": "Entry stamps only." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "stamp-settle", "value": "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "An entry stamp eases from -3deg to -1deg on its row's hover; off under reduced motion." },
+      { "name": "nav-panel", "value": "0.18s cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Navigation dropdown panels rise in." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The page's main action, such as Onboard an agency.",
+      "html": "<button class=\"ds-btn-primary\">Onboard an agency</button>",
+      "css": ".ds-btn-primary { background: #1d2b4f; color: #fbfbf9; padding: 8px 16px; border: 0; border-radius: 8px; font: 600 14px Manrope, system-ui, sans-serif; transition: background 0.15s; } .ds-btn-primary:hover { background: #34446d; } .ds-btn-primary:focus-visible { outline: 2px solid #1d2b4f; outline-offset: 2px; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary moves in lists, such as Open.",
+      "html": "<button class=\"ds-btn-outline\">Open</button>",
+      "css": ".ds-btn-outline { background: #fff; color: #222939; padding: 6px 12px; border: 1px solid #dde1e8; border-radius: 8px; font: 600 13px Manrope, system-ui, sans-serif; } .ds-btn-outline:hover { border-color: #c4cad5; background: #f7f8fa; } .ds-btn-outline:focus-visible { outline: 2px solid #1d2b4f; outline-offset: 2px; }"
+    },
+    {
+      "name": "Top Bar",
+      "kind": "nav",
+      "refersTo": "top-bar",
+      "description": "The passport cover: maroon bar, top-level destinations, the captioned security band.",
+      "html": "<header class=\"ds-bar\"><nav><b>DevvStack</b><a class=\"on\">Dashboard</a><a>Agencies</a><a>Billing</a><a>Requests <span>3</span></a><a>Audit log</a></nav><div class=\"ds-band\">Platform console</div></header>",
+      "css": ".ds-bar { background: #5b1626; font: 600 14px Manrope, system-ui, sans-serif; } .ds-bar nav { display: flex; gap: 4px; align-items: center; height: 56px; padding: 0 24px; } .ds-bar b { color: #fff; margin-right: 16px; } .ds-bar a { color: rgb(255 255 255 / 0.78); padding: 6px 10px; border-radius: 6px; } .ds-bar a:hover, .ds-bar a.on { color: #fff; background: rgb(255 255 255 / 0.1); } .ds-bar a span { background: #fff; color: #5b1626; border-radius: 999px; padding: 0 6px; font-size: 12px; } .ds-band { height: 28px; display: flex; align-items: center; padding: 0 24px; color: #1d2b4f; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; background-image: repeating-radial-gradient(circle at 18% 140%, transparent 0 7px, rgb(29 43 79 / 0.09) 7px 8px), repeating-radial-gradient(circle at 82% -40%, transparent 0 9px, rgb(91 22 38 / 0.08) 9px 10px), linear-gradient(90deg, #e3f1e8, #f7e4da); border-bottom: 1px solid #dde1e8; }"
+    },
+    {
+      "name": "Entry Stamp",
+      "kind": "custom",
+      "refersTo": "entry-stamp",
+      "description": "An agency's standing, inked like an immigration stamp, dated.",
+      "html": "<span class=\"ds-stamp\">Active<small>Since Nov 27</small></span>",
+      "css": ".ds-stamp { display: inline-flex; flex-direction: column; align-items: center; padding: 2px 8px; border: 3px double #1f7a4d; border-radius: 6px; color: #1f7a4d; font: 800 11px/1.2 Manrope, system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; transform: rotate(-3deg); transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1); } .ds-stamp:hover { transform: rotate(-1deg); } .ds-stamp small { font-size: 10px; font-weight: 600; letter-spacing: 0.03em; text-transform: none; }"
+    },
+    {
+      "name": "Attention Row",
+      "kind": "custom",
+      "refersTo": "attention-row",
+      "description": "One item waiting on a decision, with the button to where it is decided.",
+      "html": "<div class=\"ds-attn\"><small>Setup failed</small><div><span><b>Bayawan Getaways</b><em>Connection refused while migrating</em></span><button>Retry setup</button></div></div>",
+      "css": ".ds-attn { padding: 12px 20px; border-top: 1px solid #dde1e8; font: 14px Manrope, system-ui, sans-serif; color: #222939; } .ds-attn small { display: block; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.025em; color: #646b80; } .ds-attn > div { display: flex; justify-content: space-between; align-items: center; gap: 16px; } .ds-attn b { display: block; } .ds-attn em { font-style: normal; font-size: 13px; color: #646b80; } .ds-attn button { background: #1d2b4f; color: #fff; border: 0; border-radius: 8px; padding: 6px 12px; font-weight: 600; }"
+    },
+    {
+      "name": "Figure Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "A dashboard headline figure.",
+      "html": "<div class=\"ds-figure\"><small>Overdue</small><strong>₱9,600.00</strong><span>4 overdue invoices</span></div>",
+      "css": ".ds-figure { background: #fff; border: 1px solid #dde1e8; border-radius: 12px; padding: 20px; font-family: Manrope, system-ui, sans-serif; font-variant-numeric: tabular-nums; } .ds-figure small { display: block; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.025em; color: #646b80; } .ds-figure strong { display: block; margin-top: 8px; font-size: 30px; font-weight: 700; color: #b3261e; } .ds-figure span { font-size: 13px; color: #646b80; } .ds-figure:hover { border-color: #c4cad5; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Inspector's Passport",
+    "overview": "Every DevvStack console reads like a travel document an inspector trusts. The cover is passport maroon and owns the top bar; under it runs a security band of fine interference rings, captioned with whose document this is (the platform console, or the agency's own name). Pages are plain paper with navy serif titles. The one signature move is the entry stamp: every agency's standing is inked like an immigration stamp, dated, in its status's own colour. Everything else stays quiet, because these are working screens read at a desk for long stretches.\n\nThe world lends type, palette, density and the stamp; it never supplies layout, navigation or controls, which stay the standard Flux components every operator already knows. Light and dark themes are both first-class: in dark, the paper turns night navy, the band dims, and the inks brighten to stay legible.",
+    "keyCharacteristics": [
+      "Passport-maroon top bar with a captioned guilloche security band, on every console.",
+      "Navy serif titles over a workhorse sans with tabular figures everywhere.",
+      "Status shown only as dated entry stamps in six inks; colour is otherwise rare.",
+      "Neutrals tinted toward the passport's navy, so every Flux part wears the identity.",
+      "Every daily destination on the top bar; counts shown beside what waits."
+    ],
+    "rules": [
+      { "name": "The Ink Means Status Rule", "body": "A stamp ink appears only where it states an agency's standing (or overdue money in red). Nothing decorative is green, amber, blue, red or violet.", "section": "colors" },
+      { "name": "The One Cover Rule", "body": "Maroon covers the top bar and the logo seal. It never fills a button, a card or a badge.", "section": "colors" },
+      { "name": "The Tabular Figures Rule", "body": "Every number lines up: the body sets tabular-nums, so money and counts align in every table and figure.", "section": "typography" },
+      { "name": "The Working Scale Rule", "body": "Consoles use the scale above. The old 56/48/32px marketing scale is retired; public pages get their own treatment.", "section": "typography" },
+      { "name": "The Paper Stays Flat Rule", "body": "Depth is a border, never a shadow. A raised card is a mistake.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do show every agency status as an entry stamp, never a plain badge.",
+      "Do keep colour for meaning: stamp inks for status, red for overdue money, navy for the primary action.",
+      "Do set titles in Source Serif 4 and everything else in Manrope with tabular figures.",
+      "Do check both themes: every ink and placeholder must pass AA (4.5:1) in light and dark.",
+      "Do caption the band with whose console it is (the platform, or the agency's name)."
+    ],
+    "donts": [
+      "Don't fill buttons, cards or badges with passport maroon.",
+      "Don't add shadows for depth; use a hairline border.",
+      "Don't rotate or stamp anything except an agency's standing.",
+      "Don't bring back the 56/48px headline scale inside a console."
+    ]
+  }
+}

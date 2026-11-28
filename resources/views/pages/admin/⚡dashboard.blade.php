@@ -41,6 +41,11 @@ new #[Title('Dashboard')] class extends Component {
     private const LIST_LIMIT = 5;
 
     /**
+     * Rows in the dashboard's agencies table, newest first.
+     */
+    private const ROSTER_LIMIT = 6;
+
+    /**
      * How many recent audit events are shown.
      */
     private const ACTIVITY_LIMIT = 8;
@@ -76,6 +81,29 @@ new #[Title('Dashboard')] class extends Component {
         return collect(TenantStatus::cases())
             ->mapWithKeys(fn (TenantStatus $status): array => [$status->value => (int) ($counts[$status->value] ?? 0)])
             ->all();
+    }
+
+    /**
+     * Get the newest agencies for the dashboard's table, each with its live
+     * plan and what it still owes, the balance summed in the same query.
+     *
+     * @return Collection<int, Tenant>
+     */
+    #[Computed]
+    public function agencyRoster(): Collection
+    {
+        $this->authorize('viewAny', Tenant::class);
+
+        return Tenant::query()
+            ->select('tenants.*')
+            ->addSelect(['owed_minor' => SubscriptionInvoice::query()
+                ->selectRaw('COALESCE(SUM(amount_minor - amount_paid_minor), 0)')
+                ->whereColumn('subscription_invoices.tenant_id', 'tenants.id')
+                ->whereIn('status', [SubscriptionInvoiceStatus::Open, SubscriptionInvoiceStatus::PartiallyPaid])])
+            ->with(['liveSubscription', 'domains'])
+            ->latest('created_at')
+            ->limit(self::ROSTER_LIMIT)
+            ->get();
     }
 
     #[Computed]
@@ -443,46 +471,139 @@ new #[Title('Dashboard')] class extends Component {
     @else
         {{-- Headline figures --}}
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <a href="{{ route('admin.tenants.index') }}" wire:navigate class="block">
-                <flux:card class="h-full transition hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-                    <flux:text>{{ __('Agencies') }}</flux:text>
-                    <flux:heading size="xl" class="mt-2">{{ $this->totalAgencies }}</flux:heading>
+            <a href="{{ route('admin.tenants.index') }}" wire:navigate class="block rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-content">
+                <flux:card class="h-full transition hover:border-zinc-300 dark:hover:border-zinc-600">
+                    <flux:text size="sm" class="font-semibold uppercase tracking-wide">{{ __('Agencies') }}</flux:text>
+                    <div class="mt-2 text-3xl font-bold text-ink tabular-nums dark:text-white">{{ $this->totalAgencies }}</div>
                     <flux:text size="sm" class="mt-1">{{ __(':count active', ['count' => $this->agencyCounts[TenantStatus::Active->value]]) }}</flux:text>
                 </flux:card>
             </a>
 
-            <a href="{{ route('admin.invoices.overdue') }}" wire:navigate class="block">
-                <flux:card class="h-full transition hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-                    <flux:text>{{ __('Overdue') }}</flux:text>
-                    <flux:heading size="xl" class="mt-2">{{ $this->overdueOwed->format() }}</flux:heading>
+            <a href="{{ route('admin.invoices.overdue') }}" wire:navigate class="block rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-content">
+                <flux:card class="h-full transition hover:border-zinc-300 dark:hover:border-zinc-600">
+                    <flux:text size="sm" class="font-semibold uppercase tracking-wide">{{ __('Overdue') }}</flux:text>
+                    <div @class([
+                        'mt-2 text-3xl font-bold tabular-nums',
+                        'text-stamp-suspended' => $this->overdueInvoiceCount > 0,
+                        'text-ink dark:text-white' => $this->overdueInvoiceCount === 0,
+                    ])>{{ $this->overdueOwed->format() }}</div>
                     <flux:text size="sm" class="mt-1">{{ trans_choice(':count overdue invoice|:count overdue invoices', $this->overdueInvoiceCount) }}</flux:text>
                 </flux:card>
             </a>
 
             <flux:card>
-                <flux:text>{{ __('Still owed') }}</flux:text>
-                <flux:heading size="xl" class="mt-2">{{ $this->outstandingOwed->format() }}</flux:heading>
+                <flux:text size="sm" class="font-semibold uppercase tracking-wide">{{ __('Still owed') }}</flux:text>
+                <div class="mt-2 text-3xl font-bold text-ink tabular-nums dark:text-white">{{ $this->outstandingOwed->format() }}</div>
                 <flux:text size="sm" class="mt-1">{{ __('On every unsettled invoice') }}</flux:text>
             </flux:card>
 
             <flux:card>
-                <flux:text>{{ __('Received this month') }}</flux:text>
-                <flux:heading size="xl" class="mt-2">{{ $this->receivedThisMonth->format() }}</flux:heading>
+                <flux:text size="sm" class="font-semibold uppercase tracking-wide">{{ __('Received this month') }}</flux:text>
+                <div class="mt-2 text-3xl font-bold text-ink tabular-nums dark:text-white">{{ $this->receivedThisMonth->format() }}</div>
                 <flux:text size="sm" class="mt-1">{{ now()->format('F Y') }}</flux:text>
             </flux:card>
         </div>
 
+        <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+            {{-- The agencies, each with its entry stamp --}}
+            <flux:card class="flex flex-col gap-2 p-0!">
+                <div class="flex items-baseline justify-between gap-4 border-b border-zinc-200 px-5 py-4 dark:border-zinc-700">
+                    <flux:heading size="lg" level="2">{{ __('Agencies') }}</flux:heading>
+                    <flux:link :href="route('admin.tenants.index')" variant="subtle" class="text-sm font-semibold" wire:navigate>{{ __('All agencies') }}</flux:link>
+                </div>
+
+                <flux:table class="[&_td:first-child]:ps-5! [&_td:last-child]:pe-5! [&_th:first-child]:ps-5! [&_th:last-child]:pe-5!">
+                    <flux:table.columns>
+                        <flux:table.column>{{ __('Agency') }}</flux:table.column>
+                        <flux:table.column>{{ __('Standing') }}</flux:table.column>
+                        <flux:table.column class="max-sm:hidden">{{ __('Plan') }}</flux:table.column>
+                        <flux:table.column align="end">{{ __('Owed') }}</flux:table.column>
+                    </flux:table.columns>
+
+                    <flux:table.rows>
+                        @foreach ($this->agencyRoster as $agency)
+                            @php($plan = $agency->liveSubscription)
+                            <flux:table.row :key="'roster-'.$agency->id">
+                                <flux:table.cell>
+                                    <flux:link :href="route('admin.tenants.show', $agency)" variant="ghost" class="font-semibold" wire:navigate>{{ $agency->name ?? $agency->id }}</flux:link>
+                                    <flux:text size="sm">{{ $agency->domains->first()?->domain ?? $agency->id }}</flux:text>
+                                </flux:table.cell>
+                                <flux:table.cell>
+                                    <x-entry-stamp :status="$agency->status" :date="$agency->status_changed_at ?? $agency->created_at" />
+                                </flux:table.cell>
+                                <flux:table.cell class="max-sm:hidden">
+                                    @if ($plan)
+                                        {{ $plan->plan_name }}
+                                    @else
+                                        <flux:text size="sm">{{ __('No plan') }}</flux:text>
+                                    @endif
+                                </flux:table.cell>
+                                <flux:table.cell align="end" class="font-semibold tabular-nums">
+                                    {{ Money::ofMinor((int) $agency->getAttribute('owed_minor'), config('tenancy.billing_currency'))->format() }}
+                                </flux:table.cell>
+                            </flux:table.row>
+                        @endforeach
+                    </flux:table.rows>
+                </flux:table>
+            </flux:card>
+
+            {{-- Needs attention: every row names what is waiting and where it is decided --}}
+            <flux:card class="flex flex-col p-0!">
+                <div class="border-b border-zinc-200 px-5 py-4 dark:border-zinc-700">
+                    <flux:heading size="lg" level="2">{{ __('Needs attention') }}</flux:heading>
+                </div>
+
+                @php($pending = $this->pendingAgencies)
+                @php($suspended = $this->suspendedAgencies)
+                @php($failedSetups = $this->failedSetups)
+
+                <div class="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-700">
+                    @if ($pending->isEmpty() && $suspended->isEmpty() && $failedSetups->isEmpty() && $this->pastDueSubscriptions->isEmpty() && $this->agenciesWithoutAdmin->isEmpty() && $this->pendingRestoreRequests === 0 && $this->pendingPlanRequests === 0)
+                        <flux:text class="px-5 py-6">{{ __('Nothing needs a decision right now.') }}</flux:text>
+                    @endif
+
+                    @if ($this->pendingPlanRequests > 0)
+                        <x-attention-row :heading="__('Plan requests')" :title="trans_choice(':count request waiting|:count requests waiting', $this->pendingPlanRequests)" :href="route('admin.plan-requests.index')" :action="__('Decide')" primary />
+                    @endif
+
+                    @if ($this->pendingRestoreRequests > 0)
+                        <x-attention-row :heading="__('Restore requests')" :title="trans_choice(':count request waiting|:count requests waiting', $this->pendingRestoreRequests)" :href="route('admin.restore-requests.index')" :action="__('Decide')" primary />
+                    @endif
+
+                    @foreach ($failedSetups as $agency)
+                        <x-attention-row :heading="$loop->first ? __('Setup failed') : null" :title="$agency->name ?? $agency->id" :detail="$agency->status_reason" :href="route('admin.tenants.show', $agency)" :action="__('Retry setup')" primary />
+                    @endforeach
+
+                    @foreach ($pending as $agency)
+                        <x-attention-row :heading="$loop->first ? __('Waiting to be activated') : null" :title="$agency->name ?? $agency->id" :href="route('admin.tenants.show', $agency)" :action="__('Open')" />
+                    @endforeach
+
+                    @foreach ($this->pastDueSubscriptions as $subscription)
+                        <x-attention-row :heading="$loop->first ? __('Subscription past due') : null" :title="($subscription->tenant?->name ?? $subscription->tenant_id).' · '.$subscription->plan_name" :href="route('admin.tenants.show', $subscription->tenant_id)" :action="__('Open')" />
+                    @endforeach
+
+                    @foreach ($suspended as $agency)
+                        <x-attention-row :heading="$loop->first ? __('Suspended') : null" :title="$agency->name ?? $agency->id" :detail="$agency->status_reason" :href="route('admin.tenants.show', $agency)" :action="__('Open')" />
+                    @endforeach
+
+                    @foreach ($this->agenciesWithoutAdmin->take(5) as $agency)
+                        <x-attention-row :heading="$loop->first ? __('No active admin') : null" :title="$agency->name ?? $agency->id" :href="route('admin.tenants.show', $agency)" :action="__('Assign')" />
+                    @endforeach
+                </div>
+            </flux:card>
+        </div>
+
         <div class="grid gap-6 lg:grid-cols-3">
-            {{-- Agencies by status --}}
+            {{-- Agencies by status, each in its stamp --}}
             <flux:card class="flex flex-col gap-4">
                 <flux:heading size="lg" level="2">{{ __('Agencies by status') }}</flux:heading>
 
                 <ul class="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-700">
                     @foreach (TenantStatus::cases() as $status)
                         <li>
-                            <a href="{{ route('admin.tenants.index', ['status' => $status->value]) }}" wire:navigate class="flex items-center justify-between gap-3 py-2 hover:underline">
-                                <flux:badge :color="$status->color()" size="sm">{{ $status->label() }}</flux:badge>
-                                <span class="font-medium tabular-nums">{{ $this->agencyCounts[$status->value] }}</span>
+                            <a href="{{ route('admin.tenants.index', ['status' => $status->value]) }}" wire:navigate class="flex items-center justify-between gap-3 py-2.5 hover:underline">
+                                <x-entry-stamp :status="$status" />
+                                <span class="font-semibold tabular-nums">{{ $this->agencyCounts[$status->value] }}</span>
                             </a>
                         </li>
                     @endforeach
@@ -498,13 +619,13 @@ new #[Title('Dashboard')] class extends Component {
                         @php($subscriptionStatus = SubscriptionStatus::from($statusValue))
                         <li class="flex items-center justify-between gap-3 py-2">
                             <flux:badge :color="$subscriptionStatus->color()" size="sm">{{ $subscriptionStatus->label() }}</flux:badge>
-                            <span class="font-medium tabular-nums">{{ $count }}</span>
+                            <span class="font-semibold tabular-nums">{{ $count }}</span>
                         </li>
                     @endforeach
 
                     <li class="flex items-center justify-between gap-3 py-2">
                         <flux:text>{{ __('Agencies with no plan') }}</flux:text>
-                        <span class="font-medium tabular-nums">{{ $this->agenciesWithoutSubscription }}</span>
+                        <span class="font-semibold tabular-nums">{{ $this->agenciesWithoutSubscription }}</span>
                     </li>
                 </ul>
 
@@ -541,7 +662,7 @@ new #[Title('Dashboard')] class extends Component {
                         <li class="flex items-center justify-between gap-3 py-2">
                             <flux:text>{{ $group['label'] }}</flux:text>
                             <span class="text-end">
-                                <span class="font-medium tabular-nums">{{ $group['active'] }}</span>
+                                <span class="font-semibold tabular-nums">{{ $group['active'] }}</span>
                                 @if ($group['deactivated'] > 0)
                                     <flux:text size="sm" class="inline">{{ __('+ :count deactivated', ['count' => $group['deactivated']]) }}</flux:text>
                                 @endif
@@ -553,130 +674,42 @@ new #[Title('Dashboard')] class extends Component {
         </div>
 
         <div class="grid gap-6 lg:grid-cols-2">
-            {{-- Needs attention --}}
+            {{-- Upcoming renewals --}}
             <flux:card class="flex flex-col gap-4">
-                <flux:heading size="lg" level="2">{{ __('Needs attention') }}</flux:heading>
+                <flux:heading size="lg" level="2">{{ __('Renewing in the next 7 days') }}</flux:heading>
 
-                @php($pending = $this->pendingAgencies)
-                @php($suspended = $this->suspendedAgencies)
-                @php($failedSetups = $this->failedSetups)
-
-                @if ($pending->isEmpty() && $suspended->isEmpty() && $failedSetups->isEmpty() && $this->pastDueSubscriptions->isEmpty() && $this->agenciesWithoutAdmin->isEmpty() && $this->pendingRestoreRequests === 0 && $this->pendingPlanRequests === 0)
-                    <flux:text>{{ __('Nothing needs a decision right now.') }}</flux:text>
-                @endif
-
-                @if ($this->pendingPlanRequests > 0)
-                    <div>
-                        <flux:text size="sm" class="mb-1">{{ __('Plan requests') }}</flux:text>
-                        <flux:link :href="route('admin.plan-requests.index')" class="block py-1" wire:navigate>
-                            {{ trans_choice(':count request waiting|:count requests waiting', $this->pendingPlanRequests) }}
-                        </flux:link>
+                @forelse ($this->upcomingRenewals as $subscription)
+                    <div class="flex items-center justify-between gap-3">
+                        <flux:link :href="route('admin.tenants.show', $subscription->tenant_id)" wire:navigate>{{ $subscription->tenant?->name ?? $subscription->tenant_id }}</flux:link>
+                        <flux:text size="sm" class="text-end tabular-nums">
+                            {{ Money::ofMinor($subscription->amount_minor, $subscription->currency)->format() }}
+                            · {{ $subscription->next_billing_on?->toFormattedDateString() }}
+                        </flux:text>
                     </div>
-                @endif
-
-                @if ($this->pendingRestoreRequests > 0)
-                    <div>
-                        <flux:text size="sm" class="mb-1">{{ __('Restore requests') }}</flux:text>
-                        <flux:link :href="route('admin.restore-requests.index')" class="block py-1" wire:navigate>
-                            {{ trans_choice(':count request waiting|:count requests waiting', $this->pendingRestoreRequests) }}
-                        </flux:link>
-                    </div>
-                @endif
-
-                @if ($failedSetups->isNotEmpty())
-                    <div>
-                        <flux:text size="sm" class="mb-1">{{ __('Setup failed') }}</flux:text>
-                        @foreach ($failedSetups as $agency)
-                            <div class="py-1">
-                                <flux:link :href="route('admin.tenants.show', $agency)" wire:navigate>{{ $agency->name ?? $agency->id }}</flux:link>
-                                <flux:text size="sm">{{ $agency->status_reason }}</flux:text>
-                            </div>
-                        @endforeach
-                    </div>
-                @endif
-
-                @if ($pending->isNotEmpty())
-                    <div>
-                        <flux:text size="sm" class="mb-1">{{ __('Waiting to be activated') }}</flux:text>
-                        @foreach ($pending as $agency)
-                            <flux:link :href="route('admin.tenants.show', $agency)" class="block py-1" wire:navigate>{{ $agency->name ?? $agency->id }}</flux:link>
-                        @endforeach
-                    </div>
-                @endif
-
-                @if ($this->pastDueSubscriptions->isNotEmpty())
-                    <div>
-                        <flux:text size="sm" class="mb-1">{{ __('Subscription past due') }}</flux:text>
-                        @foreach ($this->pastDueSubscriptions as $subscription)
-                            <flux:link :href="route('admin.tenants.show', $subscription->tenant_id)" class="block py-1" wire:navigate>
-                                {{ $subscription->tenant?->name ?? $subscription->tenant_id }} · {{ $subscription->plan_name }}
-                            </flux:link>
-                        @endforeach
-                    </div>
-                @endif
-
-                @if ($suspended->isNotEmpty())
-                    <div>
-                        <flux:text size="sm" class="mb-1">{{ __('Suspended') }}</flux:text>
-                        @foreach ($suspended as $agency)
-                            <div class="py-1">
-                                <flux:link :href="route('admin.tenants.show', $agency)" wire:navigate>{{ $agency->name ?? $agency->id }}</flux:link>
-                                @if ($agency->status_reason)
-                                    <flux:text size="sm">{{ $agency->status_reason }}</flux:text>
-                                @endif
-                            </div>
-                        @endforeach
-                    </div>
-                @endif
-
-                @if ($this->agenciesWithoutAdmin->isNotEmpty())
-                    <div>
-                        <flux:text size="sm" class="mb-1">{{ __('No active admin') }}</flux:text>
-                        @foreach ($this->agenciesWithoutAdmin->take(5) as $agency)
-                            <flux:link :href="route('admin.tenants.show', $agency)" class="block py-1" wire:navigate>{{ $agency->name ?? $agency->id }}</flux:link>
-                        @endforeach
-                    </div>
-                @endif
+                @empty
+                    <flux:text>{{ __('No subscription renews this week.') }}</flux:text>
+                @endforelse
             </flux:card>
 
-            <div class="flex flex-col gap-6">
-                {{-- Upcoming renewals --}}
-                <flux:card class="flex flex-col gap-4">
-                    <flux:heading size="lg" level="2">{{ __('Renewing in the next 7 days') }}</flux:heading>
+            {{-- Latest payments --}}
+            <flux:card class="flex flex-col gap-4">
+                <flux:heading size="lg" level="2">{{ __('Latest payments') }}</flux:heading>
 
-                    @forelse ($this->upcomingRenewals as $subscription)
-                        <div class="flex items-center justify-between gap-3">
-                            <flux:link :href="route('admin.tenants.show', $subscription->tenant_id)" wire:navigate>{{ $subscription->tenant?->name ?? $subscription->tenant_id }}</flux:link>
-                            <flux:text size="sm" class="text-end">
-                                {{ Money::ofMinor($subscription->amount_minor, $subscription->currency)->format() }}
-                                · {{ $subscription->next_billing_on?->toFormattedDateString() }}
-                            </flux:text>
+                @forelse ($this->latestPayments as $payment)
+                    <div class="flex items-center justify-between gap-3">
+                        <div>
+                            <flux:link :href="route('admin.tenants.show', $payment->tenant_id)" wire:navigate>{{ $payment->tenant?->name ?? $payment->tenant_id }}</flux:link>
+                            <flux:text size="sm">{{ $payment->invoice->reference }} · {{ $payment->method->label() }}</flux:text>
                         </div>
-                    @empty
-                        <flux:text>{{ __('No subscription renews this week.') }}</flux:text>
-                    @endforelse
-                </flux:card>
-
-                {{-- Latest payments --}}
-                <flux:card class="flex flex-col gap-4">
-                    <flux:heading size="lg" level="2">{{ __('Latest payments') }}</flux:heading>
-
-                    @forelse ($this->latestPayments as $payment)
-                        <div class="flex items-center justify-between gap-3">
-                            <div>
-                                <flux:link :href="route('admin.tenants.show', $payment->tenant_id)" wire:navigate>{{ $payment->tenant?->name ?? $payment->tenant_id }}</flux:link>
-                                <flux:text size="sm">{{ $payment->invoice->reference }} · {{ $payment->method->label() }}</flux:text>
-                            </div>
-                            <div class="text-end">
-                                <span class="font-medium">{{ Money::ofMinor($payment->amount_minor, $payment->currency)->format() }}</span>
-                                <flux:text size="sm">{{ $payment->paid_at?->toFormattedDateString() }}</flux:text>
-                            </div>
+                        <div class="text-end">
+                            <span class="font-semibold tabular-nums">{{ Money::ofMinor($payment->amount_minor, $payment->currency)->format() }}</span>
+                            <flux:text size="sm">{{ $payment->paid_at?->toFormattedDateString() }}</flux:text>
                         </div>
-                    @empty
-                        <flux:text>{{ __('No payments have been received yet.') }}</flux:text>
-                    @endforelse
-                </flux:card>
-            </div>
+                    </div>
+                @empty
+                    <flux:text>{{ __('No payments have been received yet.') }}</flux:text>
+                @endforelse
+            </flux:card>
         </div>
 
         {{-- Recent activity --}}
