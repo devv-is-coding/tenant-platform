@@ -64,6 +64,10 @@ x-watch:
       - storage/
       - bootstrap/cache/
       - .git/
+      # Agency SQLite databases the host's tests create and delete. Syncing
+      # them holds them open, and Windows then refuses the tests' delete, so a
+      # later test finds an agency database that should be gone.
+      - database/tenant*
   composer-json: &rebuild-on-composer-json
     path: composer.json
     action: rebuild
