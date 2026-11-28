@@ -32,6 +32,20 @@ enum RefundStatus: int
     }
 
     /**
+     * Get the Flux badge color the status is shown in.
+     */
+    public function color(): string
+    {
+        return match ($this) {
+            self::Requested => 'amber',
+            self::Approved => 'blue',
+            self::Rejected => 'zinc',
+            self::Processed => 'green',
+            self::Failed => 'red',
+        };
+    }
+
+    /**
      * Determine if the refund reduces the booking's refunded total.
      */
     public function countsAsRefunded(): bool

@@ -5,11 +5,13 @@ namespace App\Services\Navigation;
 use App\Enums\BookingApprovalStatus;
 use App\Enums\ItemStatus;
 use App\Enums\PlanChangeRequestStatus;
+use App\Enums\RefundStatus;
 use App\Enums\RestoreRequestStatus;
 use App\Models\AuditEvent;
 use App\Models\Booking;
 use App\Models\Item;
 use App\Models\PlanChangeRequest;
+use App\Models\Refund;
 use App\Models\RestoreRequest;
 use App\Models\Settings;
 use App\Models\Tenant;
@@ -172,6 +174,16 @@ class NavigationMenu
             );
         }
 
+        if ($user->can('viewAny', Refund::class)) {
+            $links[] = $this->link(
+                __('Refunds'),
+                __('Money customers asked to have back, and approved refunds to pay out.'),
+                route('tenant.refunds'),
+                'receipt-refund',
+                'tenant.refunds',
+            );
+        }
+
         return $links;
     }
 
@@ -192,7 +204,7 @@ class NavigationMenu
 
     /**
      * Count the decisions waiting on the user, shown beside Approvals: the
-     * listings sent for approval.
+     * listings sent for approval and the refunds asked for.
      */
     private function waitingDecisionCount(User $user): int
     {
@@ -200,6 +212,10 @@ class NavigationMenu
 
         if ($user->can('viewApprovalQueue', Item::class)) {
             $count += Item::query()->where('item_status', ItemStatus::Pending)->count();
+        }
+
+        if ($user->can('viewAny', Refund::class)) {
+            $count += Refund::query()->where('status', RefundStatus::Requested)->count();
         }
 
         return $count;

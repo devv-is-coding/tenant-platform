@@ -106,6 +106,18 @@ class Refund extends Model
     }
 
     /**
+     * Determine if the refund is paid out through Stripe: it reverses a
+     * payment the gateway settled and Stripe knows. Anything else (cash, no
+     * named payment) is handed back by hand.
+     */
+    public function goesThroughStripe(): bool
+    {
+        $payment = $this->payment;
+
+        return $payment !== null && $payment->isGatewaySettled() && $payment->hasStripeReference();
+    }
+
+    /**
      * Scope the query to refunds whose money has gone back.
      *
      * @param  Builder<self>  $query

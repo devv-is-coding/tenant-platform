@@ -46,8 +46,8 @@ use Stripe\Exception\ApiErrorException;
  * Stripe or paid out by hand. A refund Stripe is still working on is asked
  * about, never created a second time.
  *
- * Who may decide is for the manager's page and its policy (TM-3); this
- * service keeps the money true whoever calls it.
+ * Who may decide is for the manager's refunds page and RefundPolicy (TM-3);
+ * this service keeps the money true whoever calls it.
  */
 class RefundService
 {
@@ -209,7 +209,7 @@ class RefundService
 
         $payment = $refund->payment;
 
-        if ($payment === null || ! $payment->isGatewaySettled() || ! $payment->hasStripeReference()) {
+        if ($payment === null || ! $refund->goesThroughStripe()) {
             return $this->settle($refund, RefundStatus::Processed);
         }
 

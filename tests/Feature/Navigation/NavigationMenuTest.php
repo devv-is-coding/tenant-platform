@@ -1,9 +1,11 @@
 <?php
 
+use App\Enums\RefundStatus;
 use App\Enums\Role;
 use App\Models\Booking;
 use App\Models\Item;
 use App\Models\PlanChangeRequest;
+use App\Models\Refund;
 use App\Models\RestoreRequest;
 use App\Models\Tenant;
 use App\Models\User;
@@ -151,11 +153,13 @@ test('inside an agency, its managers and admin get the approvals, with how many 
     tenancy()->initialize($tenant);
     Item::factory()->pending()->count(2)->create();
     Item::factory()->approved()->create();
+    Refund::factory()->create();
+    Refund::factory()->create(['status' => RefundStatus::Approved]);
 
     $approvals = collect(navigationFor(User::factory()->role($role)->for($tenant)->create(), tenantContext: true))->firstWhere('label', 'Approvals');
 
     expect($approvals === null ? null : [navigationHrefs([$approvals]), $approvals['count']])
-        ->toBe($decides ? [[route('tenant.listing-approvals')], 2] : null);
+        ->toBe($decides ? [[route('tenant.listing-approvals'), route('tenant.refunds')], 3] : null);
 })->with([
     'admin' => [Role::Admin, true],
     'manager' => [Role::Manager, true],
