@@ -1,0 +1,5 @@
+# Findings gitleaks may skip, one fingerprint per line (commit:file:rule:line).
+# Add one only after checking the match is not a real secret.
+
+# A placeholder in a doc example ("STRIPE_SECRET=<your-stripe-secret>"), not a key.
+b9b48d6711a92455509731d9a6ba555b819e6134:.claude/skills/laravel-best-practices/rules/config.md:generic-api-key:30

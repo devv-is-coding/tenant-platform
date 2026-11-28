@@ -84,6 +84,7 @@ test('the agency figures count every status, including those at zero', function 
         TenantStatus::Paused->value => 0,
         TenantStatus::Suspended->value => 1,
         TenantStatus::Closed->value => 0,
+        TenantStatus::Provisioning->value => 0,
     ])->and($dashboard->totalAgencies)->toBe(4);
 });
 
@@ -138,6 +139,17 @@ test('what needs attention lists pending, past-due and suspended agencies, each 
         ->assertSeeHtml('href="'.route('admin.tenants.show', 'bais').'"')
         ->assertSeeHtml('href="'.route('admin.tenants.show', 'tanjay').'"')
         ->assertSeeHtml('href="'.route('admin.tenants.show', 'sibulan').'"');
+});
+
+test('what needs attention lists a failed agency setup with its error, but not one still running', function () {
+    $failed = agencyBeingSetUp('Setup failed: Connection refused.');
+    agencyBeingSetUp();
+
+    $dashboard = adminDashboard()
+        ->assertSeeInOrder(['Needs attention', 'Setup failed', $failed->name, 'Setup failed: Connection refused.'])
+        ->assertSeeHtml('href="'.route('admin.tenants.show', $failed).'"');
+
+    expect($dashboard->instance()->failedSetups->modelKeys())->toBe([$failed->id]);
 });
 
 test('each figure links to the page where it is acted on', function () {

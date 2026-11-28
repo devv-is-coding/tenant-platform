@@ -10,6 +10,7 @@ use Laravel\Cashier\Cashier;
 use LogicException;
 use Stripe\Exception\ApiErrorException;
 use Stripe\Exception\CardException;
+use Stripe\Exception\InvalidArgumentException as StripeConfigurationException;
 use Stripe\PaymentMethod;
 use Stripe\StripeClient;
 
@@ -98,7 +99,7 @@ class AutoPayGateway
     /**
      * Let a saved card go, once the agency no longer uses it. Best effort:
      * a card Stripe has already let go of is no loss, so a refusal is only
-     * logged.
+     * logged, as is a platform with no Stripe key set.
      */
     public function detach(string $paymentMethodId): void
     {
@@ -106,7 +107,7 @@ class AutoPayGateway
 
         try {
             $this->stripe()->paymentMethods->detach($paymentMethodId);
-        } catch (ApiErrorException $refused) {
+        } catch (ApiErrorException|StripeConfigurationException $refused) {
             Log::warning('Stripe would not detach a saved card: '.$refused->getMessage(), ['payment_method' => $paymentMethodId]);
         }
     }

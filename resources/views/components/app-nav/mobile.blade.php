@@ -38,7 +38,11 @@
                         {{ $section['label'] }}
                     </flux:navlist.item>
                 @else
-                    <flux:navlist.group expandable :heading="$section['label']" :expanded="$section['current']">
+                    <flux:navlist.group
+                        expandable
+                        :heading="$section['count'] ? __(':label (:count waiting)', ['label' => $section['label'], 'count' => $section['count']]) : $section['label']"
+                        :expanded="$section['current']"
+                    >
                         @foreach ($section['groups'] as $group)
                             @foreach ($group['links'] as $link)
                                 <flux:navlist.item

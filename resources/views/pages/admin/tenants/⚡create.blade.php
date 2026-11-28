@@ -101,7 +101,7 @@ new #[Title('Onboard an agency')] class extends Component {
 
         $this->resetExcept('currency');
 
-        Flux::toast(variant: 'success', text: __(':name is onboarded and pending activation.', ['name' => $tenant->name]));
+        Flux::toast(variant: 'success', text: __(':name is onboarded. Its database is being set up, then it waits for activation.', ['name' => $tenant->name]));
     }
 
     /**

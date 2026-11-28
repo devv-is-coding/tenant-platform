@@ -6,14 +6,15 @@ use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
 use App\Enums\AuditAction;
 use App\Enums\Role;
+use App\Enums\TenantStatus;
 use App\Models\Domain;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Audit\AuditRecorder;
 use Closure;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
-use Throwable;
 
 class OnboardTenantAction
 {
@@ -24,14 +25,15 @@ class OnboardTenantAction
     /**
      * Validate and onboard a new agency together with its first admin.
      *
-     * Creating the tenant fires TenantCreated, which provisions its database
-     * (create, migrate, seed the settings row). The tenant starts Pending:
-     * going live is a separate decision, not a side effect of onboarding.
+     * Everything here is central and written in one transaction: the agency,
+     * its domain, its first admin and the platform's audit row. It starts as
+     * Provisioning, so creating it queues the setup of its own database
+     * (ProvisionAgencyDatabase: create, migrate, seed the settings row) for
+     * after the commit; that job moves it to Pending. Going live is still a
+     * separate decision, not a side effect of onboarding.
      *
-     * No transaction can roll back a created database, so a failure in a
-     * later step is undone by deleting the tenant instead - which drops its
-     * database and, through the cascading foreign key, its domain. Users do
-     * not cascade (RESTRICT), so the new admin is deleted first.
+     * A failure in any step rolls the whole agency back, and since its
+     * database is only created after the commit, there is none to drop.
      *
      * @param  array<string, string>  $input
      */
@@ -39,14 +41,15 @@ class OnboardTenantAction
     {
         $validated = Validator::make($input, $this->rules(), $this->messages())->validate();
 
-        $tenant = Tenant::create([
-            'id' => $validated['subdomain'],
-            'name' => $validated['name'],
-            'locality' => $validated['locality'],
-            'currency' => $validated['currency'],
-        ]);
+        return DB::transaction(function () use ($actor, $validated): Tenant {
+            $tenant = Tenant::create([
+                'id' => $validated['subdomain'],
+                'status' => TenantStatus::Provisioning,
+                'name' => $validated['name'],
+                'locality' => $validated['locality'],
+                'currency' => $validated['currency'],
+            ]);
 
-        try {
             $tenant->domains()->create(['domain' => $this->domainFor($validated['subdomain'])]);
 
             // The role is always explicit: the column's old default was super admin.
@@ -62,16 +65,9 @@ class OnboardTenantAction
             ]);
 
             $this->auditRecorder->recordPlatformEvent(AuditAction::TenantCreated, $actor, $tenant);
-        } catch (Throwable $exception) {
-            // Undoing a half-created agency that never went live: a force
-            // delete, so its database is dropped rather than left behind.
-            User::withTrashed()->where('tenant_id', $tenant->id)->forceDelete();
-            $tenant->forceDelete();
 
-            throw $exception;
-        }
-
-        return $tenant;
+            return $tenant;
+        });
     }
 
     /**

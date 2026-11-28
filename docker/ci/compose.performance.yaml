@@ -1,0 +1,16 @@
+# Layered over compose.yaml for the load test and Lighthouse (TA-35):
+#
+#   docker compose -f compose.yaml -f docker/ci/compose.performance.yaml up -d
+#
+# The web nodes run as production does: APP_ENV=production (the entrypoint then
+# caches config, routes, views and events), debug off, and OPcache never
+# re-checking files (the dev image's zz-dev.ini is replaced with production's
+# setting). The image stays the dev target, since seeding needs Faker.
+services:
+  app:
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      LOG_LEVEL: warning
+    volumes:
+      - ./docker/ci/opcache-production.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro

@@ -14,9 +14,14 @@ export default defineConfig({
                 'resources/js/passkeys.js',
             ],
             refresh: true,
+            // The passport identity (DESIGN.md): Manrope for every working
+            // surface and its figures, Source Serif 4 for titles.
             fonts: [
-                bunny('Instrument Sans', {
-                    weights: [400, 500, 600],
+                bunny('Manrope', {
+                    weights: [400, 500, 600, 700],
+                }),
+                bunny('Source Serif 4', {
+                    weights: [500, 600],
                 }),
             ],
         }),

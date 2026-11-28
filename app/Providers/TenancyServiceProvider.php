@@ -6,7 +6,10 @@ namespace App\Providers;
 
 use App\Http\Middleware\EnsureTenantHasFeature;
 use App\Http\Middleware\EnsureUserBelongsToTenant;
+use App\Http\Middleware\InitializeTenancyByDomainOnceProvisioned;
 use App\Http\Middleware\InitializeTenancyUnlessCentral;
+use App\Jobs\ProvisionAgencyDatabase;
+use App\Models\Tenant;
 use App\Services\Session\DefaultConnectionSessionHandler;
 use Illuminate\Cache\TaggableStore;
 use Illuminate\Contracts\Foundation\Application;
@@ -24,6 +27,7 @@ use Stancl\Tenancy\Bootstrappers\CacheTenancyBootstrapper;
 use Stancl\Tenancy\Events;
 use Stancl\Tenancy\Jobs;
 use Stancl\Tenancy\Listeners;
+use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 
 class TenancyServiceProvider extends ServiceProvider
 {
@@ -39,17 +43,7 @@ class TenancyServiceProvider extends ServiceProvider
             // Tenant events
             Events\CreatingTenant::class => [],
             Events\TenantCreated::class => [
-                JobPipeline::make([
-                    Jobs\CreateDatabase::class,
-                    Jobs\MigrateDatabase::class,
-                    Jobs\SeedDatabase::class,
-
-                    // Your own jobs to prepare the tenant.
-                    // Provision API keys, create S3 buckets, anything you want!
-
-                ])->send(function (Events\TenantCreated $event) {
-                    return $event->tenant;
-                })->shouldBeQueued(false), // `false` by default, but you probably want to make this `true` for production.
+                $this->provisionDatabase(...),
             ],
             Events\SavingTenant::class => [],
             Events\TenantSaved::class => [],
@@ -111,9 +105,10 @@ class TenancyServiceProvider extends ServiceProvider
         ];
     }
 
-    public function register()
+    public function register(): void
     {
-        //
+        // Every way into an agency refuses one still being set up; see the class.
+        $this->app->bind(InitializeTenancyByDomain::class, InitializeTenancyByDomainOnceProvisioned::class);
     }
 
     public function boot(): void
@@ -182,6 +177,33 @@ class TenancyServiceProvider extends ServiceProvider
             EnsureUserBelongsToTenant::class,
             EnsureTenantHasFeature::class,
         ]);
+    }
+
+    /**
+     * Set up a new agency's database (ProvisionAgencyDatabase).
+     *
+     * An agency onboarded as Provisioning is set up on the queue, once the
+     * transaction that created it commits: a rolled-back onboarding then
+     * leaves no database behind, and CREATE DATABASE, which commits on its
+     * own in MySQL, never runs inside it. Any other agency (seeders,
+     * factories) is set up at once, so the code that made it can use its
+     * database straight away.
+     */
+    private function provisionDatabase(Events\TenantCreated $event): void
+    {
+        $tenant = $event->tenant;
+
+        if (! $tenant instanceof Tenant) {
+            throw new LogicException('Only App\Models\Tenant agencies can be provisioned.');
+        }
+
+        if ($tenant->status->isProvisioned()) {
+            ProvisionAgencyDatabase::dispatchSync($tenant);
+
+            return;
+        }
+
+        ProvisionAgencyDatabase::dispatch($tenant)->afterCommit();
     }
 
     /**

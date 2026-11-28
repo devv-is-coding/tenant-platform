@@ -12,6 +12,8 @@ test('running in each agency visits every live agency inside its own context, th
     $agency = Tenant::factory()->create();
     $otherAgency = Tenant::factory()->create();
     Tenant::factory()->create()->delete();
+    // Still being set up, so it has no database to visit.
+    agencyBeingSetUp();
     $runner = new class
     {
         use RunsInTenant {

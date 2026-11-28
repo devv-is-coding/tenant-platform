@@ -146,11 +146,7 @@ new #[Title('Agencies')] class extends Component {
                     <flux:table.cell class="max-md:hidden">{{ $tenant->domains->pluck('domain')->join(', ') }}</flux:table.cell>
 
                     <flux:table.cell>
-                        @if ($tenant->trashed())
-                            <flux:badge color="red" size="sm" inset="top bottom">{{ __('Deleted') }}</flux:badge>
-                        @else
-                            <flux:badge :color="$tenant->status->color()" size="sm" inset="top bottom">{{ $tenant->status->label() }}</flux:badge>
-                        @endif
+                        <x-entry-stamp :status="$tenant->status" :date="$tenant->trashed() ? $tenant->deleted_at : $tenant->status_changed_at" :deleted="$tenant->trashed()" />
                     </flux:table.cell>
 
                     @php($subscription = $tenant->liveSubscription)

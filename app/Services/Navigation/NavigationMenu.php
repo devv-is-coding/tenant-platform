@@ -2,7 +2,11 @@
 
 namespace App\Services\Navigation;
 
+use App\Enums\PlanChangeRequestStatus;
+use App\Enums\RestoreRequestStatus;
 use App\Models\AuditEvent;
+use App\Models\PlanChangeRequest;
+use App\Models\RestoreRequest;
 use App\Models\Settings;
 use App\Models\Tenant;
 use App\Models\User;
@@ -17,7 +21,7 @@ use App\Models\User;
  *
  * @phpstan-type NavLink array{label: string, description: string, href: string, icon: string, current: bool}
  * @phpstan-type NavGroup array{heading: string|null, links: list<NavLink>}
- * @phpstan-type NavSection array{label: string, icon: string, href: string|null, current: bool, groups: list<NavGroup>}
+ * @phpstan-type NavSection array{label: string, icon: string, href: string|null, current: bool, groups: list<NavGroup>, count: int|null}
  */
 class NavigationMenu
 {
@@ -146,19 +150,12 @@ class NavigationMenu
             ];
         }
 
+        // Every daily destination sits on the top bar (UI-4): agencies, billing,
+        // the requests waiting on a decision, with their count, and the log.
         return [
             $this->section(__('Dashboard'), 'squares-2x2', route('admin.dashboard'), 'admin.dashboard'),
-            $this->dropdown(__('Platform'), 'shield-check', [
-                $this->group(__('Oversight'), [
-                    $this->link(
-                        __('Audit log'),
-                        __('Everything the platform did, and who did it.'),
-                        route('admin.audit.index'),
-                        'clipboard-document-list',
-                        'admin.audit.index',
-                    ),
-                ]),
-                $this->group(__('Agencies'), [
+            $this->dropdown(__('Agencies'), 'building-office-2', [
+                $this->group(null, [
                     $this->link(
                         __('All agencies'),
                         __('Search agencies and open their records.'),
@@ -168,10 +165,39 @@ class NavigationMenu
                     ),
                     $this->link(
                         __('Onboard an agency'),
-                        __('Create a tenant and its first admin.'),
+                        __('Create an agency and its first admin.'),
                         route('admin.tenants.create'),
                         'building-office',
                         'admin.tenants.create',
+                    ),
+                ]),
+            ], routePattern: 'admin.tenants.*'),
+            $this->dropdown(__('Billing'), 'banknotes', [
+                $this->group(null, [
+                    $this->link(
+                        __('Overdue invoices'),
+                        __('Agencies still owing after the due date.'),
+                        route('admin.invoices.overdue'),
+                        'exclamation-triangle',
+                        'admin.invoices.overdue',
+                    ),
+                    $this->link(
+                        __('Plans'),
+                        __('The price list agencies are put on.'),
+                        route('admin.plans.index'),
+                        'tag',
+                        'admin.plans.index',
+                    ),
+                ]),
+            ]),
+            $this->dropdown(__('Requests'), 'inbox-arrow-down', [
+                $this->group(null, [
+                    $this->link(
+                        __('Plan requests'),
+                        __('Plans agency admins are asking to be put on.'),
+                        route('admin.plan-requests.index'),
+                        'arrows-right-left',
+                        'admin.plan-requests.index',
                     ),
                     $this->link(
                         __('Restore requests'),
@@ -180,32 +206,20 @@ class NavigationMenu
                         'arrow-uturn-left',
                         'admin.restore-requests.index',
                     ),
-                    $this->link(
-                        __('Plan requests'),
-                        __('Plans agency admins are asking to be put on.'),
-                        route('admin.plan-requests.index'),
-                        'arrows-right-left',
-                        'admin.plan-requests.index',
-                    ),
                 ]),
-                $this->group(__('Billing'), [
-                    $this->link(
-                        __('Plans'),
-                        __('The price list agencies are put on.'),
-                        route('admin.plans.index'),
-                        'tag',
-                        'admin.plans.index',
-                    ),
-                    $this->link(
-                        __('Overdue invoices'),
-                        __('Agencies still owing after the due date.'),
-                        route('admin.invoices.overdue'),
-                        'exclamation-triangle',
-                        'admin.invoices.overdue',
-                    ),
-                ]),
-            ]),
+            ], count: $this->pendingRequestCount()),
+            $this->section(__('Audit log'), 'clipboard-document-list', route('admin.audit.index'), 'admin.audit.index'),
         ];
+    }
+
+    /**
+     * Count the plan and restore requests still waiting for the platform's
+     * decision, shown beside Requests.
+     */
+    private function pendingRequestCount(): int
+    {
+        return PlanChangeRequest::query()->where('status', PlanChangeRequestStatus::Pending)->count()
+            + RestoreRequest::query()->where('status', RestoreRequestStatus::Pending)->count();
     }
 
     /**
@@ -267,18 +281,22 @@ class NavigationMenu
             'href' => $href,
             'current' => request()->routeIs($routePattern),
             'groups' => [],
+            'count' => null,
         ];
     }
 
     /**
-     * Build a section that opens a panel. It is current when any of its links is.
+     * Build a section that opens a panel. It is current when any of its links
+     * is, or when the route matches the given pattern (an agency's own page
+     * belongs to Agencies though no link points at it). A count, when given,
+     * shows beside the label.
      *
      * @param  list<NavGroup>  $groups
      * @return NavSection
      */
-    private function dropdown(string $label, string $icon, array $groups): array
+    private function dropdown(string $label, string $icon, array $groups, ?string $routePattern = null, ?int $count = null): array
     {
-        $current = false;
+        $current = $routePattern !== null && request()->routeIs($routePattern);
 
         foreach ($groups as $group) {
             foreach ($group['links'] as $link) {
@@ -292,6 +310,7 @@ class NavigationMenu
             'href' => null,
             'current' => $current,
             'groups' => $groups,
+            'count' => $count,
         ];
     }
 

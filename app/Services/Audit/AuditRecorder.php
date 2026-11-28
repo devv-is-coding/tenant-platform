@@ -153,6 +153,9 @@ class AuditRecorder
      * is limited to `tenant.*` actions: the platform decides whether an agency
      * operates, never how, so it has no operational action to record there.
      *
+     * An agency still being set up has no audit log to write into yet, so it
+     * gets no notice (null): the platform's own audit row is the record.
+     *
      * @param  array<string, mixed>|null  $changes
      */
     public function recordTenantLifecycleNotice(
@@ -161,9 +164,13 @@ class AuditRecorder
         Tenant $tenant,
         ?string $description = null,
         ?array $changes = null,
-    ): AuditEvent {
+    ): ?AuditEvent {
         if ($action->domain() !== 'tenant') {
             throw new LogicException("The platform may only write tenant lifecycle notices into a tenant's audit log, not [{$action->value}].");
+        }
+
+        if (! $tenant->status->isProvisioned()) {
+            return null;
         }
 
         return $tenant->run(fn (): AuditEvent => AuditEvent::create([

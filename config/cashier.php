@@ -1,5 +1,17 @@
 <?php
 
+/*
+Locally, the Stripe CLI service writes its current signing secret to a file on
+every start (compose.yaml), and while that file exists and holds a secret it
+wins over STRIPE_WEBHOOK_SECRET: the CLI's secret can change, and a stale copy
+in .env makes the app refuse every event. Without the file (production, CI, the
+host's tests) STRIPE_WEBHOOK_SECRET is the secret, as before.
+*/
+$webhookSecretFile = env('STRIPE_WEBHOOK_SECRET_FILE');
+$webhookSecret = is_string($webhookSecretFile) && $webhookSecretFile !== '' && is_readable($webhookSecretFile)
+    ? trim((string) file_get_contents($webhookSecretFile))
+    : '';
+
 return [
 
     /*
@@ -35,7 +47,7 @@ return [
     */
 
     'webhook' => [
-        'secret' => env('STRIPE_WEBHOOK_SECRET'),
+        'secret' => $webhookSecret !== '' ? $webhookSecret : env('STRIPE_WEBHOOK_SECRET'),
         'tolerance' => 300,
         'events' => [
             'checkout.session.completed',
